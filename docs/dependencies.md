@@ -34,10 +34,11 @@ Test transitive dependencies include Microsoft TestPlatform/CodeCoverage 17.14.1
 
 | Package/tool | Version | Purpose |
 | --- | ---: | --- |
-| `WixToolset.Sdk` | 5.0.0 | Build and ICE-validate the x64 corporate MSI |
-| Windows SDK `signtool.exe` | Organization-managed | Authenticode-sign client binaries and MSI |
+| Inno Setup | 6.x | Build the admin-free, per-user x64 setup executable |
+| Docker Compose | Current supported release | Run the relay and Caddy HTTPS proxy |
+| Caddy container | `caddy:2-alpine` | Terminate HTTPS and manage the small deployment's local CA |
 
-WiX and signing tools run only in the release build environment and are not shipped to endpoints. WiX 5 is pinned because it provides SDK-style MSI builds and file harvesting without the Open Source Maintenance Fee introduced in WiX 6; any toolchain upgrade requires legal/license review as well as package regression testing.
+Inno Setup runs only on the build machine. Caddy runs only on the Docker server. Neither is part of the Windows client payload.
 
 Central version declarations live in `Directory.Packages.props`. Framework and package updates require the full Release build, test suite, vulnerability scan, and a review of protocol compatibility and this inventory.
 

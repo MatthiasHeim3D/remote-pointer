@@ -49,7 +49,7 @@ No development certificate-bypass switch will be included in production builds.
 - Pointer events are rejected for invalid coordinates, stale TTL, future timestamps, wrong sessions, unauthorized roles, excessive rate, and duplicate/old sequence numbers.
 - SignalR receive payloads are limited to 8 KB.
 - Structured logs omit pairing secrets, role tokens, reconnect tokens, and individual pointer coordinates.
-- Production refuses plaintext requests rather than redirecting them; no certificate-validation bypass exists.
+- Production refuses plaintext requests by default; the Docker profile permits it only on the unexposed relay container port behind Caddy. No certificate-validation bypass exists.
 
 ## Phase 5 client controls
 
@@ -63,8 +63,8 @@ No development certificate-bypass switch will be included in production builds.
 
 ## Phase 6 hardening controls
 
-- Production Kestrel configuration exposes only `https://0.0.0.0:443`; the certificate path and password are supplied externally through standard ASP.NET Core configuration.
-- A defense-in-depth middleware returns HTTP 400 for plaintext production requests and never redirects secrets to another URL. Secure production responses use HSTS.
+- Production returns HTTP 400 for plaintext by default and never redirects secrets to another URL. Secure production responses use HSTS.
+- The Docker profile explicitly allows HTTP only on the unexposed relay container port; Caddy is the sole published service and terminates HTTPS on port 443.
 - SignalR detailed errors are disabled, unexpected operations are audited by a hub filter, and safe production exception handling avoids stack-trace disclosure.
 - Client role and reconnect credentials are encrypted with Windows DPAPI `CurrentUser`, written atomically, and never fall back to plaintext.
 - Protected recovery state is rejected when corrupt, expired, wrong-role, or bound to a different durable client ID. A successful recovery rotates and re-protects the reconnect token.
@@ -74,12 +74,11 @@ No development certificate-bypass switch will be included in production builds.
 
 ## Phase 7 deployment controls
 
-- Production release automation requires an organization Authenticode certificate and validates both the published executable and final MSI after RFC 3161 timestamping.
-- The MSI is per-machine and x64, uses major upgrades, blocks downgrades, and is checked by the Windows Installer ICE suite.
-- Machine policy contains only the HTTPS relay URL and lives outside the MSI at `%ProgramData%\RemotePointer\clientsettings.json`; standard users require read-only access.
-- Client audit and DPAPI session files remain per-user and are not silently deleted by uninstall. Separate retention/offboarding policy owns their eventual removal.
-- Endpoints require outbound TCP 443 only. The package creates no inbound firewall rule, Windows service, driver, or certificate-validation bypass.
-- The reference relay container runs as non-root with a read-only filesystem, dropped capabilities, and its PFX mounted read-only from an external secret location.
-- Authenticode publishing uses SHA-256 file digests and RFC 3161 timestamps. The certificate is selected from the Windows certificate store by thumbprint; no private key or password is committed.
+- Inno Setup installs the self-contained x64 client per user and requests no administrator rights.
+- The installer contains only Caddy's public CA root and adds it to the current user's root store when the clearly labelled HTTPS task is selected. Caddy's CA private key remains in its persistent server-side data volume.
+- The relay URL is embedded at build time, must use HTTPS, and still uses normal Windows certificate validation.
+- Client audit and DPAPI session files remain per-user and are not silently deleted by uninstall.
+- Endpoints require outbound TCP 443 only. The package creates no inbound firewall rule, Windows service, driver, remote-control capability, or certificate-validation bypass.
+- The unsigned installer is distributed through an authenticated internal channel with a separately recorded SHA-256 digest. This provides provenance checking for the pilot but is not equivalent to Authenticode.
 
 See [threat-model.md](threat-model.md) for trust boundaries, abuse cases, assumptions, and residual risks.

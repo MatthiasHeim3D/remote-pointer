@@ -1,85 +1,50 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [string]$MsiPath,
+    [string]$SetupPath,
 
-    [uri]$ServerUrl = 'https://pointer.internal.example',
-
-    [string]$PreviousMsiPath,
-
-    [switch]$AllowUnsigned
+    [switch]$SkipCertificateTrust
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = [Security.Principal.WindowsPrincipal]::new($identity)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Installer acceptance testing requires an elevated PowerShell session.'
+$resolvedSetup = (Resolve-Path -LiteralPath $SetupPath).Path
+$installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\Remote Pointer'
+$executablePath = Join-Path $installDirectory 'RemotePointer.Client.exe'
+$uninstallerPath = Join-Path $installDirectory 'unins000.exe'
+
+$installArguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-'
+if ($SkipCertificateTrust) {
+    $installArguments += ' /MERGETASKS="!trustrelay"'
 }
 
-$resolvedMsi = (Resolve-Path -LiteralPath $MsiPath).Path
-$signature = Get-AuthenticodeSignature -LiteralPath $resolvedMsi
-if (-not $AllowUnsigned -and $signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-    throw "The MSI signature is not valid: $($signature.Status)."
+$install = Start-Process -FilePath $resolvedSetup `
+    -ArgumentList $installArguments `
+    -Wait `
+    -PassThru
+if ($install.ExitCode -ne 0) {
+    throw "Setup failed with exit code $($install.ExitCode)."
+}
+if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
+    throw "The installed executable was not found: $executablePath"
 }
 
-$repositoryRoot = Split-Path -Parent $PSScriptRoot
-$configurationScript = Join-Path $repositoryRoot 'build\Set-MachineConfiguration.ps1'
-$installedExecutable = Join-Path $env:ProgramFiles 'Remote Pointer\RemotePointer.Client.exe'
-$configurationPath = Join-Path $env:ProgramData 'RemotePointer\clientsettings.json'
-$auditDirectory = Join-Path $env:LOCALAPPDATA 'RemotePointer\Logs'
-$auditSentinel = Join-Path $auditDirectory 'phase7-uninstall-preservation.test'
-$logDirectory = Join-Path $env:TEMP 'RemotePointer-InstallerTests'
-New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-
-function Invoke-MsiExec {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Arguments,
-        [Parameter(Mandatory)]
-        [string]$LogName
-    )
-
-    $logPath = Join-Path $logDirectory $LogName
-    $process = Start-Process -FilePath 'msiexec.exe' `
-        -ArgumentList "$Arguments /qn /norestart /L*v `"$logPath`"" `
-        -Wait `
-        -PassThru
-    if ($process.ExitCode -notin @(0, 3010)) {
-        throw "msiexec failed with exit code $($process.ExitCode). See $logPath"
-    }
+$settings = Get-Content -Raw -LiteralPath (Join-Path $installDirectory 'appsettings.json') |
+    ConvertFrom-Json
+if (-not $settings.Server.BaseUrl.StartsWith('https://', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The installed relay URL is not HTTPS.'
 }
 
-if (-not [string]::IsNullOrWhiteSpace($PreviousMsiPath)) {
-    $resolvedPreviousMsi = (Resolve-Path -LiteralPath $PreviousMsiPath).Path
-    Invoke-MsiExec -Arguments "/i `"$resolvedPreviousMsi`"" -LogName 'install-previous.log'
+$uninstall = Start-Process -FilePath $uninstallerPath `
+    -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' `
+    -Wait `
+    -PassThru
+if ($uninstall.ExitCode -ne 0) {
+    throw "Uninstall failed with exit code $($uninstall.ExitCode)."
 }
-
-& $configurationScript -ServerUrl $ServerUrl
-$configurationBefore = Get-Content -Raw -LiteralPath $configurationPath
-
-Invoke-MsiExec -Arguments "/i `"$resolvedMsi`"" -LogName 'install-current.log'
-if (-not (Test-Path -LiteralPath $installedExecutable -PathType Leaf)) {
-    throw "Installed executable was not found: $installedExecutable"
-}
-if ((Get-Content -Raw -LiteralPath $configurationPath) -ne $configurationBefore) {
-    throw 'The machine configuration changed during install or upgrade.'
-}
-
-New-Item -ItemType Directory -Path $auditDirectory -Force | Out-Null
-Set-Content -LiteralPath $auditSentinel -Value 'preserve' -Encoding utf8
-
-Invoke-MsiExec -Arguments "/x `"$resolvedMsi`"" -LogName 'uninstall.log'
-if (Test-Path -LiteralPath $installedExecutable) {
+if (Test-Path -LiteralPath $executablePath) {
     throw 'Uninstall did not remove the application executable.'
 }
-if (-not (Test-Path -LiteralPath $configurationPath -PathType Leaf)) {
-    throw 'Uninstall removed the machine configuration.'
-}
-if (-not (Test-Path -LiteralPath $auditSentinel -PathType Leaf)) {
-    throw 'Uninstall removed a per-user audit record.'
-}
 
-Write-Output "Installer acceptance checks passed. Logs: $logDirectory"
+Write-Output 'Per-user install and uninstall checks passed without elevation.'

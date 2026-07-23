@@ -8,6 +8,7 @@ using RemotePointer.Server.Sessions;
 using PointerSessionOptions = RemotePointer.Server.Sessions.SessionOptions;
 
 var builder = WebApplication.CreateBuilder(args);
+var behindHttpsProxy = builder.Configuration.GetValue<bool>("Deployment:BehindHttpsProxy");
 
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
@@ -54,32 +55,35 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler();
     app.UseHsts();
-    app.Use(
-        async (context, next) =>
-        {
-            if (!context.Request.IsHttps)
+    if (!behindHttpsProxy)
+    {
+        app.Use(
+            async (context, next) =>
             {
-                var logger = context.RequestServices
-                    .GetRequiredService<ILoggerFactory>()
-                    .CreateLogger("RemotePointer.Server.TransportSecurity");
-                logger.LogWarning(
-                    AuditEventIds.PlaintextRejected,
-                    "Plaintext request rejected. Path={Path}",
-                    context.Request.Path);
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                await context.Response.WriteAsJsonAsync(
-                        new
-                        {
-                            type = "https-required",
-                            title = "HTTPS is required.",
-                            status = StatusCodes.Status400BadRequest,
-                        })
-                    .ConfigureAwait(false);
-                return;
-            }
+                if (!context.Request.IsHttps)
+                {
+                    var logger = context.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("RemotePointer.Server.TransportSecurity");
+                    logger.LogWarning(
+                        AuditEventIds.PlaintextRejected,
+                        "Plaintext request rejected. Path={Path}",
+                        context.Request.Path);
+                    context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    await context.Response.WriteAsJsonAsync(
+                            new
+                            {
+                                type = "https-required",
+                                title = "HTTPS is required.",
+                                status = StatusCodes.Status400BadRequest,
+                            })
+                        .ConfigureAwait(false);
+                    return;
+                }
 
-            await next(context).ConfigureAwait(false);
-        });
+                await next(context).ConfigureAwait(false);
+            });
+    }
 }
 
 app.MapHealthChecks("/health");

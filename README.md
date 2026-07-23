@@ -2,14 +2,11 @@
 
 Remote Pointer is a side-band Windows 11 pointer application. It exchanges only normalized pointer coordinates and session metadata through an internal relay; it does not capture screens or inject input.
 
-Implementation proceeds one reviewed phase at a time. Phases 1–5 provide the contracts, desktop overlays, relay, and end-to-end workflow. Phase 6 hardens that workflow with production HTTPS refusal, DPAPI-protected crash recovery, stable structured audit events, safe error boundaries, dependency auditing, a threat model, and Authenticode signing configuration.
+Phases 1-5 provide the contracts, desktop overlays, relay, and end-to-end workflow. Phase 6 hardens that workflow with HTTPS enforcement, DPAPI-protected crash recovery, structured audit events, safe error boundaries, dependency auditing, and a threat model.
 
-## Build
+## Build and local test
 
-Prerequisites:
-
-- Windows 11
-- .NET 10 SDK
+Prerequisites are Windows 11 and the .NET 10 SDK.
 
 ```powershell
 dotnet restore RemotePointer.sln
@@ -25,16 +22,16 @@ dotnet run --project src\RemotePointer.Client
 dotnet run --project src\RemotePointer.Client
 ```
 
-In the first client, use **Receive pointers**, select a monitor, and create a session. In the second, use **Point at another screen**, enter the pairing code, and request access. Approve the presenter in the receiver, then calibrate and enable pointing. The receiver overlay remains click-through; the presenter target consumes clicks only while pointing mode is active.
+In the first client, use **Receive pointers**, select a monitor, and create a session. In the second, use **Point at another screen**, enter the pairing code, and request access. Approve the presenter, calibrate, and enable pointing. The receiver overlay remains click-through; the presenter target consumes clicks only while pointing mode is active.
 
-The SignalR hub is available at `/hubs/pointer` and the health check at `https://localhost:7243/health`.
+## Small-network deployment
 
-Phase 7 adds the self-contained x64 MSI, machine-wide policy configuration, signed release pipeline, clean-VM acceptance automation, containerized relay deployment, and corporate operations documentation. Build a development-only MSI with:
+Docker Compose runs the relay behind Caddy HTTPS. Inno Setup produces a self-contained, admin-free per-user client installer. After exporting Caddy's public root certificate, build it with:
 
 ```powershell
-.\build\Build-Installer.ps1 -AllowUnsigned
+.\build\Build-Installer.ps1 `
+  -ServerUrl https://pointer.internal.example `
+  -RelayRootCertificatePath .\relay-root.crt
 ```
 
-Production packages require an organization code-signing certificate. See [docs/deployment.md](docs/deployment.md), [docs/server-deployment.md](docs/server-deployment.md), and [docs/operations-runbook.md](docs/operations-runbook.md).
-
-See [docs/architecture.md](docs/architecture.md) for component boundaries and phase status.
+No MSI, WiX, corporate code-signing certificate, machine policy, service, driver, or inbound client firewall rule is required. See [server deployment](docs/server-deployment.md), [client deployment](docs/deployment.md), and [architecture](docs/architecture.md).

@@ -3,97 +3,104 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version = '1.0.0',
 
-    [string]$CertificateThumbprint,
+    [Parameter(Mandatory)]
+    [uri]$ServerUrl,
 
-    [string]$TimestampUrl = 'https://timestamp.digicert.com',
+    [Parameter(Mandatory)]
+    [string]$RelayRootCertificatePath,
 
-    [string]$SignToolPath = 'signtool.exe',
-
-    [switch]$AllowUnsigned
+    [string]$InnoSetupCompilerPath
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-if ([string]::IsNullOrWhiteSpace($CertificateThumbprint) -and -not $AllowUnsigned) {
-    throw 'A code-signing certificate thumbprint is required. Use -AllowUnsigned only for development validation.'
+if ($ServerUrl.Scheme -ne [System.Uri]::UriSchemeHttps) {
+    throw 'ServerUrl must use HTTPS.'
+}
+
+$resolvedCertificatePath = (Resolve-Path -LiteralPath $RelayRootCertificatePath).Path
+$certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+    $resolvedCertificatePath)
+$basicConstraints = $certificate.Extensions |
+    Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension] } |
+    Select-Object -First 1
+if ($null -eq $basicConstraints -or -not $basicConstraints.CertificateAuthority) {
+    throw 'RelayRootCertificatePath must contain a CA certificate.'
+}
+if ($certificate.HasPrivateKey) {
+    throw 'RelayRootCertificatePath must contain only the public certificate, never a CA private key.'
+}
+if ($certificate.NotBefore.ToUniversalTime() -gt [DateTime]::UtcNow) {
+    throw 'The relay root certificate is not valid yet.'
+}
+if ($certificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow) {
+    throw 'The relay root certificate has expired.'
+}
+$certificate.Dispose()
+
+if ([string]::IsNullOrWhiteSpace($InnoSetupCompilerPath)) {
+    $compilerCommand = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue
+    if ($null -ne $compilerCommand) {
+        $InnoSetupCompilerPath = $compilerCommand.Source
+    }
+    else {
+        $compilerCandidates = @(
+            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
+        )
+        $InnoSetupCompilerPath = $compilerCandidates |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+            Select-Object -First 1
+    }
+}
+if ([string]::IsNullOrWhiteSpace($InnoSetupCompilerPath) -or
+    -not (Test-Path -LiteralPath $InnoSetupCompilerPath -PathType Leaf)) {
+    throw 'Inno Setup 6 was not found. Install it, or pass -InnoSetupCompilerPath.'
 }
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $clientProject = Join-Path $repositoryRoot 'src\RemotePointer.Client\RemotePointer.Client.csproj'
-$installerProject = Join-Path $repositoryRoot 'installer\RemotePointer.Client.Installer\RemotePointer.Client.Installer.wixproj'
+$installerScript = Join-Path $repositoryRoot 'installer\RemotePointer.Client.iss'
 $publishDirectory = Join-Path $repositoryRoot 'artifacts\publish\client\win-x64'
 $installerDirectory = Join-Path $repositoryRoot 'artifacts\installer'
 
-$publishArguments = @(
-    'publish', $clientProject,
-    '--configuration', 'Release',
-    '--runtime', 'win-x64',
-    '--self-contained', 'true',
-    '--output', $publishDirectory,
-    "-p:Version=$Version"
-)
-
-$isSignedBuild = -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
-if ($isSignedBuild) {
-    $publishArguments += @(
-        '-p:EnableCodeSigning=true',
-        "-p:CodeSigningCertificateThumbprint=$CertificateThumbprint",
-        "-p:CodeSigningTimestampUrl=$TimestampUrl",
-        "-p:SignToolPath=$SignToolPath"
-    )
-}
-
-& dotnet @publishArguments
+& dotnet publish $clientProject `
+    --configuration Release `
+    --runtime win-x64 `
+    --self-contained true `
+    --output $publishDirectory `
+    "-p:Version=$Version" `
+    '-p:DebugType=None'
 if ($LASTEXITCODE -ne 0) {
     throw "Client publish failed with exit code $LASTEXITCODE."
 }
 
-$installerArguments = @(
-    'build', $installerProject,
-    '--configuration', 'Release',
-    "-p:ProductVersion=$Version",
-    "-p:PublishDirectory=$publishDirectory",
-    "-p:BaseOutputPath=$installerDirectory\"
-)
-if ($isSignedBuild) {
-    $installerArguments += @(
-        '-p:EnableInstallerSigning=true',
-        "-p:CodeSigningCertificateThumbprint=$CertificateThumbprint",
-        "-p:CodeSigningTimestampUrl=$TimestampUrl",
-        "-p:SignToolPath=$SignToolPath"
-    )
-}
+$settingsPath = Join-Path $publishDirectory 'appsettings.json'
+$settings = Get-Content -Raw -LiteralPath $settingsPath | ConvertFrom-Json
+$settings.Server.BaseUrl = $ServerUrl.AbsoluteUri.TrimEnd('/')
+$settings | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $settingsPath -Encoding utf8
 
-& dotnet @installerArguments
+New-Item -ItemType Directory -Path $installerDirectory -Force | Out-Null
+& $InnoSetupCompilerPath `
+    "/DMyAppVersion=$Version" `
+    "/DPublishDir=$publishDirectory" `
+    "/DRelayRootCertificate=$resolvedCertificatePath" `
+    "/DInstallerOutputDir=$installerDirectory" `
+    $installerScript
 if ($LASTEXITCODE -ne 0) {
-    throw "Installer build failed with exit code $LASTEXITCODE."
+    throw "Inno Setup failed with exit code $LASTEXITCODE."
 }
 
-$msiPath = Join-Path $installerDirectory "RemotePointer.Client-$Version-x64.msi"
-if (-not (Test-Path -LiteralPath $msiPath -PathType Leaf)) {
-    throw "The expected installer was not produced: $msiPath"
+$installerPath = Join-Path $installerDirectory "RemotePointer.Client-$Version-x64-Setup.exe"
+if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+    throw "The expected installer was not produced: $installerPath"
 }
 
-if ($isSignedBuild) {
-    foreach ($path in @(
-        (Join-Path $publishDirectory 'RemotePointer.Client.exe'),
-        $msiPath
-    )) {
-        $signature = Get-AuthenticodeSignature -LiteralPath $path
-        if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) {
-            throw "Authenticode validation failed for $path with status $($signature.Status)."
-        }
-    }
-}
-else {
-    Write-Warning 'Produced an unsigned development MSI. Do not distribute it.'
-}
+$hash = Get-FileHash -Algorithm SHA256 -LiteralPath $installerPath
+$hashPath = "$installerPath.sha256"
+"$($hash.Hash)  $(Split-Path -Leaf $installerPath)" |
+    Set-Content -LiteralPath $hashPath -Encoding ascii
 
-$metadataScript = Join-Path $repositoryRoot 'build\Get-MsiMetadata.ps1'
-$metadataPath = Join-Path $installerDirectory "RemotePointer.Client-$Version-x64.json"
-$metadata = & $metadataScript -MsiPath $msiPath
-$metadata | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding utf8
-
-Write-Output $msiPath
-Write-Output $metadataPath
+Write-Output $installerPath
+Write-Output $hashPath

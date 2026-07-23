@@ -1,12 +1,9 @@
-using System.Text.Json;
 using System.IO;
-
+using System.Text.Json;
 namespace RemotePointer.Client.Configuration;
 
 public sealed class ClientSettings
 {
-    private const string MachineSettingsFileName = "clientsettings.json";
-
     public ServerSettings Server { get; init; } = new();
 
     public PointerSettings Pointer { get; init; } = new();
@@ -15,22 +12,15 @@ public sealed class ClientSettings
 
     public static ClientSettings Load(string? baseDirectory = null)
     {
-        var machineSettingsPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "RemotePointer",
-            MachineSettingsFileName);
         return Load(
             baseDirectory,
-            machineSettingsPath,
             Environment.GetEnvironmentVariable("REMOTEPOINTER_SERVER_BASEURL"));
     }
 
     internal static ClientSettings Load(
         string? baseDirectory,
-        string machineSettingsPath,
         string? environmentUrl)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(machineSettingsPath);
         var directory = baseDirectory ?? AppContext.BaseDirectory;
         var path = Path.Combine(directory, "appsettings.json");
         ClientSettings settings;
@@ -47,8 +37,6 @@ public sealed class ClientSettings
             settings = new ClientSettings();
         }
 
-        ApplyMachineSettings(settings, machineSettingsPath);
-
         if (!string.IsNullOrWhiteSpace(environmentUrl))
         {
             settings.Server.BaseUrl = environmentUrl;
@@ -56,23 +44,6 @@ public sealed class ClientSettings
 
         settings.Validate();
         return settings;
-    }
-
-    private static void ApplyMachineSettings(ClientSettings settings, string path)
-    {
-        if (!File.Exists(path))
-        {
-            return;
-        }
-
-        var json = File.ReadAllText(path);
-        var machineSettings = JsonSerializer.Deserialize<MachineClientSettings>(
-            json,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        if (!string.IsNullOrWhiteSpace(machineSettings?.Server.BaseUrl))
-        {
-            settings.Server.BaseUrl = machineSettings.Server.BaseUrl;
-        }
     }
 
     internal void Validate()
@@ -90,16 +61,6 @@ public sealed class ClientSettings
             throw new InvalidOperationException("Client reconnect and pointer settings are invalid.");
         }
     }
-}
-
-internal sealed class MachineClientSettings
-{
-    public MachineServerSettings Server { get; init; } = new();
-}
-
-internal sealed class MachineServerSettings
-{
-    public string? BaseUrl { get; init; }
 }
 
 public sealed class ServerSettings

@@ -16,6 +16,7 @@ RUN dotnet publish src/RemotePointer.Server/RemotePointer.Server.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /output/ ./
+ENV ASPNETCORE_URLS=http://+:8080
 USER app
-EXPOSE 8443
+EXPOSE 8080
 ENTRYPOINT ["dotnet", "RemotePointer.Server.dll"]

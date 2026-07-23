@@ -1,0 +1,5 @@
+{$REMOTEPOINTER_HOSTNAME} {
+	tls internal
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy relay:8080
+}

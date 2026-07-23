@@ -202,6 +202,28 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
+    public async Task Production_AllowsPrivateHttpOnlyWhenHttpsProxyModeIsExplicitlyEnabled()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(
+                builder =>
+                {
+                    builder.UseEnvironment("Production");
+                    builder.UseSetting("Deployment:BehindHttpsProxy", "true");
+                });
+        using var client = factory.CreateClient(
+            new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                BaseAddress = new Uri("http://relay"),
+            });
+
+        using var response = await client.GetAsync("/health");
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
     public async Task HubRateLimit_RejectsThirtyFirstImmediatePointer()
     {
         using var factory = CreateFactory();

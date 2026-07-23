@@ -28,12 +28,11 @@
 | Receiver networking | Session creation, approval presentation, fresh marker acknowledgement, expired marker drop |
 | Presenter networking | Approval gating, receiver dimensions, pointer construction, acknowledgement latency, reconnect drop |
 | Client SignalR transport | Real two-client create/join/approve/send/acknowledge/terminate flow through in-memory relay |
-| Production transport | Plaintext refusal without redirect, secure health response, HSTS |
+| Production transport | Plaintext refusal by default, explicit private proxy mode, secure health response, HSTS |
 | Protected recovery | At-rest token opacity, corruption/identity rejection, restart resume, token rotation, post-recovery pointer |
 | Audit privacy | Structured client record excludes exception messages, credentials, and coordinate fields |
 | Hub rate limiting | Real transport accepts burst of 30 and rejects immediate event 31 |
-| Machine client policy | ProgramData server URL overrides packaged JSON and still enforces HTTPS |
-| MSI authoring | Self-contained x64 payload compiles and passes WiX Windows Installer ICE validation |
+| Client configuration | Packaged and environment URLs both enforce HTTPS |
 
 ## Manual display matrix for Phases 2–5
 
@@ -92,18 +91,15 @@
 2. Restart that client. Confirm it reports recovered/resumed state, rotates its reconnect token, and resumes receiver markers or presenter approval. Recalibrate the presenter because calibration geometry is intentionally not persisted.
 3. End the recovered session and confirm the corresponding protected role file under `%LocalAppData%\RemotePointer\Sessions` is removed.
 4. Inspect `%LocalAppData%\RemotePointer\Logs\audit-YYYYMMDD.jsonl`. Confirm records are valid JSON and contain no coordinates, pairing codes, session/reconnect tokens, exception messages, screen metadata, or typed data.
-5. Start a Production relay with an organization test certificate. Confirm HTTPS health succeeds, an HTTP request is refused without redirect, HSTS is present, and an untrusted certificate causes the client connection to fail.
-6. Publish with a non-production code-signing certificate and `EnableCodeSigning=true`. Verify both the executable and DLL signatures and timestamp with `Get-AuthenticodeSignature` or `signtool verify /pa /all /v`.
-7. Repeat the full Phase 5 display matrix as a standard user and confirm no administrator rights are required by the client.
+5. Start the Docker deployment. Confirm HTTPS health succeeds through Caddy, relay port 8080 is not reachable from the LAN, HSTS is present, and an untrusted Caddy root causes the client connection to fail.
+6. Repeat the full Phase 5 display matrix as a standard user and confirm no administrator rights are required by the client.
 
-## Phase 7 clean-VM procedure
+## Phase 7 small-deployment procedure
 
-1. Build a signed three-part release with `build\Build-Installer.ps1` and archive its hash and signature output.
-2. On a disposable clean Windows 11 x64 VM, trust only the organization roots and run `build\Test-Installer.ps1` elevated.
-3. Confirm silent installation, the all-users Start menu shortcut, and standard-user launch.
-4. Confirm the client uses `%ProgramData%\RemotePointer\clientsettings.json` and requires only outbound HTTPS to the relay.
-5. Install the previous signed version, write approved machine configuration, then install the new version. Confirm the major upgrade replaces application files without changing configuration or audit records.
-6. Silently uninstall. Confirm Program Files content and the shortcut are removed while ProgramData configuration and per-user audit records remain.
-7. Verify the MSI and executable signatures with both `Get-AuthenticodeSignature` and `signtool verify /pa /all /v`.
-8. Deploy to Intune/SCCM pilot collections in system context and confirm detection, install, upgrade, and uninstall reporting.
-9. Deploy the relay container or framework-dependent output, validate `/health`, WebSocket connectivity, certificate rotation, log forwarding, and documented rollback.
+1. Start Compose with the final DNS hostname and confirm `https://<hostname>/health` through Caddy.
+2. Export only Caddy's `root.crt`; confirm its private key remains in the persistent Docker volume.
+3. Build the Inno Setup package with the matching HTTPS URL and root, and archive the generated SHA-256 file on the restricted internal share.
+4. Run `build\Test-Installer.ps1` as a non-administrator. Confirm current-user install and uninstall succeed.
+5. Install normally and leave the HTTPS trust task selected. Confirm the Start menu shortcut is current-user and the health URL succeeds without certificate warnings.
+6. Establish a real receiver/presenter session from two machines, including one over VPN, and repeat join approval, calibration, pointing, termination, and reconnect tests.
+7. Confirm the clients require only outbound TCP 443 and relay port 8080 is not published by Docker.

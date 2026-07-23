@@ -2,7 +2,7 @@
 
 ## Scope and security objectives
 
-This model covers the Windows client, the ASP.NET Core relay, the shared contracts, local client state, and the HTTPS/WSS connection between them. Conferencing applications, organization identity infrastructure, endpoint management, and PKI operations are external dependencies.
+This model covers the Windows client, the ASP.NET Core relay, Caddy, the shared contracts, local client state, and the HTTPS/WSS connection between them. Conferencing applications, organization identity infrastructure, and endpoint management are external dependencies.
 
 The primary objectives are to prevent remote control, prevent disclosure of screen or input content, restrict pointer delivery to one explicitly approved presenter and receiver, keep credentials confidential, reject stale or abusive traffic, and fail closed when identity or transport state is uncertain.
 
@@ -41,7 +41,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 | Pointer flooding | 8 KB hub message ceiling, one parallel invocation, 20/s token bucket and burst 30 | Distributed connection exhaustion requires reverse-proxy/network controls |
 | Unauthorized receiver control | Receiver display selection is local only; overlay never injects input | A local user can intentionally choose the wrong monitor |
 | Overlay input interception | Receiver uses transparent/no-activate native styles; presenter capture is bounded to calibrated window and pointing state | WPF/Windows defects could affect focus; manual release testing remains required |
-| TLS downgrade or invalid certificate | Production server rejects HTTP; client configuration requires HTTPS; platform certificate validation has no production handler override | Organization PKI issuance and renewal are operational dependencies |
+| TLS downgrade or invalid certificate | Caddy is the only published container port; client configuration requires HTTPS; platform validation trusts the per-user Caddy root and has no bypass | Replacing or losing the Caddy data volume requires rebuilding/reinstalling the client package with the new public root |
 | Sensitive log disclosure | Stable structured audit fields omit secrets, coordinates, exception messages, and screen metadata | Session IDs and machine/client identifiers remain operational metadata |
 | Server or client crash | Server fails closed and loses in-memory sessions; client credentials are protected and can resume only while relay session survives | Relay restart requires re-pairing by design in the in-memory MVP |
 | Multiple clients under one Windows profile | Role files and durable identity are scoped to the Windows user; automatic recovery is skipped when both saved roles exist | Concurrent same-profile processes support new local sessions, but automatic crash recovery requires one saved role per profile; production assumes distinct users/endpoints |
@@ -60,8 +60,8 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 ## Operational assumptions
 
 - Windows 11 endpoints are managed, patched, time synchronized, and protected from same-user malware. Each production participant uses a distinct Windows user profile/endpoint.
-- The relay certificate chains to a trusted organization root and its private key is stored outside this repository.
-- Firewall and reverse-proxy policy restrict relay exposure and connection-level denial of service.
+- The Caddy public root is distributed only inside the intended installer; its private key remains in the persistent Docker volume.
+- Firewall policy exposes only Caddy TCP 443. Relay port 8080 remains private to the Compose network.
 - Audit sinks, access controls, retention, and alerting are configured by operations.
 
 Review this model when adding Entra ID, durable server sessions, additional presenter/receiver roles, new pointer kinds, installer privileges, telemetry, or any new captured data.

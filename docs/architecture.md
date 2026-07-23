@@ -64,7 +64,7 @@ SignalR automatic reconnect invokes `ResumeSession` with the role credential and
 
 ## Phase 6 design
 
-The production relay exposes an HTTPS-only Kestrel endpoint. A second application-layer guard rejects any plaintext request without redirecting it, HSTS is emitted for secure production hosts, detailed hub errors remain disabled, and an exception handler produces safe production responses. Stable audit event IDs cover connection, creation, join, rejection, approval, resume, termination, expiry, plaintext refusal, validation failure, and unexpected hub faults.
+The production relay normally rejects plaintext without redirecting it. The small Docker deployment explicitly enables private HTTP between Caddy and the relay, but publishes only Caddy's HTTPS port. HSTS, hidden detailed hub errors, and safe production exception handling remain enabled. Stable audit event IDs cover connection, creation, join, rejection, approval, resume, termination, expiry, plaintext refusal, validation failure, and unexpected hub faults.
 
 The client persists only `SessionCredential` recovery documents. They are serialized, encrypted with Windows DPAPI `CurrentUser`, atomically replaced under `%LocalAppData%\RemotePointer\Sessions`, and discarded when corrupt, expired, wrong-role, or bound to a different client identity. Startup attempts resume, accepts the server's rotated reconnect token, and atomically protects the replacement. Receiver display selection is reconstructed from server session state; presenter calibration geometry remains intentionally ephemeral.
 
@@ -72,7 +72,7 @@ Automatic startup recovery runs only when the Windows profile contains one saved
 
 Client lifecycle and fault events are JSON Lines records under `%LocalAppData%\RemotePointer\Logs`. The fixed schema permits event, level, session ID, role, exception type, and numeric error code; it has no coordinate, credential, pairing-code, exception-message, or arbitrary payload field. WPF dispatcher, AppDomain, and unobserved-task boundaries record failures without exposing details to the user.
 
-Release analyzers remain warnings-as-errors. The dependency inventory and vulnerability scan are documented, and the publish pipeline can Authenticode-sign the x64 executable and managed entry assembly using a certificate selected by thumbprint without storing private-key material in the repository.
+Release analyzers remain warnings-as-errors. The dependency inventory and vulnerability scan are documented.
 
 ## Dependency direction
 
@@ -91,11 +91,11 @@ No reference is permitted from contracts back to either host. Client and server 
 - Phase 3: implemented; click-consumption and mixed-DPI calibration require manual verification on target hardware.
 - Phase 4: implemented and covered by in-memory SignalR integration tests.
 - Phase 5: implemented; LAN p95 latency and the full mixed-DPI matrix require manual target-environment verification.
-- Phase 6: implemented; organization-PKI deployment and signed-artifact verification require the organization's certificate infrastructure.
-- Phase 7: implemented; organization signing and clean-VM deployment acceptance require the organization's certificate and disposable Windows 11 validation environment.
+- Phase 6: implemented.
+- Phase 7: implemented with a small-network deployment profile.
 
 ## Phase 7 deployment boundary
 
-The client is published self-contained for `win-x64` and packaged in a per-machine WiX MSI. Program files and the all-users shortcut are installer-owned; machine policy in `%ProgramData%\RemotePointer\clientsettings.json`, DPAPI recovery data, and per-user audit records are intentionally outside the MSI component graph. This keeps upgrades deterministic while preventing uninstall from erasing organization policy or retained records.
+The client is published self-contained for `win-x64` and packaged with Inno Setup for the current user under `%LocalAppData%\Programs\Remote Pointer`. The installer embeds the chosen HTTPS relay URL and Caddy public root certificate. With the certificate task selected, setup trusts that root only for the current Windows account. DPAPI recovery data and audit records remain separate under `%LocalAppData%\RemotePointer`.
 
-Client configuration precedence is packaged JSON, machine ProgramData policy, then the process environment override. All paths feed the same HTTPS-only validation. The relay can be deployed framework-dependent or from the non-root container image; its in-memory session boundary means process restart terminates active sessions.
+Packaged JSON provides the relay URL, with a process environment override retained for development. Both paths enforce HTTPS. In Docker, Caddy is the only published service and proxies to the non-root relay on the private Compose network. The relay's in-memory session boundary means process restart terminates active sessions.
