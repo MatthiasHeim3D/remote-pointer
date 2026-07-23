@@ -1,11 +1,11 @@
 # Deployment
 
-Deployment artifacts are scheduled for Phases 6 and 7. Phase 1 produces source projects only.
+Deployment artifacts are scheduled for Phases 6 and 7. Phases 1 and 2 produce source projects and a locally runnable overlay prototype only.
 
 ## Planned client deployment
 
 - Self-contained, signed Windows x64 output targeting `net10.0-windows`.
-- Per-Monitor V2 application manifest.
+- Per-Monitor V2 application manifest (implemented in Phase 2).
 - MSI or MSIX suitable for silent Intune/SCCM deployment.
 - Standard-user operation after installation.
 - Machine-wide server URL configuration without storing session secrets in JSON.

@@ -15,6 +15,13 @@ The shared library does not reference Windows desktop APIs. Future Win32 interop
 - Friendly pairing codes exclude visually ambiguous characters.
 - Nullable analysis, .NET analyzers, and warnings-as-errors are enabled repository-wide.
 
+## Phase 2 overlay controls
+
+- The receiver overlay is non-activating and returns transparent native hit-test results.
+- The overlay never observes mouse input and has no keyboard handlers.
+- Win32 interop is isolated under `RemotePointer.Client/Native` and is limited to display enumeration, DPI inspection, window placement, and extended window styles.
+- Test markers are generated from local normalized coordinates; no screen contents or application metadata are accessed.
+
 ## Controls scheduled for later phases
 
 - HTTPS/WSS enforcement and production plaintext refusal.
