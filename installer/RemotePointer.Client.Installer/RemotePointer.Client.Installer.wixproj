@@ -1,0 +1,35 @@
+<Project Sdk="WixToolset.Sdk/5.0.0">
+  <PropertyGroup>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <PublishDirectory Condition="'$(PublishDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\publish\client\win-x64</PublishDirectory>
+    <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\installer\</BaseOutputPath>
+    <OutputPath>$(BaseOutputPath)</OutputPath>
+    <OutputName>RemotePointer.Client-$(ProductVersion)-x64</OutputName>
+    <DebugType>none</DebugType>
+    <DefaultCompressionLevel>high</DefaultCompressionLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DefineConstants>ProductVersion=$(ProductVersion)</DefineConstants>
+    <EnableInstallerSigning Condition="'$(EnableInstallerSigning)' == ''">false</EnableInstallerSigning>
+    <SignOutput Condition="'$(EnableInstallerSigning)' == 'true'">true</SignOutput>
+    <SignToolPath Condition="'$(SignToolPath)' == ''">signtool.exe</SignToolPath>
+    <CodeSigningTimestampUrl Condition="'$(CodeSigningTimestampUrl)' == ''">https://timestamp.digicert.com</CodeSigningTimestampUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <BindPath Include="$(PublishDirectory)">
+      <BindName>ClientPublish</BindName>
+    </BindPath>
+  </ItemGroup>
+
+  <Target Name="ValidateInstallerSigning"
+          BeforeTargets="Build"
+          Condition="'$(EnableInstallerSigning)' == 'true'">
+    <Error Condition="'$(CodeSigningCertificateThumbprint)' == ''"
+           Text="CodeSigningCertificateThumbprint is required when EnableInstallerSigning=true." />
+  </Target>
+
+  <Target Name="SignMsi" Condition="'$(EnableInstallerSigning)' == 'true'">
+    <Exec Command="&quot;$(SignToolPath)&quot; sign /sha1 &quot;$(CodeSigningCertificateThumbprint)&quot; /fd SHA256 /tr &quot;$(CodeSigningTimestampUrl)&quot; /td SHA256 $(CodeSigningAdditionalArguments) &quot;%(SignMsi.FullPath)&quot;" />
+  </Target>
+</Project>

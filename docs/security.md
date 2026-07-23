@@ -71,6 +71,15 @@ No development certificate-bypass switch will be included in production builds.
 - Client crash handling preserves only protected credentials. Calibration rectangles, pairing codes, pointer events, and coordinates are never persisted.
 - Server and client use stable structured audit events. Client audit schema deliberately has no arbitrary message or coordinate fields and records exception type/code rather than exception text.
 - Release builds use latest installed .NET analyzers with warnings as errors. The Phase 6 NuGet advisory scan found no known vulnerable direct or transitive packages.
+
+## Phase 7 deployment controls
+
+- Production release automation requires an organization Authenticode certificate and validates both the published executable and final MSI after RFC 3161 timestamping.
+- The MSI is per-machine and x64, uses major upgrades, blocks downgrades, and is checked by the Windows Installer ICE suite.
+- Machine policy contains only the HTTPS relay URL and lives outside the MSI at `%ProgramData%\RemotePointer\clientsettings.json`; standard users require read-only access.
+- Client audit and DPAPI session files remain per-user and are not silently deleted by uninstall. Separate retention/offboarding policy owns their eventual removal.
+- Endpoints require outbound TCP 443 only. The package creates no inbound firewall rule, Windows service, driver, or certificate-validation bypass.
+- The reference relay container runs as non-root with a read-only filesystem, dropped capabilities, and its PFX mounted read-only from an external secret location.
 - Authenticode publishing uses SHA-256 file digests and RFC 3161 timestamps. The certificate is selected from the Windows certificate store by thumbprint; no private key or password is committed.
 
 See [threat-model.md](threat-model.md) for trust boundaries, abuse cases, assumptions, and residual risks.

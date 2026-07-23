@@ -92,4 +92,10 @@ No reference is permitted from contracts back to either host. Client and server 
 - Phase 4: implemented and covered by in-memory SignalR integration tests.
 - Phase 5: implemented; LAN p95 latency and the full mixed-DPI matrix require manual target-environment verification.
 - Phase 6: implemented; organization-PKI deployment and signed-artifact verification require the organization's certificate infrastructure.
-- Phase 7: not yet implemented.
+- Phase 7: implemented; organization signing and clean-VM deployment acceptance require the organization's certificate and disposable Windows 11 validation environment.
+
+## Phase 7 deployment boundary
+
+The client is published self-contained for `win-x64` and packaged in a per-machine WiX MSI. Program files and the all-users shortcut are installer-owned; machine policy in `%ProgramData%\RemotePointer\clientsettings.json`, DPAPI recovery data, and per-user audit records are intentionally outside the MSI component graph. This keeps upgrades deterministic while preventing uninstall from erasing organization policy or retained records.
+
+Client configuration precedence is packaged JSON, machine ProgramData policy, then the process environment override. All paths feed the same HTTPS-only validation. The relay can be deployed framework-dependent or from the non-root container image; its in-memory session boundary means process restart terminates active sessions.

@@ -30,6 +30,15 @@ The SignalR client resolves the matching 10.0.10 `Microsoft.AspNetCore.Connectio
 
 Test transitive dependencies include Microsoft TestPlatform/CodeCoverage 17.14.1, ASP.NET Core TestHost and Microsoft.Extensions 10.0.10, xUnit components/analyzers, and Newtonsoft.Json 13.0.3 used by the test platform. They are not shipped as application features.
 
+## Build and packaging dependencies
+
+| Package/tool | Version | Purpose |
+| --- | ---: | --- |
+| `WixToolset.Sdk` | 5.0.0 | Build and ICE-validate the x64 corporate MSI |
+| Windows SDK `signtool.exe` | Organization-managed | Authenticode-sign client binaries and MSI |
+
+WiX and signing tools run only in the release build environment and are not shipped to endpoints. WiX 5 is pinned because it provides SDK-style MSI builds and file harvesting without the Open Source Maintenance Fee introduced in WiX 6; any toolchain upgrade requires legal/license review as well as package regression testing.
+
 Central version declarations live in `Directory.Packages.props`. Framework and package updates require the full Release build, test suite, vulnerability scan, and a review of protocol compatibility and this inventory.
 
 ## Audit result

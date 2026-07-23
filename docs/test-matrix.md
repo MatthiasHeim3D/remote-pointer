@@ -1,6 +1,6 @@
 # Test matrix
 
-## Automated coverage through Phase 6
+## Automated coverage through Phase 7
 
 | Area | Cases |
 | --- | --- |
@@ -32,6 +32,8 @@
 | Protected recovery | At-rest token opacity, corruption/identity rejection, restart resume, token rotation, post-recovery pointer |
 | Audit privacy | Structured client record excludes exception messages, credentials, and coordinate fields |
 | Hub rate limiting | Real transport accepts burst of 30 and rejects immediate event 31 |
+| Machine client policy | ProgramData server URL overrides packaged JSON and still enforces HTTPS |
+| MSI authoring | Self-contained x64 payload compiles and passes WiX Windows Installer ICE validation |
 
 ## Manual display matrix for Phases 2–5
 
@@ -93,3 +95,15 @@
 5. Start a Production relay with an organization test certificate. Confirm HTTPS health succeeds, an HTTP request is refused without redirect, HSTS is present, and an untrusted certificate causes the client connection to fail.
 6. Publish with a non-production code-signing certificate and `EnableCodeSigning=true`. Verify both the executable and DLL signatures and timestamp with `Get-AuthenticodeSignature` or `signtool verify /pa /all /v`.
 7. Repeat the full Phase 5 display matrix as a standard user and confirm no administrator rights are required by the client.
+
+## Phase 7 clean-VM procedure
+
+1. Build a signed three-part release with `build\Build-Installer.ps1` and archive its hash and signature output.
+2. On a disposable clean Windows 11 x64 VM, trust only the organization roots and run `build\Test-Installer.ps1` elevated.
+3. Confirm silent installation, the all-users Start menu shortcut, and standard-user launch.
+4. Confirm the client uses `%ProgramData%\RemotePointer\clientsettings.json` and requires only outbound HTTPS to the relay.
+5. Install the previous signed version, write approved machine configuration, then install the new version. Confirm the major upgrade replaces application files without changing configuration or audit records.
+6. Silently uninstall. Confirm Program Files content and the shortcut are removed while ProgramData configuration and per-user audit records remain.
+7. Verify the MSI and executable signatures with both `Get-AuthenticodeSignature` and `signtool verify /pa /all /v`.
+8. Deploy to Intune/SCCM pilot collections in system context and confirm detection, install, upgrade, and uninstall reporting.
+9. Deploy the relay container or framework-dependent output, validate `/health`, WebSocket connectivity, certificate rotation, log forwarding, and documented rollback.

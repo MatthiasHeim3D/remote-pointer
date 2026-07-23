@@ -29,4 +29,12 @@ In the first client, use **Receive pointers**, select a monitor, and create a se
 
 The SignalR hub is available at `/hubs/pointer` and the health check at `https://localhost:7243/health`.
 
+Phase 7 adds the self-contained x64 MSI, machine-wide policy configuration, signed release pipeline, clean-VM acceptance automation, containerized relay deployment, and corporate operations documentation. Build a development-only MSI with:
+
+```powershell
+.\build\Build-Installer.ps1 -AllowUnsigned
+```
+
+Production packages require an organization code-signing certificate. See [docs/deployment.md](docs/deployment.md), [docs/server-deployment.md](docs/server-deployment.md), and [docs/operations-runbook.md](docs/operations-runbook.md).
+
 See [docs/architecture.md](docs/architecture.md) for component boundaries and phase status.

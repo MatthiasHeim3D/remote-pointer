@@ -1,0 +1,23 @@
+services:
+  relay:
+    image: registry.internal/remote-pointer-relay:1.0.0
+    build:
+      context: ../..
+      dockerfile: src/RemotePointer.Server/Dockerfile
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "443:8443"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Kestrel__Endpoints__Https__Url: https://0.0.0.0:8443
+      Kestrel__Endpoints__Https__Certificate__Path: /run/secrets/relay.pfx
+      Kestrel__Endpoints__Https__Certificate__Password: ${REMOTEPOINTER_TLS_PASSWORD:?set REMOTEPOINTER_TLS_PASSWORD}
+    volumes:
+      - C:/ProgramData/RemotePointer/tls/relay.pfx:/run/secrets/relay.pfx:ro
