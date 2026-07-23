@@ -19,6 +19,12 @@
 | Calibration geometry | Locked/unlocked resize, horizontal/vertical ratio preservation, minimum dimensions |
 | Presenter state | Expected-ratio validation, calibration request, ready/pointing transitions, hotkey errors |
 | Presenter capture reporting | Normalized local pointer count and coordinate presentation |
+| Pairing and secrets | Friendly cryptographic codes, hashing, one-time consumption, expiry |
+| Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
+| Session lifecycle | Creation, approval, active expiry, termination, presenter and receiver resume |
+| Pointer defenses | TTL, sequence duplicate suppression, 20/s refill, burst of 30 |
+| In-memory SignalR | Join/approve/send/acknowledge, both-role reconnect, termination, unauthorized sender |
+| Relay hosting | Health endpoint, 8 KB message limit, single invocation per client |
 
 ## Manual display matrix for Phases 2–5
 

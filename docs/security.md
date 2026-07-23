@@ -4,7 +4,7 @@
 
 The protocol contains only display geometry, normalized pointer events, acknowledgements, and session metadata. The solution has no screen-capture, audio, input-injection, clipboard, file-transfer, process-inspection, UI Automation, or conferencing-integration API.
 
-The shared library does not reference Windows desktop APIs. Future Win32 interop is restricted to monitor geometry, overlay styles, display-change messages, and global hotkey registration under `RemotePointer.Client/Native`.
+The shared library does not reference Windows desktop APIs. Client Win32 interop is restricted to monitor geometry, overlay styles, display-change messages, and global hotkey registration under `RemotePointer.Client/Native`.
 
 ## Phase 1 controls
 
@@ -33,12 +33,22 @@ The shared library does not reference Windows desktop APIs. Future Win32 interop
 
 ## Controls scheduled for later phases
 
-- HTTPS/WSS enforcement and production plaintext refusal.
-- SignalR connection authentication and role-restricted session tokens.
-- Cryptographically generated session IDs, secrets, and hashed one-time pairing codes.
-- Explicit receiver approval and one-presenter enforcement.
-- Per-session expiry, termination, rate limiting, and 8 KB message limits.
-- Coordinate-free structured audit logging and secret redaction.
+- Production plaintext refusal rather than redirection.
+- Organization PKI certificate and approved-interface configuration.
+- Protected client-side storage for role and reconnect credentials.
+- Durable audit sink, retention policy, and operational alerting.
 - Optional tenant/group-restricted Microsoft Entra ID authentication.
 
 No development certificate-bypass switch will be included in production builds.
+
+## Phase 4 relay controls
+
+- Pairing codes, session secrets, session tokens, and reconnect tokens are cryptographically generated; only hashes are retained in server state.
+- A pairing code is one-time and does not become a durable session credential.
+- Presenter credentials are issued only after explicit approval from the session's receiver connection.
+- Role and session membership are revalidated for every pointer, acknowledgement, resume, and termination operation.
+- Reconnect requires the client-instance ID, session token, role, and a single-use rotating reconnect token.
+- Pointer events are rejected for invalid coordinates, stale TTL, future timestamps, wrong sessions, unauthorized roles, excessive rate, and duplicate/old sequence numbers.
+- SignalR receive payloads are limited to 8 KB.
+- Structured logs omit pairing secrets, role tokens, reconnect tokens, and individual pointer coordinates.
+- Production uses HTTPS redirection; no certificate-validation bypass exists.

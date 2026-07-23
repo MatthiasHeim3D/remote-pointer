@@ -1,6 +1,6 @@
 # Deployment
 
-Deployment artifacts are scheduled for Phases 6 and 7. Phases 1 and 2 produce source projects and a locally runnable overlay prototype only.
+Deployment artifacts are scheduled for Phases 6 and 7. Phase 4 provides a runnable framework-dependent ASP.NET Core relay but not a production container or installer.
 
 ## Planned client deployment
 
@@ -17,5 +17,18 @@ Deployment artifacts are scheduled for Phases 6 and 7. Phases 1 and 2 produce so
 - Inbound TCP 443 at the server; clients require outbound HTTPS only.
 - JSON configuration with environment-variable overrides.
 - Health endpoint at `/health`.
+
+## Local Phase 4 relay
+
+```powershell
+dotnet run --project src\RemotePointer.Server --launch-profile https
+```
+
+- HTTPS: `https://localhost:7243`
+- Development HTTP: `http://localhost:5243`
+- SignalR: `/hubs/pointer`
+- Health: `/health`
+
+Session and rate settings live in `appsettings.json`. Standard ASP.NET Core environment variables override them, for example `Sessions__MaximumSessionHours` and `RateLimits__EventsPerSecond`.
 
 Signing, package upgrade/uninstall behavior, firewall details, and the operational runbook must be verified in Phase 7 on a clean Windows 11 VM.

@@ -18,7 +18,7 @@ public static class ContractValidator
         var errors = new List<ValidationError>();
 
         AddRequired(errors, message.EventId != Guid.Empty, nameof(message.EventId));
-        AddRequired(errors, !string.IsNullOrWhiteSpace(message.SessionId), nameof(message.SessionId));
+        AddRequired(errors, IsRequiredIdentifier(message.SessionId), nameof(message.SessionId));
         AddRange(errors, message.SequenceNumber >= 0, nameof(message.SequenceNumber));
         AddNormalizedCoordinate(errors, message.NormalizedX, nameof(message.NormalizedX));
         AddNormalizedCoordinate(errors, message.NormalizedY, nameof(message.NormalizedY));
@@ -59,8 +59,11 @@ public static class ContractValidator
         }
 
         var errors = new List<ValidationError>();
-        AddRequired(errors, !string.IsNullOrWhiteSpace(display.DisplayId), nameof(display.DisplayId));
-        AddRequired(errors, !string.IsNullOrWhiteSpace(display.DisplayName), nameof(display.DisplayName));
+        AddRequired(errors, IsRequiredIdentifier(display.DisplayId), nameof(display.DisplayId));
+        AddRequired(
+            errors,
+            !string.IsNullOrWhiteSpace(display.DisplayName) && display.DisplayName.Length <= 256,
+            nameof(display.DisplayName));
         AddRange(errors, display.WidthPixels > 0, nameof(display.WidthPixels));
         AddRange(errors, display.HeightPixels > 0, nameof(display.HeightPixels));
         AddRange(
@@ -93,9 +96,12 @@ public static class ContractValidator
         AddValue(errors, Enum.IsDefined(request.Role), nameof(request.Role));
         AddRequired(
             errors,
-            !string.IsNullOrWhiteSpace(request.ClientInstanceId),
+            IsRequiredIdentifier(request.ClientInstanceId),
             nameof(request.ClientInstanceId));
-        AddRequired(errors, !string.IsNullOrWhiteSpace(request.ClientVersion), nameof(request.ClientVersion));
+        AddRequired(
+            errors,
+            !string.IsNullOrWhiteSpace(request.ClientVersion) && request.ClientVersion.Length <= 64,
+            nameof(request.ClientVersion));
 
         return ValidationResult.Failure(errors);
     }
@@ -125,7 +131,7 @@ public static class ContractValidator
         }
 
         var errors = new List<ValidationError>();
-        AddRequired(errors, !string.IsNullOrWhiteSpace(state.SessionId), nameof(state.SessionId));
+        AddRequired(errors, IsRequiredIdentifier(state.SessionId), nameof(state.SessionId));
         AddRange(errors, state.ExpiresAt != default, nameof(state.ExpiresAt));
 
         if (state.ReceiverDisplay is not null)
@@ -133,6 +139,25 @@ public static class ContractValidator
             errors.AddRange(Validate(state.ReceiverDisplay).Errors);
         }
 
+        return ValidationResult.Failure(errors);
+    }
+
+    public static ValidationResult Validate(SessionResumeRequest? request)
+    {
+        if (request is null)
+        {
+            return RequiredMessage(nameof(request));
+        }
+
+        var errors = new List<ValidationError>();
+        AddRequired(errors, IsRequiredIdentifier(request.SessionId), nameof(request.SessionId));
+        AddValue(errors, Enum.IsDefined(request.Role), nameof(request.Role));
+        AddRequired(
+            errors,
+            IsRequiredIdentifier(request.ClientInstanceId),
+            nameof(request.ClientInstanceId));
+        AddRequired(errors, IsRequiredSecret(request.SessionToken), nameof(request.SessionToken));
+        AddRequired(errors, IsRequiredSecret(request.ReconnectToken), nameof(request.ReconnectToken));
         return ValidationResult.Failure(errors);
     }
 
@@ -185,4 +210,10 @@ public static class ContractValidator
             errors,
             double.IsFinite(coordinate) && coordinate is >= 0d and <= 1d,
             fieldName);
+
+    private static bool IsRequiredIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= 128;
+
+    private static bool IsRequiredSecret(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length is >= 32 and <= 256;
 }

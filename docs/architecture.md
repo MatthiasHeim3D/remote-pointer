@@ -40,6 +40,18 @@ Pointing mode reuses the exact calibrated top-level window bounds with transpare
 
 The control window registers `Ctrl+Alt+P` with `RegisterHotKey`; no keyboard or mouse hook is installed. Escape is handled by the focused target window and immediately closes pointing mode. Inactive mode closes the target window entirely.
 
+## Phase 4 design
+
+`PointerHub` is a typed SignalR hub at `/hubs/pointer`. It contains orchestration only: every state transition and authorization decision is delegated to the singleton `SessionManager`. A SignalR group exists per approved session, while pointer and acknowledgement delivery is addressed directly to the currently validated receiver or presenter connection so no pending or unrelated client receives transient data.
+
+`SessionManager` uses a single in-process synchronization boundary around its dictionaries because the MVP permits only one receiver and one presenter per session. SignalR connection IDs are current routes, not identities. Participants are identified by a client-instance ID plus role-specific session and reconnect tokens. Resume validates both hashes, replaces the route, and rotates the reconnect token without resetting sequence state.
+
+Pairing codes use a six-character unambiguous cryptographic alphabet and are indexed only by SHA-256 hash. A successful join consumes the code. Session IDs, session secrets, role tokens, and reconnect tokens each use 256 bits of random input; only hashes are retained by the manager.
+
+Pointer acceptance applies strict JSON/contract validation, current role authorization, session expiry, a 30-event token-bucket burst with a 20-event-per-second refill, and a bounded sequence window. Duplicate or significantly old sequence numbers are dropped. Events are delivered only when the receiver is currently connected and are never queued for replay.
+
+A hosted cleanup service expires unused pairing sessions and active sessions. The relay uses structured JSON console logging and records aggregate pointer counts only when a session ends or expires.
+
 ## Dependency direction
 
 ```text
@@ -55,4 +67,5 @@ No reference is permitted from contracts back to either host. Client and server 
 - Phase 1: implemented.
 - Phase 2: implemented; manual mixed-DPI and display-disconnection verification is required on target hardware.
 - Phase 3: implemented; click-consumption and mixed-DPI calibration require manual verification on target hardware.
-- Phases 4–7: not yet implemented.
+- Phase 4: implemented and covered by in-memory SignalR integration tests.
+- Phases 5–7: not yet implemented.
