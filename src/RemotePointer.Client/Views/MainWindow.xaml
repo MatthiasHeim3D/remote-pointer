@@ -93,6 +93,16 @@
                                 Foreground="White"
                                 Content="End session" />
                     </WrapPanel>
+                    <CheckBox Margin="0,8,0,0"
+                              Foreground="White"
+                              IsEnabled="{Binding CanSetReceiverDiscoverable}"
+                              IsChecked="{Binding ReceiverDiscoverable, Mode=TwoWay}"
+                              Command="{Binding SetReceiverDiscoverableCommand}"
+                              Content="Visible to presenters on this relay" />
+                    <TextBlock Margin="0,4,0,10"
+                               Foreground="#AEB8C8"
+                               TextWrapping="Wrap"
+                               Text="{Binding ReceiverDiscoveryMessage, Mode=OneWay}" />
                     <TextBlock Margin="0,8,0,0" Foreground="#AEB8C8" Text="Pairing code" />
                     <TextBlock Margin="0,2,0,0"
                                FontFamily="Consolas"
@@ -147,7 +157,7 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Margin="0,0,0,24">
-                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="Presenter target prototype" />
+                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="Point at another screen" />
                         <TextBlock Margin="0,8,0,0"
                                    Foreground="#AEB8C8"
                                    TextWrapping="Wrap"
@@ -167,6 +177,9 @@
                             </TextBlock>
                             <TextBlock Margin="0,3,0,12" Foreground="#AEB8C8"
                                        Text="{Binding Presenter.ConnectionMessage, Mode=OneWay}" />
+                            <TextBlock Margin="0,0,0,6"
+                                       Foreground="#AEB8C8"
+                                       Text="Join with pairing code" />
                             <DockPanel>
                                 <Button DockPanel.Dock="Right"
                                         Margin="10,0,0,0"
@@ -179,6 +192,29 @@
                                          FontSize="18"
                                          Text="{Binding Presenter.PairingCode, UpdateSourceTrigger=PropertyChanged}" />
                             </DockPanel>
+                            <TextBlock Margin="0,14,0,6"
+                                       Foreground="#AEB8C8"
+                                       Text="Or choose a visible receiver" />
+                            <DockPanel IsEnabled="{Binding Presenter.ReceiverDiscoveryEnabled}">
+                                <Button DockPanel.Dock="Right"
+                                        Margin="10,0,0,0"
+                                        Command="{Binding Presenter.RefreshReceiversCommand}"
+                                        Content="Refresh list" />
+                                <ComboBox MinHeight="38"
+                                          Padding="8,5"
+                                          ItemsSource="{Binding Presenter.AvailableReceivers}"
+                                          SelectedItem="{Binding Presenter.SelectedReceiver}"
+                                          DisplayMemberPath="DisplayName" />
+                            </DockPanel>
+                            <Button Margin="0,8,8,0"
+                                    HorizontalAlignment="Left"
+                                    IsEnabled="{Binding Presenter.ReceiverDiscoveryEnabled}"
+                                    Command="{Binding Presenter.JoinDiscoveredReceiverCommand}"
+                                    Content="Request access to selected receiver" />
+                            <TextBlock Margin="0,3,0,0"
+                                       Foreground="#AEB8C8"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding Presenter.ReceiverDiscoveryMessage, Mode=OneWay}" />
                             <WrapPanel Margin="0,12,0,0">
                                 <Button Command="{Binding Presenter.EndSessionCommand}"
                                         Background="#C35E65"
@@ -201,19 +237,10 @@
                             <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Receiver display shape" />
                             <TextBlock Margin="0,6,0,12"
                                        Foreground="#AEB8C8"
-                                       Text="Enter the receiver display dimensions used for aspect-ratio guidance." />
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Margin="0,7,8,0" Text="Width" />
-                                <TextBox Width="100"
-                                         Text="{Binding Presenter.ExpectedWidthPixels, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Margin="16,7,8,0" Text="Height" />
-                                <TextBox Width="100"
-                                         Text="{Binding Presenter.ExpectedHeightPixels, UpdateSourceTrigger=PropertyChanged}" />
-                                <CheckBox Margin="18,7,0,0"
-                                          Foreground="White"
-                                          IsChecked="{Binding Presenter.AspectRatioLockEnabled}"
-                                          Content="Lock while resizing" />
-                            </StackPanel>
+                                       Text="Synced automatically from the approved receiver." />
+                            <TextBlock FontFamily="Consolas"
+                                       FontSize="18"
+                                       Text="{Binding Presenter.ReceiverDisplayShape, Mode=OneWay}" />
                             <Button Margin="0,16,8,0"
                                     HorizontalAlignment="Left"
                                     Command="{Binding Presenter.CalibrateCommand}"

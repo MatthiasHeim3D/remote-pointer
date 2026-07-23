@@ -9,6 +9,49 @@ namespace RemotePointer.Client.Tests.ViewModels;
 public sealed class PresenterViewModelTests
 {
     [Fact]
+    public async Task DiscoveryInitialization_LoadsReceiversAndDirectJoinRequestsSelection()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(true),
+            AvailableReceivers =
+            [
+                new AvailableReceiverDescriptor("session-visible", "Receiver PC"),
+            ],
+        };
+        using var viewModel = new PresenterViewModel(service, relay);
+
+        await viewModel.InitializeAsync();
+        viewModel.JoinDiscoveredReceiverCommand.Execute(null);
+
+        Assert.True(viewModel.ReceiverDiscoveryEnabled);
+        Assert.Equal("session-visible", relay.RequestedReceiverSessionId);
+        Assert.True(viewModel.IsJoinPending);
+    }
+
+    [Fact]
+    public async Task DiscoveryInitialization_RemainsDisabledWhenServerDisallowsIt()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(false),
+            AvailableReceivers =
+            [
+                new AvailableReceiverDescriptor("session-hidden", "Hidden Receiver"),
+            ],
+        };
+        using var viewModel = new PresenterViewModel(service, relay);
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(viewModel.ReceiverDiscoveryEnabled);
+        Assert.Empty(viewModel.AvailableReceivers);
+        Assert.False(viewModel.JoinDiscoveredReceiverCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void ApprovedPointer_IsSentAndAcknowledgementLatencyIsShown()
     {
         using var service = new FakeTargetRegionService();
@@ -31,8 +74,7 @@ public sealed class PresenterViewModelTests
         Assert.Equal(0.75d, sent.NormalizedY);
         Assert.Equal(2_000, sent.TimeToLiveMilliseconds);
         Assert.True(sent.SequenceNumber > 1_000_000);
-        Assert.Equal(2_560d, viewModel.ExpectedWidthPixels);
-        Assert.Equal(1_440d, viewModel.ExpectedHeightPixels);
+        Assert.Contains("2560 × 1440", viewModel.ReceiverDisplayShape, StringComparison.Ordinal);
         Assert.Contains("42 ms", viewModel.LastAcknowledgement, StringComparison.Ordinal);
     }
 
@@ -99,39 +141,52 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
-    public void CalibrateCommand_SendsExpectedAspectRatioAndLockPreference()
+    public void CalibrateCommand_UsesSyncedReceiverAspectRatio()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service)
-        {
-            ExpectedWidthPixels = 2_560d,
-            ExpectedHeightPixels = 1_440d,
-            AspectRatioLockEnabled = true,
-        };
+        var relay = new FakeRelayClient();
+        using var viewModel = new PresenterViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 2_560, 1_440, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
 
         viewModel.CalibrateCommand.Execute(null);
 
         Assert.Equal(16d / 9d, service.RequestedAspectRatio, precision: 12);
-        Assert.True(service.RequestedAspectLock);
     }
 
-    [Theory]
-    [InlineData(0d, 1_080d)]
-    [InlineData(1_920d, -1d)]
-    [InlineData(double.NaN, 1_080d)]
-    public void CalibrateCommand_RejectsInvalidExpectedDimensions(double width, double height)
+    [Fact]
+    public void ReceiverDisplayChange_UpdatesShapeAndInvalidatesDifferentAspectCalibration()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service)
-        {
-            ExpectedWidthPixels = width,
-            ExpectedHeightPixels = height,
-        };
+        var relay = new FakeRelayClient();
+        using var viewModel = new PresenterViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
 
-        viewModel.CalibrateCommand.Execute(null);
+        relay.RaiseReceiverDisplayChanged(
+            new DisplayDescriptor("display", "Display", 1_200, 1_920, 1d, 90));
 
-        Assert.Equal(0, service.BeginCalibrationCount);
-        Assert.True(viewModel.IsError);
+        Assert.Contains("1200 × 1920", viewModel.ReceiverDisplayShape, StringComparison.Ordinal);
+        Assert.Equal(1_200d / 1_920d, service.UpdatedAspectRatio, precision: 12);
+    }
+
+    [Fact]
+    public void LocalDisplayChange_InvalidatesCalibration()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new PresenterViewModel(service);
+
+        viewModel.HandleLocalDisplayConfigurationChanged();
+
+        Assert.Equal(1, service.InvalidateCount);
     }
 
     [Fact]
@@ -209,17 +264,27 @@ public sealed class PresenterViewModelTests
 
         public double RequestedAspectRatio { get; private set; }
 
-        public bool RequestedAspectLock { get; private set; }
+        public double UpdatedAspectRatio { get; private set; }
+
+        public int InvalidateCount { get; private set; }
 
         public int ToggleCount { get; private set; }
 
         public int ExitCount { get; private set; }
 
-        public void BeginCalibration(double expectedAspectRatio, bool lockAspectRatio)
+        public void BeginCalibration(double expectedAspectRatio)
         {
             BeginCalibrationCount++;
             RequestedAspectRatio = expectedAspectRatio;
-            RequestedAspectLock = lockAspectRatio;
+        }
+
+        public void UpdateExpectedAspectRatio(double expectedAspectRatio) =>
+            UpdatedAspectRatio = expectedAspectRatio;
+
+        public void InvalidateCalibration(string message)
+        {
+            _ = message;
+            InvalidateCount++;
         }
 
         public void TogglePointingMode() => ToggleCount++;

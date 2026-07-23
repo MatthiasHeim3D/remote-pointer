@@ -110,6 +110,8 @@ public sealed class SignalRRelayClient : IRelayClient
 
     public event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
+    public event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
+
     public event EventHandler<RelayPointerEventArgs>? PointerReceived;
 
     public event EventHandler<RelayAcknowledgementEventArgs>? PointerDisplayed;
@@ -149,6 +151,26 @@ public sealed class SignalRRelayClient : IRelayClient
                 return credential;
             }
         }
+    }
+
+    public async Task<RelayCapabilities> GetRelayCapabilitiesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.InvokeAsync<RelayCapabilities>(
+                "GetRelayCapabilities",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.InvokeAsync<AvailableReceiverDescriptor[]>(
+                "GetAvailableReceivers",
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default)
@@ -193,6 +215,21 @@ public sealed class SignalRRelayClient : IRelayClient
         return response;
     }
 
+    public async Task<bool> SetReceiverDiscoverableAsync(
+        bool discoverable,
+        CancellationToken cancellationToken = default)
+    {
+        var currentSessionId = SessionId
+            ?? throw new InvalidOperationException("No receiver session is active.");
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        return await connection.InvokeAsync<bool>(
+                "SetReceiverDiscoverable",
+                currentSessionId,
+                discoverable,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<JoinResponse> RequestToJoinSessionAsync(
         string pairingCode,
         CancellationToken cancellationToken = default)
@@ -218,6 +255,49 @@ public sealed class SignalRRelayClient : IRelayClient
         }
 
         return response;
+    }
+
+    public async Task<JoinResponse> RequestToJoinReceiverAsync(
+        string selectedSessionId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(selectedSessionId);
+        DiscardRecoveredCredential(ClientRole.Presenter);
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        var request = new DirectJoinRequest(
+            selectedSessionId,
+            clientInstanceId,
+            GetClientVersion());
+        var response = await connection.InvokeAsync<JoinResponse>(
+                "RequestToJoinReceiver",
+                request,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (response.Accepted)
+        {
+            lock (stateLock)
+            {
+                sessionId = response.SessionId;
+            }
+        }
+
+        return response;
+    }
+
+    public async Task UpdateReceiverDisplayAsync(
+        DisplayDescriptor display,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureValid(ContractValidator.Validate(display));
+        var currentSessionId = SessionId
+            ?? throw new InvalidOperationException("No receiver session is active.");
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        await connection.InvokeAsync(
+                "UpdateReceiverDisplay",
+                currentSessionId,
+                display,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task ApprovePresenterAsync(
@@ -344,6 +424,12 @@ public sealed class SignalRRelayClient : IRelayClient
                 Publish(
                     () => SessionApproved?.Invoke(this, new RelaySessionStateEventArgs(state)));
             });
+        connection.On<DisplayDescriptor>(
+            "ReceiverDisplayChanged",
+            display => Publish(
+                () => ReceiverDisplayChanged?.Invoke(
+                    this,
+                    new RelayReceiverDisplayChangedEventArgs(display))));
         connection.On<PointerEventMessage>(
             "PointerReceived",
             pointerEvent => Publish(

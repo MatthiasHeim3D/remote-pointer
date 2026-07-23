@@ -10,6 +10,8 @@ public interface IPointerClient
 
     Task SessionCredentialIssued(SessionCredential credential);
 
+    Task ReceiverDisplayChanged(DisplayDescriptor display);
+
     Task PointerReceived(PointerEventMessage pointerEvent);
 
     Task PointerDisplayed(PointerAcknowledgement acknowledgement);

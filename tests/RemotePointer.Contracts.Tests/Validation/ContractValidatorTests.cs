@@ -55,6 +55,25 @@ public sealed class ContractValidatorTests
     }
 
     [Fact]
+    public void Validate_AcceptsValidDirectJoinRequest()
+    {
+        var request = new DirectJoinRequest("session-id", "client-id", "1.0.0");
+
+        Assert.True(ContractValidator.Validate(request).IsValid);
+    }
+
+    [Fact]
+    public void Validate_RejectsInvalidDirectJoinRequest()
+    {
+        var request = new DirectJoinRequest("", "", "");
+
+        var result = ContractValidator.Validate(request);
+
+        Assert.False(result.IsValid);
+        Assert.Equal(3, result.Errors.Count);
+    }
+
+    [Fact]
     public void Validate_ValidatesNestedReceiverDisplay()
     {
         var display = new DisplayDescriptor("display", "Display", -1, 1_080, 1d, 0);

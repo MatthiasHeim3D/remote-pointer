@@ -23,6 +23,7 @@ Trust boundaries exist at the public relay listener, SignalR hub method boundary
 
 1. The receiver creates a session over HTTPS and receives role credentials plus a one-time code.
 2. The presenter submits the code and a durable random client ID. The receiver explicitly approves the displayed machine identity.
+   When server-enabled discovery is used instead, the receiver first opts into the directory and the presenter selects its opaque entry; the same approval step still applies.
 3. The relay issues role-specific credentials and relays only validated, transient normalized coordinates.
 4. The receiver displays a non-interactive marker and acknowledges its event ID.
 5. Reconnection or client restart submits the DPAPI-recovered token set; the relay revalidates it and rotates the reconnect token.
@@ -34,6 +35,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 | Threat | Control | Residual risk |
 | --- | --- | --- |
 | Pairing-code guessing | Cryptographic alphabet, short expiry, one-time consumption, explicit receiver approval | Online attempts are not globally throttled by source IP in the MVP; network perimeter controls remain required |
+| Receiver-directory enumeration | Disabled by default, receiver opt-in, machine label plus opaque session ID only, approval before credentials | Other users who can reach the relay can see opted-in receiver labels; the small-network deployment relies on its closed network/VPN boundary |
 | Presenter impersonation | Random client identity, receiver-visible machine name, explicit approval, role token | Machine name is not cryptographic identity until optional Entra ID is added |
 | Credential theft from disk | Windows DPAPI CurrentUser encryption and no plaintext fallback | Malware running as the same user can call DPAPI and remains outside the app's isolation capability |
 | Token replay | Session/role/client binding and single-use reconnect-token rotation | A token stolen from live process memory can be used until rotation or expiry |

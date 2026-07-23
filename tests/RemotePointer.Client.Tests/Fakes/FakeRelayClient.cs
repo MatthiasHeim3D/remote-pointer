@@ -11,6 +11,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
+    public event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
+
     public event EventHandler<RelayPointerEventArgs>? PointerReceived;
 
     public event EventHandler<RelayAcknowledgementEventArgs>? PointerDisplayed;
@@ -29,6 +31,16 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public JoinResponse JoinResponse { get; set; } = new(true, "session-1", null);
 
+    public RelayCapabilities Capabilities { get; set; } = new(false);
+
+    public IReadOnlyList<AvailableReceiverDescriptor> AvailableReceivers { get; set; } = [];
+
+    public bool IsDiscoverable { get; private set; }
+
+    public DisplayDescriptor? UpdatedReceiverDisplay { get; private set; }
+
+    public string? RequestedReceiverSessionId { get; private set; }
+
     public int CreateCount { get; private set; }
 
     public PresenterDescriptor? ApprovedPresenter { get; private set; }
@@ -46,6 +58,20 @@ internal sealed class FakeRelayClient : IRelayClient
     public bool ResumeResult { get; set; }
 
     public int ResumeCount { get; private set; }
+
+    public Task<RelayCapabilities> GetRelayCapabilitiesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        return Task.FromResult(Capabilities);
+    }
+
+    public Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        return Task.FromResult(AvailableReceivers);
+    }
 
     public Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default)
     {
@@ -75,6 +101,34 @@ internal sealed class FakeRelayClient : IRelayClient
         _ = cancellationToken;
         SessionId = JoinResponse.SessionId;
         return Task.FromResult(JoinResponse);
+    }
+
+    public Task<bool> SetReceiverDiscoverableAsync(
+        bool discoverable,
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        IsDiscoverable = discoverable;
+        return Task.FromResult(discoverable);
+    }
+
+    public Task<JoinResponse> RequestToJoinReceiverAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        RequestedReceiverSessionId = sessionId;
+        _ = cancellationToken;
+        SessionId = JoinResponse.SessionId;
+        return Task.FromResult(JoinResponse);
+    }
+
+    public Task UpdateReceiverDisplayAsync(
+        DisplayDescriptor display,
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        UpdatedReceiverDisplay = display;
+        return Task.CompletedTask;
     }
 
     public Task ApprovePresenterAsync(
@@ -153,6 +207,11 @@ internal sealed class FakeRelayClient : IRelayClient
             state.ExpiresAt);
         SessionApproved?.Invoke(this, new RelaySessionStateEventArgs(state));
     }
+
+    public void RaiseReceiverDisplayChanged(DisplayDescriptor display) =>
+        ReceiverDisplayChanged?.Invoke(
+            this,
+            new RelayReceiverDisplayChangedEventArgs(display));
 
     public void RaisePointer(PointerEventMessage pointerEvent) =>
         PointerReceived?.Invoke(this, new RelayPointerEventArgs(pointerEvent));

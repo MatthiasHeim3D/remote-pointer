@@ -17,6 +17,54 @@ public sealed class PointerHubIntegrationTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
+    public async Task Discovery_DirectJoinAndReceiverDisplayUpdate_PreserveReceiverApproval()
+    {
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
+        await using var presenter = CreateConnection(factory, "presenter-client", "Presenter Machine");
+        var joinRequested = CompletionSource<PresenterDescriptor>();
+        var approved = CompletionSource<SessionStateMessage>();
+        var displayChanged = CompletionSource<DisplayDescriptor>();
+        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
+        presenter.On<SessionStateMessage>("SessionApproved", approved.SetResult);
+        presenter.On<DisplayDescriptor>("ReceiverDisplayChanged", displayChanged.SetResult);
+        await receiver.StartAsync();
+        await presenter.StartAsync();
+
+        var capabilities = await presenter.InvokeAsync<RelayCapabilities>("GetRelayCapabilities");
+        Assert.True(capabilities.ReceiverDiscoveryEnabled);
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSession",
+            CreateDisplay());
+        Assert.True(await receiver.InvokeAsync<bool>(
+            "SetReceiverDiscoverable",
+            created.SessionId,
+            true));
+        var listed = Assert.Single(
+            await presenter.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
+        Assert.Equal("Receiver Machine", listed.DisplayName);
+
+        var join = await presenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+        var pending = await joinRequested.Task.WaitAsync(TestTimeout);
+        Assert.True(join.Accepted);
+        Assert.False(approved.Task.IsCompleted);
+
+        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, pending.ConnectionId);
+        _ = await approved.Task.WaitAsync(TestTimeout);
+        var updatedDisplay = new DisplayDescriptor(
+            "display-1",
+            "Display 1",
+            1_200,
+            1_920,
+            1d,
+            90);
+        await receiver.InvokeAsync("UpdateReceiverDisplay", created.SessionId, updatedDisplay);
+        Assert.Equal(updatedDisplay, await displayChanged.Task.WaitAsync(TestTimeout));
+    }
+
+    [Fact]
     public async Task ApprovedSession_RelaysAcknowledgesReconnectsAndTerminates()
     {
         using var factory = CreateFactory();
@@ -275,9 +323,17 @@ public sealed class PointerHubIntegrationTests
         Assert.Equal(30, await allPointersReceived.Task.WaitAsync(TestTimeout));
     }
 
-    private static WebApplicationFactory<Program> CreateFactory() =>
+    private static WebApplicationFactory<Program> CreateFactory(
+        bool receiverDiscoveryEnabled = false) =>
         new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+            .WithWebHostBuilder(
+                builder =>
+                {
+                    builder.UseEnvironment("Development");
+                    builder.UseSetting(
+                        "Sessions:ReceiverDiscoveryEnabled",
+                        receiverDiscoveryEnabled.ToString());
+                });
 
     private static HubConnection CreateConnection(
         WebApplicationFactory<Program> factory,

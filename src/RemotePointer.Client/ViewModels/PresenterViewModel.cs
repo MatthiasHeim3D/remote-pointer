@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
 using RemotePointer.Client.Services;
@@ -11,17 +12,19 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 {
     private readonly RelayCommand calibrateCommand;
     private readonly AsyncRelayCommand endSessionCommand;
+    private readonly AsyncRelayCommand joinDiscoveredReceiverCommand;
     private readonly AsyncRelayCommand joinSessionCommand;
+    private readonly AsyncRelayCommand refreshReceiversCommand;
     private readonly Dictionary<Guid, long> pendingAcknowledgements = [];
     private readonly int pointerTtlMilliseconds;
     private readonly IRelayClient? relayClient;
     private readonly ITargetRegionService targetRegionService;
     private readonly RelayCommand togglePointingCommand;
-    private bool aspectRatioLockEnabled = true;
     private int capturedPointerCount;
     private bool disposed;
-    private double expectedHeightPixels = 1_080d;
-    private double expectedWidthPixels = 1_920d;
+    private DisplayDescriptor? receiverDisplay;
+    private AvailableReceiverDescriptor? selectedReceiver;
+    private bool receiverDiscoveryEnabled;
     private bool isError;
     private bool isJoinPending;
     private bool isSessionApproved;
@@ -58,6 +61,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         {
             relayClient.ConnectionStatusChanged += OnConnectionStatusChanged;
             relayClient.SessionApproved += OnSessionApproved;
+            relayClient.ReceiverDisplayChanged += OnReceiverDisplayChanged;
             relayClient.PointerDisplayed += OnPointerDisplayed;
             relayClient.SessionEnded += OnSessionEnded;
         }
@@ -73,28 +77,60 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         joinSessionCommand = new AsyncRelayCommand(
             _ => JoinSessionAsync(),
             _ => relayClient is not null && !IsJoinPending && !IsSessionApproved);
+        refreshReceiversCommand = new AsyncRelayCommand(
+            _ => RefreshAvailableReceiversAsync(),
+            _ => relayClient is not null && ReceiverDiscoveryEnabled && !IsSessionApproved);
+        joinDiscoveredReceiverCommand = new AsyncRelayCommand(
+            _ => JoinDiscoveredReceiverAsync(),
+            _ => relayClient is not null
+                && ReceiverDiscoveryEnabled
+                && SelectedReceiver is not null
+                && !IsJoinPending
+                && !IsSessionApproved);
         endSessionCommand = new AsyncRelayCommand(
             _ => EndSessionAsync(),
             _ => relayClient is not null && IsSessionApproved);
     }
 
-    public double ExpectedWidthPixels
+    public ObservableCollection<AvailableReceiverDescriptor> AvailableReceivers { get; } = [];
+
+    public AvailableReceiverDescriptor? SelectedReceiver
     {
-        get => expectedWidthPixels;
-        set => SetProperty(ref expectedWidthPixels, value);
+        get => selectedReceiver;
+        set
+        {
+            if (SetProperty(ref selectedReceiver, value))
+            {
+                joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 
-    public double ExpectedHeightPixels
+    public bool ReceiverDiscoveryEnabled
     {
-        get => expectedHeightPixels;
-        set => SetProperty(ref expectedHeightPixels, value);
+        get => receiverDiscoveryEnabled;
+        private set
+        {
+            if (SetProperty(ref receiverDiscoveryEnabled, value))
+            {
+                RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+                refreshReceiversCommand.RaiseCanExecuteChanged();
+                joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 
-    public bool AspectRatioLockEnabled
-    {
-        get => aspectRatioLockEnabled;
-        set => SetProperty(ref aspectRatioLockEnabled, value);
-    }
+    public string ReceiverDiscoveryMessage => ReceiverDiscoveryEnabled
+        ? AvailableReceivers.Count == 0
+            ? "No visible receivers are currently available."
+            : $"{AvailableReceivers.Count} visible receiver{(AvailableReceivers.Count == 1 ? string.Empty : "s")} available."
+        : "Receiver discovery is disabled on this relay.";
+
+    public string ReceiverDisplayShape => receiverDisplay is null
+        ? "Available after receiver approval."
+        : string.Create(
+            CultureInfo.InvariantCulture,
+            $"{receiverDisplay.WidthPixels} × {receiverDisplay.HeightPixels} ({receiverDisplay.AspectRatio:0.###}:1)");
 
     public string PairingCode
     {
@@ -194,7 +230,33 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public ICommand JoinSessionCommand => joinSessionCommand;
 
+    public ICommand RefreshReceiversCommand => refreshReceiversCommand;
+
+    public ICommand JoinDiscoveredReceiverCommand => joinDiscoveredReceiverCommand;
+
     public ICommand EndSessionCommand => endSessionCommand;
+
+    public async Task InitializeAsync()
+    {
+        if (relayClient is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var capabilities = await relayClient.GetRelayCapabilitiesAsync();
+            ReceiverDiscoveryEnabled = capabilities.ReceiverDiscoveryEnabled;
+            if (ReceiverDiscoveryEnabled)
+            {
+                await RefreshAvailableReceiversAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Relay capabilities could not be loaded: {exception.Message}", true);
+        }
+    }
 
     public async Task RestoreSessionAsync()
     {
@@ -244,6 +306,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         {
             relayClient.ConnectionStatusChanged -= OnConnectionStatusChanged;
             relayClient.SessionApproved -= OnSessionApproved;
+            relayClient.ReceiverDisplayChanged -= OnReceiverDisplayChanged;
             relayClient.PointerDisplayed -= OnPointerDisplayed;
             relayClient.SessionEnded -= OnSessionEnded;
             relayClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -271,19 +334,80 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         {
             var response = await relayClient.RequestToJoinSessionAsync(
                 PairingCodeValidator.Normalize(PairingCode));
-            if (!response.Accepted)
-            {
-                SetStatus(response.Reason ?? "The join request was rejected.", true);
-                return;
-            }
-
-            IsJoinPending = true;
-            SetStatus("Join request sent. Waiting for receiver approval.", false);
+            HandleJoinResponse(response);
         }
         catch (Exception exception)
         {
             SetStatus($"The receiver session could not be joined: {exception.Message}", true);
         }
+    }
+
+    private async Task RefreshAvailableReceiversAsync()
+    {
+        if (relayClient is null || !ReceiverDiscoveryEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var receivers = await relayClient.GetAvailableReceiversAsync();
+            var selectedSessionId = SelectedReceiver?.SessionId;
+            AvailableReceivers.Clear();
+            foreach (var receiver in receivers)
+            {
+                AvailableReceivers.Add(receiver);
+            }
+
+            SelectedReceiver = AvailableReceivers.FirstOrDefault(
+                receiver => string.Equals(
+                    receiver.SessionId,
+                    selectedSessionId,
+                    StringComparison.Ordinal))
+                ?? AvailableReceivers.FirstOrDefault();
+            RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Visible receivers could not be loaded: {exception.Message}", true);
+        }
+    }
+
+    private async Task JoinDiscoveredReceiverAsync()
+    {
+        if (relayClient is null || SelectedReceiver is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var response = await relayClient.RequestToJoinReceiverAsync(
+                SelectedReceiver.SessionId);
+            HandleJoinResponse(response);
+            if (response.Accepted)
+            {
+                AvailableReceivers.Remove(SelectedReceiver);
+                SelectedReceiver = AvailableReceivers.FirstOrDefault();
+                RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+            }
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"The selected receiver could not be joined: {exception.Message}", true);
+        }
+    }
+
+    private void HandleJoinResponse(JoinResponse response)
+    {
+        if (!response.Accepted)
+        {
+            SetStatus(response.Reason ?? "The join request was rejected.", true);
+            return;
+        }
+
+        IsJoinPending = true;
+        SetStatus("Join request sent. Waiting for receiver approval.", false);
     }
 
     private async Task EndSessionAsync()
@@ -314,19 +438,13 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (!double.IsFinite(ExpectedWidthPixels)
-            || !double.IsFinite(ExpectedHeightPixels)
-            || ExpectedWidthPixels <= 0d
-            || ExpectedHeightPixels <= 0d)
+        if (relayClient is not null && receiverDisplay is null)
         {
-            SetStatus("Expected receiver dimensions must be positive numbers.", isError: true);
+            SetStatus("Wait for the receiver display shape before calibrating.", isError: true);
             return;
         }
 
-        var expectedRatio = AspectRatio.Calculate(
-            ExpectedWidthPixels,
-            ExpectedHeightPixels);
-        targetRegionService.BeginCalibration(expectedRatio, AspectRatioLockEnabled);
+        targetRegionService.BeginCalibration(receiverDisplay?.AspectRatio ?? (16d / 9d));
     }
 
     private void OnStateChanged(object? sender, TargetRegionStateChangedEventArgs e)
@@ -399,11 +517,29 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         IsSessionApproved = true;
         if (e.State.ReceiverDisplay is not null)
         {
-            ExpectedWidthPixels = e.State.ReceiverDisplay.WidthPixels;
-            ExpectedHeightPixels = e.State.ReceiverDisplay.HeightPixels;
+            ApplyReceiverDisplay(e.State.ReceiverDisplay);
         }
 
         SetStatus("Receiver approved this presenter. Calibrate the target area.", false);
+    }
+
+    private void OnReceiverDisplayChanged(
+        object? sender,
+        RelayReceiverDisplayChangedEventArgs e)
+    {
+        ApplyReceiverDisplay(e.Display);
+        SetStatus("The receiver display changed. Review or repeat calibration.", false);
+    }
+
+    public void HandleLocalDisplayConfigurationChanged() =>
+        targetRegionService.InvalidateCalibration(
+            "The local display configuration changed. Recalibrate the target area.");
+
+    private void ApplyReceiverDisplay(DisplayDescriptor display)
+    {
+        receiverDisplay = display;
+        RaisePropertyChanged(nameof(ReceiverDisplayShape));
+        targetRegionService.UpdateExpectedAspectRatio(display.AspectRatio);
     }
 
     private void OnPointerDisplayed(object? sender, RelayAcknowledgementEventArgs e)
@@ -430,6 +566,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         IsJoinPending = false;
         IsSessionApproved = false;
+        receiverDisplay = null;
+        RaisePropertyChanged(nameof(ReceiverDisplayShape));
         pendingAcknowledgements.Clear();
         sequenceNumber = Math.Max(sequenceNumber, CreateSequenceBase());
     }
@@ -437,6 +575,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private void RaiseNetworkCommandStates()
     {
         joinSessionCommand.RaiseCanExecuteChanged();
+        refreshReceiversCommand.RaiseCanExecuteChanged();
+        joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
         endSessionCommand.RaiseCanExecuteChanged();
     }
 

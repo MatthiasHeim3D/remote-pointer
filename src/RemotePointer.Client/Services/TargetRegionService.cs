@@ -19,7 +19,7 @@ public sealed class TargetRegionService : ITargetRegionService
 
     public TargetRegionState State { get; private set; } = TargetRegionState.Inactive;
 
-    public void BeginCalibration(double expectedAspectRatio, bool lockAspectRatio)
+    public void BeginCalibration(double expectedAspectRatio)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (!double.IsFinite(expectedAspectRatio) || expectedAspectRatio <= 0d)
@@ -36,7 +36,7 @@ public sealed class TargetRegionService : ITargetRegionService
             startingRectangle,
             defaultRectangle,
             expectedAspectRatio,
-            lockAspectRatio);
+            lockAspectRatio: true);
         window.CalibrationLocked += OnCalibrationLocked;
         window.CalibrationCancelled += OnCalibrationCancelled;
         window.Closed += OnWindowClosed;
@@ -46,6 +46,34 @@ public sealed class TargetRegionService : ITargetRegionService
             "Move and resize the target window, then lock the region.");
         window.Show();
         _ = window.Activate();
+    }
+
+    public void UpdateExpectedAspectRatio(double newExpectedAspectRatio)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        if (!double.IsFinite(newExpectedAspectRatio) || newExpectedAspectRatio <= 0d)
+        {
+            throw new ArgumentOutOfRangeException(nameof(newExpectedAspectRatio));
+        }
+
+        if (Math.Abs(expectedAspectRatio - newExpectedAspectRatio) < 0.000001d)
+        {
+            expectedAspectRatio = newExpectedAspectRatio;
+            return;
+        }
+
+        expectedAspectRatio = newExpectedAspectRatio;
+        InvalidateCalibration(
+            "The receiver display shape changed. Recalibrate the target area.");
+    }
+
+    public void InvalidateCalibration(string message)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        calibratedRectangle = null;
+        CloseWindow();
+        SetState(TargetRegionState.Inactive, message);
     }
 
     public void TogglePointingMode()

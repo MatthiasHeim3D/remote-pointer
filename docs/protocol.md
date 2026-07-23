@@ -32,7 +32,10 @@ The Phase 5 presenter sends each captured click immediately as a `PointerEventMe
 - `PointerEventMessage`: unique event ID, session identity, monotonic sequence, normalized coordinate, kind, send time, and TTL.
 - `PointerAcknowledgement`: event identity and receiver display time.
 - `JoinRequest`: one-time pairing code, requested role, durable client-instance identity, and version.
-- `SessionStateMessage`: session identity, approval state, receiver display, and expiry.
+- `DirectJoinRequest`: opaque session identity for an explicitly visible receiver, durable client-instance identity, and version.
+- `AvailableReceiverDescriptor`: opaque session identity and receiver-selected machine label; no pairing code, display metadata, or credential.
+- `RelayCapabilities`: server-controlled receiver-discovery availability.
+- `SessionStateMessage`: session identity, approval state, current receiver display, expiry, and discovery state.
 - `SessionCredential`: role-restricted session token, rotating reconnect token, durable client identity, and expiry.
 - `CreateSessionResponse`: pairing information, receiver-only session secret, and receiver credential.
 - `JoinResponse`: acceptance result with no session data on rejection.
@@ -49,19 +52,26 @@ The default pointer TTL is 2,000 ms at the client. Structural validation current
 
 Pairing codes normalize case, whitespace, and hyphens. The accepted six-character alphabet excludes `0`, `O`, `1`, and `I` to reduce transcription errors. Codes are generated cryptographically, stored only by hash, expire after ten minutes when unused, and are consumed by the first accepted join request.
 
+When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explicitly publish its machine label and opaque session ID. A presenter may submit a direct join request for that entry, but receives no credential and cannot send pointers until the receiver approves. Disabled, hidden, disconnected, pending, and already paired receivers are omitted. A discoverable receiver can remain available after its pairing code expires, until the receiver hides/ends it or the session expires.
+
 ## SignalR surface
 
 Clients connect to `/hubs/pointer` with a `clientInstanceId` query parameter and an optional approval `displayName`. Implemented client-to-server methods are:
 
 - `CreateReceiverSession(DisplayDescriptor)`
+- `GetRelayCapabilities()`
+- `GetAvailableReceivers()`
+- `SetReceiverDiscoverable(sessionId, discoverable)`
 - `RequestToJoinSession(JoinRequest)`
+- `RequestToJoinReceiver(DirectJoinRequest)`
 - `ApprovePresenter(sessionId, presenterConnectionId)`
+- `UpdateReceiverDisplay(sessionId, DisplayDescriptor)`
 - `SendPointer(PointerEventMessage)`
 - `AcknowledgePointer(PointerAcknowledgement)`
 - `ResumeSession(SessionResumeRequest)`
 - `EndSession(sessionId)`
 
-Implemented server-to-client methods are `PresenterJoinRequested`, `SessionCredentialIssued`, `SessionApproved`, `PointerReceived`, `PointerDisplayed`, and `SessionEnded`.
+Implemented server-to-client methods are `PresenterJoinRequested`, `SessionCredentialIssued`, `SessionApproved`, `ReceiverDisplayChanged`, `PointerReceived`, `PointerDisplayed`, and `SessionEnded`.
 
 The desktop client uses automatic reconnect delays from `appsettings.json`. An active role resumes with `SessionResumeRequest`; the returned credential contains the rotated reconnect token. A failed resume clears local session state. Pending, unapproved presenter requests have no credential and therefore must be submitted again after a connection loss.
 

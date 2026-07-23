@@ -11,6 +11,92 @@ public sealed class SessionManagerTests
         new(2026, 7, 23, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void ReceiverDiscovery_IsDisabledByDefault()
+    {
+        var context = CreateContext();
+        var created = CreateReceiver(context);
+
+        Assert.False(context.Manager.ReceiverDiscoveryEnabled);
+        Assert.Empty(context.Manager.GetAvailableReceivers());
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.SetReceiverDiscoverable(
+                created.SessionId,
+                "receiver-connection",
+                true));
+        var join = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
+            "presenter-connection",
+            "Presenter Machine");
+        Assert.False(join.Response.Accepted);
+    }
+
+    [Fact]
+    public void DiscoverableReceiver_CanReceiveDirectJoinRequestButStillRequiresApproval()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        Assert.True(context.Manager.SetReceiverDiscoverable(
+            created.SessionId,
+            "receiver-connection",
+            true));
+
+        var available = Assert.Single(context.Manager.GetAvailableReceivers());
+        Assert.Equal(created.SessionId, available.SessionId);
+        Assert.Equal("Receiver Machine", available.DisplayName);
+
+        var join = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
+            "presenter-connection",
+            "Presenter Machine");
+
+        Assert.True(join.Response.Accepted);
+        Assert.NotNull(join.Presenter);
+        Assert.Empty(context.Manager.GetAvailableReceivers());
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.AcceptPointer(
+                "presenter-connection",
+                CreatePointer(InitialTime, created.SessionId, 0)));
+    }
+
+    [Fact]
+    public void ReceiverDisplayUpdate_IsReturnedForApprovedPresenter()
+    {
+        var context = CreateContext();
+        var approved = CreateApprovedSession(context);
+        var changed = new DisplayDescriptor("display-1", "Display 1", 1_200, 1_920, 1d, 90);
+
+        var result = context.Manager.UpdateReceiverDisplay(
+            approved.Created.SessionId,
+            "receiver-connection",
+            changed);
+
+        Assert.Equal(approved.PresenterConnectionId, result.PresenterConnectionId);
+        Assert.Equal(changed, result.Display);
+    }
+
+    [Fact]
+    public void DiscoverableReceiver_RemainsAvailableAfterPairingCodeExpires()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        _ = context.Manager.SetReceiverDiscoverable(
+            created.SessionId,
+            "receiver-connection",
+            true);
+        context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
+
+        var expired = context.Manager.CollectExpiredSessions();
+
+        Assert.Empty(expired);
+        Assert.Equal(created.SessionId, Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
+        var directJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
+            "presenter-connection",
+            "Presenter Machine");
+        Assert.True(directJoin.Response.Accepted);
+    }
+
+    [Fact]
     public void CreateReceiverSession_IssuesReceiverOnlyCredentialAndPairingExpiry()
     {
         var context = CreateContext();
@@ -18,7 +104,8 @@ public sealed class SessionManagerTests
         var response = context.Manager.CreateReceiverSession(
             CreateDisplay(),
             "receiver-connection",
-            "receiver-client");
+            "receiver-client",
+            "Receiver Machine");
 
         Assert.True(response.SessionId.Length >= 43);
         Assert.True(response.SessionSecret.Length >= 43);
@@ -261,7 +348,7 @@ public sealed class SessionManagerTests
         Assert.Equal(0, context.Manager.ActiveSessionCount);
     }
 
-    private static TestContext CreateContext()
+    private static TestContext CreateContext(bool receiverDiscoveryEnabled = false)
     {
         var timeProvider = new ManualTimeProvider(InitialTime);
         var manager = new SessionManager(
@@ -270,6 +357,7 @@ public sealed class SessionManagerTests
                 PairingCodeLifetimeMinutes = 10,
                 MaximumSessionHours = 8,
                 SequenceWindowSize = 64,
+                ReceiverDiscoveryEnabled = receiverDiscoveryEnabled,
             }),
             Options.Create(new PointerRateLimitOptions
             {
@@ -285,7 +373,8 @@ public sealed class SessionManagerTests
         context.Manager.CreateReceiverSession(
             CreateDisplay(),
             "receiver-connection",
-            "receiver-client");
+            "receiver-client",
+            "Receiver Machine");
 
     private static JoinSessionResult JoinPresenter(
         TestContext context,

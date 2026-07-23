@@ -14,12 +14,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AsyncRelayCommand approvePresenterCommand;
     private readonly AsyncRelayCommand createReceiverSessionCommand;
     private readonly AsyncRelayCommand endReceiverSessionCommand;
+    private readonly AsyncRelayCommand setReceiverDiscoverableCommand;
     private readonly IMonitorService monitorService;
     private readonly IReceiverOverlayService overlayService;
     private readonly IRelayClient? receiverRelayClient;
     private bool disposed;
     private bool isError;
     private bool isOverlayVisible;
+    private bool receiverDiscoveryEnabled;
+    private bool receiverDiscoverable;
     private string pairingCode = "—";
     private string pairingExpiration = "No receiver session is active.";
     private PresenterDescriptor? pendingPresenter;
@@ -68,6 +71,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         endReceiverSessionCommand = new AsyncRelayCommand(
             _ => EndReceiverSessionAsync(),
             _ => receiverRelayClient is not null && HasReceiverSession);
+        setReceiverDiscoverableCommand = new AsyncRelayCommand(
+            _ => SetReceiverDiscoverableAsync(),
+            _ => receiverRelayClient is not null
+                && ReceiverDiscoveryEnabled
+                && HasReceiverSession);
 
         RefreshMonitors();
     }
@@ -134,6 +142,33 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool CanSelectMonitor => !HasReceiverSession;
 
+    public bool ReceiverDiscoveryEnabled
+    {
+        get => receiverDiscoveryEnabled;
+        private set
+        {
+            if (SetProperty(ref receiverDiscoveryEnabled, value))
+            {
+                RaisePropertyChanged(nameof(CanSetReceiverDiscoverable));
+                RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+                setReceiverDiscoverableCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool ReceiverDiscoverable
+    {
+        get => receiverDiscoverable;
+        set => SetProperty(ref receiverDiscoverable, value);
+    }
+
+    public bool CanSetReceiverDiscoverable =>
+        ReceiverDiscoveryEnabled && HasReceiverSession;
+
+    public string ReceiverDiscoveryMessage => ReceiverDiscoveryEnabled
+        ? "Allow presenters to find this receiver without a pairing code. Approval is still required."
+        : "Receiver discovery is disabled on this relay.";
+
     public ICommand RefreshMonitorsCommand { get; }
 
     public ICommand CreateReceiverSessionCommand => createReceiverSessionCommand;
@@ -141,6 +176,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand ApprovePresenterCommand => approvePresenterCommand;
 
     public ICommand EndReceiverSessionCommand => endReceiverSessionCommand;
+
+    public ICommand SetReceiverDiscoverableCommand => setReceiverDiscoverableCommand;
+
+    public async Task InitializeAsync()
+    {
+        var presenterInitialization = Presenter.InitializeAsync();
+        if (receiverRelayClient is not null)
+        {
+            try
+            {
+                var capabilities = await receiverRelayClient.GetRelayCapabilitiesAsync();
+                ReceiverDiscoveryEnabled = capabilities.ReceiverDiscoveryEnabled;
+            }
+            catch (Exception exception)
+            {
+                SetStatus($"Relay capabilities could not be loaded: {exception.Message}", true);
+            }
+        }
+
+        await presenterInitialization;
+    }
 
     public async Task RestoreSessionsAsync()
     {
@@ -215,6 +271,34 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 ? "No connected monitors were found."
                 : $"Found {Monitors.Count} connected monitor{(Monitors.Count == 1 ? string.Empty : "s")}.",
             isError: Monitors.Count == 0);
+    }
+
+    public async Task HandleDisplayConfigurationChangedAsync()
+    {
+        var selectedDisplayId = SelectedMonitor?.Display.DisplayId;
+        RefreshMonitors();
+        Presenter.HandleLocalDisplayConfigurationChanged();
+
+        if (receiverSessionId is null
+            || receiverRelayClient is null
+            || SelectedMonitor is null
+            || !string.Equals(
+                selectedDisplayId,
+                SelectedMonitor.Display.DisplayId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            await receiverRelayClient.UpdateReceiverDisplayAsync(SelectedMonitor.Display);
+            SetStatus("Receiver display information updated.", false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Receiver display information could not be updated: {exception.Message}", true);
+        }
     }
 
     public void Dispose()
@@ -311,6 +395,30 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private async Task SetReceiverDiscoverableAsync()
+    {
+        if (receiverRelayClient is null || !CanSetReceiverDiscoverable)
+        {
+            return;
+        }
+
+        try
+        {
+            ReceiverDiscoverable = await receiverRelayClient.SetReceiverDiscoverableAsync(
+                ReceiverDiscoverable);
+            SetStatus(
+                ReceiverDiscoverable
+                    ? "This receiver is visible to presenters on the relay."
+                    : "This receiver is hidden from the relay directory.",
+                false);
+        }
+        catch (Exception exception)
+        {
+            ReceiverDiscoverable = !ReceiverDiscoverable;
+            SetStatus($"Receiver visibility could not be changed: {exception.Message}", true);
+        }
+    }
+
     private void OnOverlayStateChanged(object? sender, OverlayStateChangedEventArgs e)
     {
         IsOverlayVisible = e.IsVisible;
@@ -337,6 +445,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (receiverRelayClient?.Credential?.Role == ClientRole.Receiver)
             {
                 receiverSessionId = e.State.SessionId;
+                ReceiverDiscoverable = e.State.ReceiverDiscoverable;
                 PairingCode = "—";
                 PairingExpiration = string.Create(
                     CultureInfo.CurrentCulture,
@@ -432,6 +541,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void ClearReceiverSession()
     {
         receiverSessionId = null;
+        ReceiverDiscoverable = false;
         PairingCode = "—";
         PairingExpiration = "No receiver session is active.";
         SetPendingPresenter(null);
@@ -442,9 +552,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         RaisePropertyChanged(nameof(HasReceiverSession));
         RaisePropertyChanged(nameof(CanSelectMonitor));
+        RaisePropertyChanged(nameof(CanSetReceiverDiscoverable));
         createReceiverSessionCommand.RaiseCanExecuteChanged();
         approvePresenterCommand.RaiseCanExecuteChanged();
         endReceiverSessionCommand.RaiseCanExecuteChanged();
+        setReceiverDiscoverableCommand.RaiseCanExecuteChanged();
     }
 
     private void SetStatus(string message, bool isError)

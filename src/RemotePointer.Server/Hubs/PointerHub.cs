@@ -9,6 +9,12 @@ public sealed class PointerHub(
     ISessionManager sessionManager,
     ILogger<PointerHub> logger) : Hub<IPointerClient>
 {
+    public RelayCapabilities GetRelayCapabilities() =>
+        new(sessionManager.ReceiverDiscoveryEnabled);
+
+    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers() =>
+        sessionManager.GetAvailableReceivers();
+
     public override Task OnConnectedAsync()
     {
         logger.LogInformation(
@@ -49,7 +55,8 @@ public sealed class PointerHub(
             var response = sessionManager.CreateReceiverSession(
                 display,
                 Context.ConnectionId,
-                clientInstanceId);
+                clientInstanceId,
+                GetDisplayName(clientInstanceId));
             await Groups.AddToGroupAsync(
                     Context.ConnectionId,
                     GroupName(response.SessionId))
@@ -65,6 +72,22 @@ public sealed class PointerHub(
         catch (SessionOperationException exception)
         {
             throw ToHubException(exception, "CreateReceiverSession");
+        }
+    }
+
+    public Task<bool> SetReceiverDiscoverable(string sessionId, bool discoverable)
+    {
+        try
+        {
+            return Task.FromResult(
+                sessionManager.SetReceiverDiscoverable(
+                    sessionId,
+                    Context.ConnectionId,
+                    discoverable));
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "SetReceiverDiscoverable");
         }
     }
 
@@ -113,6 +136,72 @@ public sealed class PointerHub(
         catch (SessionOperationException exception)
         {
             throw ToHubException(exception, "RequestToJoinSession");
+        }
+    }
+
+    public async Task<JoinResponse> RequestToJoinReceiver(DirectJoinRequest request)
+    {
+        var clientInstanceId = GetRequiredClientInstanceId();
+        if (!string.Equals(request.ClientInstanceId, clientInstanceId, StringComparison.Ordinal))
+        {
+            LogValidationFailure("client_identity_mismatch", "RequestToJoinReceiver");
+            return new JoinResponse(false, null, "The join request identity is invalid.");
+        }
+
+        try
+        {
+            var result = sessionManager.RequestToJoinReceiver(
+                request,
+                Context.ConnectionId,
+                GetDisplayName(clientInstanceId));
+            if (result.Response.Accepted
+                && result.ReceiverConnectionId is not null
+                && result.Presenter is not null)
+            {
+                await Clients.Client(result.ReceiverConnectionId)
+                    .PresenterJoinRequested(result.Presenter)
+                    .ConfigureAwait(false);
+                logger.LogInformation(
+                    AuditEventIds.PresenterJoinRequested,
+                    "Direct presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
+                    result.Response.SessionId,
+                    request.ClientInstanceId);
+            }
+            else
+            {
+                logger.LogWarning(
+                    AuditEventIds.PresenterJoinRejected,
+                    "Direct presenter join rejected. ClientInstanceId={ClientInstanceId} Reason={Reason}",
+                    request.ClientInstanceId,
+                    result.Response.Reason);
+            }
+
+            return result.Response;
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "RequestToJoinReceiver");
+        }
+    }
+
+    public async Task UpdateReceiverDisplay(string sessionId, DisplayDescriptor display)
+    {
+        try
+        {
+            var result = sessionManager.UpdateReceiverDisplay(
+                sessionId,
+                Context.ConnectionId,
+                display);
+            if (result.PresenterConnectionId is not null)
+            {
+                await Clients.Client(result.PresenterConnectionId)
+                    .ReceiverDisplayChanged(result.Display)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "UpdateReceiverDisplay");
         }
     }
 

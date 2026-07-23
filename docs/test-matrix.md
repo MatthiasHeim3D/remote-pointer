@@ -20,6 +20,8 @@
 | Presenter state | Expected-ratio validation, calibration request, ready/pointing transitions, hotkey errors |
 | Presenter capture reporting | Normalized local pointer count and coordinate presentation |
 | Pairing and secrets | Friendly cryptographic codes, hashing, one-time consumption, expiry |
+| Receiver discovery | Disabled-by-default capability, receiver opt-in, directory filtering, direct request, mandatory approval |
+| Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
 | Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
 | Session lifecycle | Creation, approval, active expiry, termination, presenter and receiver resume |
 | Pointer defenses | TTL, sequence duplicate suppression, 20/s refill, burst of 30 |
@@ -61,7 +63,7 @@
 
 ## Phase 3 manual procedure
 
-1. Open **Point at another screen**, enter the expected receiver dimensions, and select **Calibrate target area**.
+1. Approve a presenter session, confirm the receiver dimensions appear automatically, and select **Calibrate target area**.
 2. Move and resize the calibration window over a normal application. Verify dimensions and aspect-ratio difference update continuously.
 3. Disable ratio lock, create a difference greater than 2%, and verify Lock requires the explicit Allow mismatch override.
 4. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.
@@ -84,6 +86,8 @@
 8. Restore connectivity within the reconnect window. Confirm both roles resume and newly captured pointers work without re-pairing.
 9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
 10. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
+11. Enable relay discovery, opt the receiver into visibility, refresh the presenter list, and request the receiver directly. Confirm the same receiver approval is required. Disable discovery on the relay and confirm both discovery controls are disabled while pairing-code joins still work.
+12. While approved, change the receiver resolution and confirm the sender's displayed dimensions update. Change the receiver aspect ratio and confirm stale calibration is invalidated. Change the sender's local display configuration and confirm recalibration is required there as well.
 
 ## Phase 6 manual procedure
 

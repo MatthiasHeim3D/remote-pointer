@@ -6,15 +6,35 @@ public interface ISessionManager
 {
     int ActiveSessionCount { get; }
 
+    bool ReceiverDiscoveryEnabled { get; }
+
     CreateSessionResponse CreateReceiverSession(
         DisplayDescriptor display,
         string connectionId,
-        string clientInstanceId);
+        string clientInstanceId,
+        string receiverDisplayName);
+
+    IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers();
+
+    bool SetReceiverDiscoverable(
+        string sessionId,
+        string receiverConnectionId,
+        bool discoverable);
 
     JoinSessionResult RequestToJoinSession(
         JoinRequest request,
         string connectionId,
         string displayName);
+
+    JoinSessionResult RequestToJoinReceiver(
+        DirectJoinRequest request,
+        string connectionId,
+        string displayName);
+
+    ReceiverDisplayUpdateResult UpdateReceiverDisplay(
+        string sessionId,
+        string receiverConnectionId,
+        DisplayDescriptor display);
 
     ApprovePresenterResult ApprovePresenter(
         string sessionId,

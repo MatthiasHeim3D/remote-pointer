@@ -9,4 +9,6 @@ public sealed class SessionOptions
     public int MaximumSessionHours { get; set; } = 8;
 
     public int SequenceWindowSize { get; set; } = 64;
+
+    public bool ReceiverDiscoveryEnabled { get; set; }
 }

@@ -106,6 +106,26 @@ public static class ContractValidator
         return ValidationResult.Failure(errors);
     }
 
+    public static ValidationResult Validate(DirectJoinRequest? request)
+    {
+        if (request is null)
+        {
+            return RequiredMessage(nameof(request));
+        }
+
+        var errors = new List<ValidationError>();
+        AddRequired(errors, IsRequiredIdentifier(request.SessionId), nameof(request.SessionId));
+        AddRequired(
+            errors,
+            IsRequiredIdentifier(request.ClientInstanceId),
+            nameof(request.ClientInstanceId));
+        AddRequired(
+            errors,
+            !string.IsNullOrWhiteSpace(request.ClientVersion) && request.ClientVersion.Length <= 64,
+            nameof(request.ClientVersion));
+        return ValidationResult.Failure(errors);
+    }
+
     public static ValidationResult Validate(PointerAcknowledgement? acknowledgement)
     {
         if (acknowledgement is null)

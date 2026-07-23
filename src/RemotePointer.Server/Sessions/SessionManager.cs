@@ -44,13 +44,17 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
+    public bool ReceiverDiscoveryEnabled => sessionOptions.ReceiverDiscoveryEnabled;
+
     public CreateSessionResponse CreateReceiverSession(
         DisplayDescriptor display,
         string connectionId,
-        string clientInstanceId)
+        string clientInstanceId,
+        string receiverDisplayName)
     {
         EnsureIdentifier(connectionId, nameof(connectionId));
         EnsureIdentifier(clientInstanceId, nameof(clientInstanceId));
+        EnsureIdentifier(receiverDisplayName, nameof(receiverDisplayName));
         EnsureValid(ContractValidator.Validate(display), "invalid_display");
 
         lock (syncRoot)
@@ -78,6 +82,7 @@ public sealed class SessionManager : ISessionManager
                 expiresAt,
                 secretGenerator.HashSecret(sessionSecret),
                 display,
+                receiverDisplayName,
                 receiver,
                 new SequenceNumberTracker(sessionOptions.SequenceWindowSize),
                 new PointerTokenBucket(
@@ -104,6 +109,58 @@ public sealed class SessionManager : ISessionManager
                 sessionSecret,
                 credential,
                 session.PairingCodeExpiresAt);
+        }
+    }
+
+    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers()
+    {
+        if (!sessionOptions.ReceiverDiscoveryEnabled)
+        {
+            return [];
+        }
+
+        lock (syncRoot)
+        {
+            var now = timeProvider.GetUtcNow();
+            return sessions.Values
+                .Where(session =>
+                    session.IsDiscoverable
+                    && session.ExpiresAt > now
+                    && session.Receiver.ConnectionId is not null
+                    && session.PendingPresenter is null
+                    && session.Presenter is null)
+                .OrderBy(session => session.ReceiverDisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(session => new AvailableReceiverDescriptor(
+                    session.Id,
+                    session.ReceiverDisplayName))
+                .ToArray();
+        }
+    }
+
+    public bool SetReceiverDiscoverable(
+        string sessionId,
+        string receiverConnectionId,
+        bool discoverable)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        if (!sessionOptions.ReceiverDiscoveryEnabled)
+        {
+            throw new SessionOperationException(
+                "receiver_discovery_disabled",
+                "Receiver discovery is disabled on this relay.");
+        }
+
+        lock (syncRoot)
+        {
+            var session = GetActiveSession(sessionId);
+            EnsureMembership(
+                receiverConnectionId,
+                sessionId,
+                ClientRole.Receiver,
+                requireApproved: true);
+            session.IsDiscoverable = discoverable;
+            return session.IsDiscoverable;
         }
     }
 
@@ -136,33 +193,97 @@ public sealed class SessionManager : ISessionManager
             }
 
             var now = timeProvider.GetUtcNow();
-            if (session.ExpiresAt <= now || session.PairingCodeExpiresAt <= now)
+            if (session.ExpiresAt <= now)
             {
                 _ = TerminateSessionNoLock(session);
                 return RejectedJoin("The pairing code is invalid or expired.");
             }
 
-            if (session.Presenter is not null || session.PendingPresenter is not null)
+            if (session.PairingCodeExpiresAt <= now)
             {
-                return RejectedJoin("The session already has a presenter request.");
+                pairingCodeSessions.Remove(session.PairingCodeHash);
+                session.PairingCodeConsumed = true;
+                if (!session.IsDiscoverable)
+                {
+                    _ = TerminateSessionNoLock(session);
+                }
+
+                return RejectedJoin("The pairing code is invalid or expired.");
             }
 
-            session.PairingCodeConsumed = true;
-            pairingCodeSessions.Remove(session.PairingCodeHash);
-            var presenter = new PresenterDescriptor(
+            return BindPendingPresenterNoLock(
+                session,
                 connectionId,
                 request.ClientInstanceId,
                 displayName,
                 request.ClientVersion);
-            session.PendingPresenter = presenter;
-            connections.Add(
-                connectionId,
-                new ConnectionMembership(session.Id, ClientRole.Presenter, Approved: false));
+        }
+    }
 
-            return new JoinSessionResult(
-                new JoinResponse(true, session.Id, null),
-                session.Receiver.ConnectionId,
-                presenter);
+    public JoinSessionResult RequestToJoinReceiver(
+        DirectJoinRequest request,
+        string connectionId,
+        string displayName)
+    {
+        EnsureIdentifier(connectionId, nameof(connectionId));
+        EnsureIdentifier(displayName, nameof(displayName));
+        if (!sessionOptions.ReceiverDiscoveryEnabled)
+        {
+            return RejectedJoin("Receiver discovery is disabled on this relay.");
+        }
+
+        var validation = ContractValidator.Validate(request);
+        if (!validation.IsValid)
+        {
+            return RejectedJoin("The direct join request is invalid.");
+        }
+
+        lock (syncRoot)
+        {
+            if (connections.ContainsKey(connectionId))
+            {
+                return RejectedJoin("This connection is already participating in a session.");
+            }
+
+            if (!sessions.TryGetValue(request.SessionId, out var session)
+                || !session.IsDiscoverable
+                || session.ExpiresAt <= timeProvider.GetUtcNow()
+                || session.Receiver.ConnectionId is null)
+            {
+                return RejectedJoin("The selected receiver is no longer available.");
+            }
+
+            return BindPendingPresenterNoLock(
+                session,
+                connectionId,
+                request.ClientInstanceId,
+                displayName,
+                request.ClientVersion);
+        }
+    }
+
+    public ReceiverDisplayUpdateResult UpdateReceiverDisplay(
+        string sessionId,
+        string receiverConnectionId,
+        DisplayDescriptor display)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        EnsureValid(ContractValidator.Validate(display), "invalid_display");
+
+        lock (syncRoot)
+        {
+            var session = GetActiveSession(sessionId);
+            EnsureMembership(
+                receiverConnectionId,
+                sessionId,
+                ClientRole.Receiver,
+                requireApproved: true);
+            session.ReceiverDisplay = display;
+            return new ReceiverDisplayUpdateResult(
+                session.Id,
+                session.Presenter?.ConnectionId,
+                display);
         }
     }
 
@@ -205,6 +326,7 @@ public sealed class SessionManager : ISessionManager
                 secretGenerator.HashSecret(sessionToken),
                 secretGenerator.HashSecret(reconnectToken));
             session.PendingPresenter = null;
+            session.IsDiscoverable = false;
             connections[presenterConnectionId] = new ConnectionMembership(
                 session.Id,
                 ClientRole.Presenter,
@@ -382,12 +504,30 @@ public sealed class SessionManager : ISessionManager
         lock (syncRoot)
         {
             var now = timeProvider.GetUtcNow();
-            var expired = sessions.Values
-                .Where(session =>
-                    session.ExpiresAt <= now
-                    || (!session.PairingCodeConsumed && session.PairingCodeExpiresAt <= now))
-                .ToArray();
-            return expired.Select(TerminateSessionNoLock).ToArray();
+            var terminated = new List<SessionTerminationResult>();
+            foreach (var session in sessions.Values.ToArray())
+            {
+                if (session.ExpiresAt <= now)
+                {
+                    terminated.Add(TerminateSessionNoLock(session));
+                    continue;
+                }
+
+                if (!session.PairingCodeConsumed && session.PairingCodeExpiresAt <= now)
+                {
+                    if (session.IsDiscoverable)
+                    {
+                        pairingCodeSessions.Remove(session.PairingCodeHash);
+                        session.PairingCodeConsumed = true;
+                    }
+                    else
+                    {
+                        terminated.Add(TerminateSessionNoLock(session));
+                    }
+                }
+            }
+
+            return terminated;
         }
     }
 
@@ -457,6 +597,36 @@ public sealed class SessionManager : ISessionManager
         new JoinResponse(false, null, reason),
         null,
         null);
+
+    private JoinSessionResult BindPendingPresenterNoLock(
+        SessionRecord session,
+        string connectionId,
+        string clientInstanceId,
+        string displayName,
+        string clientVersion)
+    {
+        if (session.Presenter is not null || session.PendingPresenter is not null)
+        {
+            return RejectedJoin("The session already has a presenter request.");
+        }
+
+        session.PairingCodeConsumed = true;
+        pairingCodeSessions.Remove(session.PairingCodeHash);
+        var presenter = new PresenterDescriptor(
+            connectionId,
+            clientInstanceId,
+            displayName,
+            clientVersion);
+        session.PendingPresenter = presenter;
+        connections.Add(
+            connectionId,
+            new ConnectionMembership(session.Id, ClientRole.Presenter, Approved: false));
+
+        return new JoinSessionResult(
+            new JoinResponse(true, session.Id, null),
+            session.Receiver.ConnectionId,
+            presenter);
+    }
 
     private string GenerateUniqueSessionId()
     {
@@ -559,7 +729,8 @@ public sealed class SessionManager : ISessionManager
         session.Id,
         Approved: session.Presenter is not null,
         session.ReceiverDisplay,
-        session.ExpiresAt);
+        session.ExpiresAt,
+        session.IsDiscoverable);
 
     private sealed class SessionRecord(
         string id,
@@ -568,6 +739,7 @@ public sealed class SessionManager : ISessionManager
         DateTimeOffset expiresAt,
         string sessionSecretHash,
         DisplayDescriptor receiverDisplay,
+        string receiverDisplayName,
         Participant receiver,
         SequenceNumberTracker sequenceNumbers,
         PointerTokenBucket rateLimiter)
@@ -582,7 +754,9 @@ public sealed class SessionManager : ISessionManager
 
         internal string SessionSecretHash { get; } = sessionSecretHash;
 
-        internal DisplayDescriptor ReceiverDisplay { get; } = receiverDisplay;
+        internal DisplayDescriptor ReceiverDisplay { get; set; } = receiverDisplay;
+
+        internal string ReceiverDisplayName { get; } = receiverDisplayName;
 
         internal Participant Receiver { get; } = receiver;
 
@@ -591,6 +765,8 @@ public sealed class SessionManager : ISessionManager
         internal PointerTokenBucket RateLimiter { get; } = rateLimiter;
 
         internal bool PairingCodeConsumed { get; set; }
+
+        internal bool IsDiscoverable { get; set; }
 
         internal PresenterDescriptor? PendingPresenter { get; set; }
 

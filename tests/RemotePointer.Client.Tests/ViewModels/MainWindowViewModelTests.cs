@@ -10,6 +10,47 @@ namespace RemotePointer.Client.Tests.ViewModels;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public async Task ReceiverDiscoveryCapability_ControlsVisibilityAndServerUpdate()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        relay.Capabilities = new RelayCapabilities(true);
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+
+        await viewModel.InitializeAsync();
+        viewModel.CreateReceiverSessionCommand.Execute(null);
+        viewModel.ReceiverDiscoverable = true;
+        viewModel.SetReceiverDiscoverableCommand.Execute(null);
+
+        Assert.True(viewModel.ReceiverDiscoveryEnabled);
+        Assert.True(viewModel.CanSetReceiverDiscoverable);
+        Assert.True(relay.IsDiscoverable);
+    }
+
+    [Fact]
+    public async Task ReceiverResolutionChange_IsSentForActiveSelectedDisplay()
+    {
+        var initial = CreateMonitor("DISPLAY1", isPrimary: true, width: 1_920);
+        var monitors = new FakeMonitorService([initial]);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            monitors,
+            overlay,
+            receiverRelayClient: relay);
+        viewModel.CreateReceiverSessionCommand.Execute(null);
+        monitors.Monitors = [CreateMonitor("DISPLAY1", isPrimary: true, width: 2_560)];
+
+        await viewModel.HandleDisplayConfigurationChangedAsync();
+
+        Assert.Equal(2_560, relay.UpdatedReceiverDisplay?.WidthPixels);
+    }
+
+    [Fact]
     public async Task RestoreSessions_SkipsBothRolesForSharedProfileTestClients()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);

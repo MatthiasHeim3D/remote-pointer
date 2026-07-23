@@ -4,4 +4,5 @@ public sealed record SessionStateMessage(
     string SessionId,
     bool Approved,
     DisplayDescriptor? ReceiverDisplay,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    bool ReceiverDiscoverable = false);

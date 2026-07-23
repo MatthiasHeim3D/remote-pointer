@@ -10,6 +10,8 @@ public interface IRelayClient : IAsyncDisposable
 
     event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
+    event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
+
     event EventHandler<RelayPointerEventArgs>? PointerReceived;
 
     event EventHandler<RelayAcknowledgementEventArgs>? PointerDisplayed;
@@ -24,14 +26,32 @@ public interface IRelayClient : IAsyncDisposable
 
     SessionCredential? Credential { get; }
 
+    Task<RelayCapabilities> GetRelayCapabilitiesAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
+        CancellationToken cancellationToken = default);
+
     Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default);
 
     Task<CreateSessionResponse> CreateReceiverSessionAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default);
 
+    Task<bool> SetReceiverDiscoverableAsync(
+        bool discoverable,
+        CancellationToken cancellationToken = default);
+
     Task<JoinResponse> RequestToJoinSessionAsync(
         string pairingCode,
+        CancellationToken cancellationToken = default);
+
+    Task<JoinResponse> RequestToJoinReceiverAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateReceiverDisplayAsync(
+        DisplayDescriptor display,
         CancellationToken cancellationToken = default);
 
     Task ApprovePresenterAsync(

@@ -29,6 +29,11 @@ public sealed record AcknowledgementRelayResult(
     string SessionId,
     string? PresenterConnectionId);
 
+public sealed record ReceiverDisplayUpdateResult(
+    string SessionId,
+    string? PresenterConnectionId,
+    DisplayDescriptor Display);
+
 public sealed record ResumeSessionResult(
     SessionCredential Credential,
     SessionStateMessage State,

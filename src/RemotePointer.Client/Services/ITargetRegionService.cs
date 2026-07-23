@@ -8,7 +8,11 @@ public interface ITargetRegionService : IDisposable
 
     TargetRegionState State { get; }
 
-    void BeginCalibration(double expectedAspectRatio, bool lockAspectRatio);
+    void BeginCalibration(double expectedAspectRatio);
+
+    void UpdateExpectedAspectRatio(double expectedAspectRatio);
+
+    void InvalidateCalibration(string message);
 
     void TogglePointingMode();
 

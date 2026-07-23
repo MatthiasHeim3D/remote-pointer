@@ -21,6 +21,11 @@ public sealed class RelaySessionStateEventArgs(SessionStateMessage state) : Even
     public SessionStateMessage State { get; } = state;
 }
 
+public sealed class RelayReceiverDisplayChangedEventArgs(DisplayDescriptor display) : EventArgs
+{
+    public DisplayDescriptor Display { get; } = display;
+}
+
 public sealed class RelayPointerEventArgs(PointerEventMessage pointerEvent) : EventArgs
 {
     public PointerEventMessage PointerEvent { get; } = pointerEvent;

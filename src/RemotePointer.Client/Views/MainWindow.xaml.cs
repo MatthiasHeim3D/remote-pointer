@@ -90,7 +90,9 @@ public partial class MainWindow : Window
 
         if (message == NativeMethods.WmDisplayChange)
         {
-            _ = Dispatcher.InvokeAsync(viewModel.RefreshMonitors, DispatcherPriority.Background);
+            _ = Dispatcher.InvokeAsync(
+                viewModel.HandleDisplayConfigurationChangedAsync,
+                DispatcherPriority.Background);
         }
 
         if (message == NativeMethods.WmHotKey
@@ -121,6 +123,7 @@ public partial class MainWindow : Window
     {
         _ = sender;
         _ = e;
+        await viewModel.InitializeAsync();
         await viewModel.RestoreSessionsAsync();
     }
 
