@@ -19,6 +19,12 @@ public partial class TargetRegionWindow : Window
 
     private readonly RectangleD resetRectangle;
     private bool isPointingMode;
+    private bool isResizeDragActive;
+    private NativePoint resizeDragStartCursor;
+    private double resizeDragStartWidth;
+    private double resizeDragStartHeight;
+    private double resizeDragDpiScaleX = 1d;
+    private double resizeDragDpiScaleY = 1d;
 
     public TargetRegionWindow(
         RectangleD rectangle,
@@ -89,25 +95,55 @@ public partial class TargetRegionWindow : Window
         e.Handled = true;
     }
 
+    private void OnResizeThumbDragStarted(
+        object sender,
+        System.Windows.Controls.Primitives.DragStartedEventArgs e)
+    {
+        if (isPointingMode || !NativeMethods.GetCursorPos(out resizeDragStartCursor))
+        {
+            isResizeDragActive = false;
+            return;
+        }
+
+        resizeDragStartWidth = ActualWidth > 0d ? ActualWidth : Width;
+        resizeDragStartHeight = ActualHeight > 0d ? ActualHeight : Height;
+        var dpi = VisualTreeHelper.GetDpi(this);
+        resizeDragDpiScaleX = dpi.DpiScaleX;
+        resizeDragDpiScaleY = dpi.DpiScaleY;
+        isResizeDragActive = true;
+    }
+
     private void OnResizeThumbDragDelta(
         object sender,
         System.Windows.Controls.Primitives.DragDeltaEventArgs e)
     {
-        if (isPointingMode)
+        if (isPointingMode ||
+            !isResizeDragActive ||
+            !NativeMethods.GetCursorPos(out var currentCursor))
         {
             return;
         }
 
+        var horizontalChange = (currentCursor.X - (double)resizeDragStartCursor.X) / resizeDragDpiScaleX;
+        var verticalChange = (currentCursor.Y - (double)resizeDragStartCursor.Y) / resizeDragDpiScaleY;
         var resized = TargetRegionGeometry.Resize(
-            ActualWidth > 0d ? ActualWidth : Width,
-            ActualHeight > 0d ? ActualHeight : Height,
-            e.HorizontalChange,
-            e.VerticalChange,
+            resizeDragStartWidth,
+            resizeDragStartHeight,
+            horizontalChange,
+            verticalChange,
             ExpectedAspectRatio,
             AspectLockCheckBox.IsChecked == true);
         Width = resized.X;
         Height = resized.Y;
         UpdateMetrics();
+        e.Handled = true;
+    }
+
+    private void OnResizeThumbDragCompleted(
+        object sender,
+        System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        isResizeDragActive = false;
     }
 
     private void OnAspectLockChanged(object sender, RoutedEventArgs e)

@@ -64,7 +64,7 @@
 ## Phase 3 manual procedure
 
 1. Approve a presenter session, confirm the receiver dimensions appear automatically, and select **Calibrate target area**.
-2. Move and resize the calibration window over a normal application. Verify dimensions and aspect-ratio difference update continuously.
+2. Move and resize the calibration window over a normal application. Verify dimensions and aspect-ratio difference update continuously, and that ratio-locked resizing remains stable without flickering.
 3. Move it onto each sender monitor and select **Fullscreen**. With ratio lock enabled, confirm the largest receiver-shaped rectangle is centered within that monitor. Disable ratio lock and confirm it fills the complete monitor.
 4. With ratio lock disabled, create a difference greater than 2%, and verify Lock requires the explicit Allow mismatch override.
 5. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.

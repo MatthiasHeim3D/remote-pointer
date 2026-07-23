@@ -47,6 +47,10 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     internal static partial nint MonitorFromWindow(nint window, uint flags);
 
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetCursorPos(out NativePoint point);
+
     [LibraryImport("shcore.dll")]
     internal static partial int GetDpiForMonitor(
         nint monitor,

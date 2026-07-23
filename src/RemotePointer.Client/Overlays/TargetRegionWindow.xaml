@@ -98,6 +98,8 @@
                               HorizontalAlignment="Right"
                               VerticalAlignment="Bottom"
                               Cursor="SizeNWSE"
+                              DragStarted="OnResizeThumbDragStarted"
+                              DragCompleted="OnResizeThumbDragCompleted"
                               DragDelta="OnResizeThumbDragDelta">
                 <primitives:Thumb.Template>
                     <ControlTemplate TargetType="primitives:Thumb">
