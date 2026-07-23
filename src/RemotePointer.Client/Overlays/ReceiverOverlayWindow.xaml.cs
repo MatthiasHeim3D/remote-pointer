@@ -68,7 +68,10 @@ public partial class ReceiverOverlayWindow : Window
             pointerEvent.Kind,
             ToOverlayPoint(normalizedPoint),
             pointerEvent.GestureId,
-            pointerEvent.Text);
+            pointerEvent.Text,
+            pointerEvent.PathPoints?
+                .Select(ToOverlayPoint)
+                .ToArray());
     }
 
     private void ShowMarker(NormalizedPoint normalizedPoint)

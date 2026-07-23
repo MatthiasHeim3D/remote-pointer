@@ -488,7 +488,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             sentAt,
             pointerTtlMilliseconds,
             e.GestureId,
-            e.Text);
+            e.Text,
+            e.PathPoints);
         pendingAcknowledgements[pointerEvent.EventId] = sentAt;
 
         try

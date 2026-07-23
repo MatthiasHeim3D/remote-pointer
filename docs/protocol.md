@@ -4,7 +4,7 @@
 
 Messages use UTF-8 JSON. The shared serializer policy uses camel-case property names and lower camel-case string enum values. Integer enum values, comments, trailing commas, non-standard numeric values, case-mismatched property names, and unknown members are rejected.
 
-The relay configures a maximum SignalR receive message size of 8 KB and allows only one parallel hub invocation per client.
+The relay configures a maximum SignalR receive message size of 32 KB and allows only one parallel hub invocation per client.
 
 ## Coordinate system
 
@@ -24,7 +24,7 @@ y = overlayTop  + normalizedY * overlayHeight
 
 Normalized coordinates are finite numbers in the inclusive range `0.0` through `1.0`. The rectangle origin may be negative. Rectangle dimensions must be finite and greater than zero.
 
-The presenter sends each captured pointer event immediately as a `PointerEventMessage`. A click is one event. Paths, lines, and rectangles use start/update/end events sharing a gesture ID; updates are limited by the client to 20 Hz. Text annotations carry at most 256 plain-text characters and are finalized explicitly with Enter. The receiver revalidates every event immediately before display and returns `PointerAcknowledgement` only after the overlay accepts it. No pointer event or text is persisted or queued during a connection interruption.
+The presenter sends each captured pointer event immediately as a `PointerEventMessage`. A click is one event. Paths, lines, and rectangles use start/update/end events sharing a gesture ID. Updates are delivered at roughly 60 Hz, with freehand updates carrying bounded batches of every captured mouse sample so spatial detail is retained. A 500 ms keepalive keeps stationary held gestures active; only the end event begins the normal fade. Text annotations carry at most 256 plain-text characters and are finalized explicitly with Enter. The receiver revalidates every event immediately before display and returns `PointerAcknowledgement` only after the overlay accepts it. No pointer event or text is persisted or queued during a connection interruption.
 
 ## Initial messages
 

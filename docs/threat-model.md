@@ -41,7 +41,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 | Credential theft from disk | Windows DPAPI CurrentUser encryption and no plaintext fallback | Malware running as the same user can call DPAPI and remains outside the app's isolation capability |
 | Token replay | Session/role/client binding and single-use reconnect-token rotation | A token stolen from live process memory can be used until rotation or expiry |
 | Stale or duplicate pointers | Two-second TTL, event ID, bounded sequence window, no reconnect queue | Clock error can reject legitimate events; managed endpoint time synchronization is assumed |
-| Pointer flooding | 8 KB hub message ceiling, one parallel invocation, 20/s token bucket and burst 30 | Distributed connection exhaustion requires reverse-proxy/network controls |
+| Pointer flooding | 32 KB hub message ceiling, 128-point batch bound, one parallel invocation, 90/s token bucket and burst 180 | Distributed connection exhaustion requires reverse-proxy/network controls |
 | Unauthorized receiver control | Receiver display selection is local only; overlay never injects input | A local user can intentionally choose the wrong monitor |
 | Overlay input interception | Receiver uses transparent/no-activate native styles; presenter capture is bounded to calibrated window and pointing state | WPF/Windows defects could affect focus; manual release testing remains required |
 | TLS downgrade or invalid certificate | Caddy is the only published container port; client configuration requires HTTPS; platform validation trusts the per-user Caddy root and has no bypass | Replacing or losing the Caddy data volume requires rebuilding/reinstalling the client package with the new public root |

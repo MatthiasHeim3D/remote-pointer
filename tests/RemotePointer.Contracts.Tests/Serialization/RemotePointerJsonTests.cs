@@ -69,6 +69,31 @@ public sealed class RemotePointerJsonTests
     }
 
     [Fact]
+    public void Options_RoundTripBatchedPathPoints()
+    {
+        var message = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session",
+            3,
+            0.3d,
+            0.4d,
+            PointerKind.PathUpdate,
+            1_000,
+            2_000,
+            Guid.NewGuid(),
+            PathPoints: [new(0.1d, 0.2d), new(0.2d, 0.3d), new(0.3d, 0.4d)]);
+
+        var result = JsonSerializer.Deserialize<PointerEventMessage>(
+            JsonSerializer.Serialize(message, RemotePointerJson.CreateOptions()),
+            RemotePointerJson.CreateOptions());
+
+        Assert.NotNull(result);
+        Assert.Equal(message.Kind, result.Kind);
+        Assert.Equal(message.GestureId, result.GestureId);
+        Assert.Equal(message.PathPoints, result.PathPoints);
+    }
+
+    [Fact]
     public void Options_RejectUnknownMembers()
     {
         const string json = """

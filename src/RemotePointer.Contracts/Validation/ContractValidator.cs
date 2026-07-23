@@ -5,6 +5,7 @@ namespace RemotePointer.Contracts.Validation;
 public static class ContractValidator
 {
     public const int MaximumPointerTextLength = 256;
+    public const int MaximumPathPointsPerEvent = 128;
 
     public static ValidationResult Validate(
         PointerEventMessage? message,
@@ -86,6 +87,28 @@ public static class ContractValidator
         else if (message.Text is not null)
         {
             AddValue(errors, condition: false, nameof(message.Text));
+        }
+
+        var supportsPathPoints = message.Kind is PointerKind.PathUpdate or PointerKind.PathEnd;
+        if (!supportsPathPoints && message.PathPoints is not null)
+        {
+            AddValue(errors, condition: false, nameof(message.PathPoints));
+            return;
+        }
+
+        if (message.PathPoints is null)
+        {
+            return;
+        }
+
+        AddRange(
+            errors,
+            message.PathPoints.Length <= MaximumPathPointsPerEvent,
+            nameof(message.PathPoints));
+        foreach (var point in message.PathPoints.Take(MaximumPathPointsPerEvent + 1))
+        {
+            AddNormalizedCoordinate(errors, point.X, nameof(message.PathPoints));
+            AddNormalizedCoordinate(errors, point.Y, nameof(message.PathPoints));
         }
     }
 

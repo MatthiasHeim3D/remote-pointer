@@ -9,6 +9,7 @@ using System.Net;
 using RemotePointer.Contracts.Messages;
 using RemotePointer.Contracts.Serialization;
 using RemotePointer.Server.Hubs;
+using RemotePointer.Server.RateLimiting;
 
 namespace RemotePointer.IntegrationTests;
 
@@ -201,7 +202,7 @@ public sealed class PointerHubIntegrationTests
             "AB2D4E",
             ClientRole.Presenter,
             "large-client",
-            new string('x', 9_000));
+            new string('x', 40_000));
 
         var exception = await Record.ExceptionAsync(
             () => connection.InvokeAsync("RequestToJoinSession", oversizedRequest)
@@ -218,10 +219,15 @@ public sealed class PointerHubIntegrationTests
 
         using var response = await client.GetAsync("/health");
         var hubOptions = factory.Services.GetRequiredService<IOptions<HubOptions>>().Value;
+        var rateLimitOptions = factory.Services
+            .GetRequiredService<IOptions<PointerRateLimitOptions>>()
+            .Value;
 
         response.EnsureSuccessStatusCode();
-        Assert.Equal(8 * 1024, hubOptions.MaximumReceiveMessageSize);
+        Assert.Equal(32 * 1024, hubOptions.MaximumReceiveMessageSize);
         Assert.Equal(1, hubOptions.MaximumParallelInvocationsPerClient);
+        Assert.Equal(90, rateLimitOptions.EventsPerSecond);
+        Assert.Equal(180, rateLimitOptions.BurstSize);
     }
 
     [Fact]
@@ -278,7 +284,12 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task HubRateLimit_RejectsThirtyFirstImmediatePointer()
     {
-        using var factory = CreateFactory();
+        using var factory = CreateFactory().WithWebHostBuilder(
+            builder =>
+            {
+                builder.UseSetting("RateLimits:EventsPerSecond", "20");
+                builder.UseSetting("RateLimits:BurstSize", "30");
+            });
         await using var receiver = CreateConnection(factory, "receiver-rate", "Receiver");
         await using var presenter = CreateConnection(factory, "presenter-rate", "Presenter");
         var joinRequested = CompletionSource<PresenterDescriptor>();

@@ -1,3 +1,4 @@
+using RemotePointer.Contracts.Coordinates;
 using RemotePointer.Contracts.Messages;
 using RemotePointer.Contracts.Validation;
 
@@ -187,6 +188,72 @@ public sealed class PointerEventValidationTests
             Now);
 
         Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_AcceptsBoundedPathPointBatch()
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with
+            {
+                Kind = PointerKind.PathUpdate,
+                GestureId = Guid.NewGuid(),
+                PathPoints =
+                [
+                    new(0.1d, 0.2d),
+                    new(0.15d, 0.3d),
+                    new(0.2d, 0.4d),
+                ],
+            },
+            Now);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_AcceptsEmptyPathPointBatchForKeepAlive()
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with
+            {
+                Kind = PointerKind.PathUpdate,
+                GestureId = Guid.NewGuid(),
+                PathPoints = [],
+            },
+            Now);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_RejectsPathPointsOnNonPathEvent()
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with { PathPoints = [new(0.1d, 0.2d)] },
+            Now);
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_RejectsOversizedOrOutOfRangePathPointBatch()
+    {
+        var oversized = Enumerable.Repeat(
+                new NormalizedPoint(0.5d, 0.5d),
+                ContractValidator.MaximumPathPointsPerEvent + 1)
+            .ToArray();
+        oversized[^1] = new NormalizedPoint(1.1d, 0.5d);
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with
+            {
+                Kind = PointerKind.PathEnd,
+                GestureId = Guid.NewGuid(),
+                PathPoints = oversized,
+            },
+            Now);
+
+        Assert.False(result.IsValid);
+        Assert.True(result.Errors.Count >= 2);
     }
 
     private static PointerEventMessage CreateValidMessage() => new(

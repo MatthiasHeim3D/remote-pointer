@@ -3,13 +3,15 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Overlays;
 
-internal sealed class PointerVisualRenderer(Canvas canvas)
+internal sealed class PointerVisualRenderer
 {
     private const int GestureFailSafeMilliseconds = 3_000;
+    private const int GestureLeaseCheckMilliseconds = 250;
     private const int GestureHoldMilliseconds = 350;
     private const int GestureFadeMilliseconds = 450;
     private const int TextHoldMilliseconds = 2_500;
@@ -22,10 +24,27 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
     private static readonly Brush AccentFillBrush =
         new SolidColorBrush(Color.FromArgb(38, 255, 92, 92));
 
+    private readonly Canvas canvas;
     private readonly Dictionary<Guid, ActiveGesture> activeGestures = [];
     private readonly LinkedList<FrameworkElement> transientVisuals = [];
+    private readonly DispatcherTimer gestureLeaseTimer;
 
-    public void Show(PointerKind kind, Point point, Guid? gestureId, string? text)
+    public PointerVisualRenderer(Canvas canvas)
+    {
+        this.canvas = canvas ?? throw new ArgumentNullException(nameof(canvas));
+        gestureLeaseTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(GestureLeaseCheckMilliseconds),
+        };
+        gestureLeaseTimer.Tick += OnGestureLeaseTimerTick;
+    }
+
+    public void Show(
+        PointerKind kind,
+        Point point,
+        Guid? gestureId,
+        string? text,
+        IReadOnlyList<Point>? pathPoints = null)
     {
         switch (kind)
         {
@@ -33,10 +52,10 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
                 StartPath(gestureId, point);
                 break;
             case PointerKind.PathUpdate:
-                UpdatePath(gestureId, point, end: false);
+                UpdatePath(gestureId, point, pathPoints, end: false);
                 break;
             case PointerKind.PathEnd:
-                UpdatePath(gestureId, point, end: true);
+                UpdatePath(gestureId, point, pathPoints, end: true);
                 break;
             case PointerKind.LineStart:
                 StartLine(gestureId, point);
@@ -64,6 +83,7 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
 
     public void Clear()
     {
+        gestureLeaseTimer.Stop();
         activeGestures.Clear();
         transientVisuals.Clear();
         canvas.Children.Clear();
@@ -79,9 +99,35 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
         TouchGesture(gesture);
     }
 
-    private void UpdatePath(Guid? gestureId, Point point, bool end)
+    private void UpdatePath(
+        Guid? gestureId,
+        Point point,
+        IReadOnlyList<Point>? pathPoints,
+        bool end)
     {
         if (!TryGetGesture<Polyline>(gestureId, out var gesture, out var path))
+        {
+            return;
+        }
+
+        if (pathPoints is null)
+        {
+            AddPathPoint(path, point);
+        }
+        else
+        {
+            foreach (var pathPoint in pathPoints)
+            {
+                AddPathPoint(path, pathPoint);
+            }
+        }
+
+        CompleteOrTouch(gesture, end);
+    }
+
+    private static void AddPathPoint(Polyline path, Point point)
+    {
+        if (path.Points.Count > 0 && path.Points[^1] == point)
         {
             return;
         }
@@ -95,7 +141,6 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
         }
 
         path.Points.Add(point);
-        CompleteOrTouch(gesture, end);
     }
 
     private void StartLine(Guid? gestureId, Point point)
@@ -239,6 +284,7 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
         }
 
         _ = activeGestures.Remove(gesture.Id);
+        StopLeaseTimerWhenIdle();
         BeginFade(
             gesture.Element,
             GestureHoldMilliseconds,
@@ -250,19 +296,42 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
     {
         gesture.Element.BeginAnimation(UIElement.OpacityProperty, null);
         gesture.Element.Opacity = 1d;
-        BeginFade(
-            gesture.Element,
-            GestureFailSafeMilliseconds,
-            GestureFadeMilliseconds,
-            () =>
+        gesture.LastTouchedAt = Environment.TickCount64;
+        if (!gestureLeaseTimer.IsEnabled)
+        {
+            gestureLeaseTimer.Start();
+        }
+    }
+
+    private void OnGestureLeaseTimerTick(object? sender, EventArgs e)
+    {
+        var now = Environment.TickCount64;
+        var expired = activeGestures.Values
+            .Where(gesture => now - gesture.LastTouchedAt >= GestureFailSafeMilliseconds)
+            .ToArray();
+        foreach (var gesture in expired)
+        {
+            if (!activeGestures.Remove(gesture.Id))
             {
-                if (activeGestures.TryGetValue(gesture.Id, out var current)
-                    && ReferenceEquals(current, gesture))
-                {
-                    _ = activeGestures.Remove(gesture.Id);
-                    canvas.Children.Remove(gesture.Element);
-                }
-            });
+                continue;
+            }
+
+            BeginFade(
+                gesture.Element,
+                holdMilliseconds: 0,
+                GestureFadeMilliseconds,
+                () => canvas.Children.Remove(gesture.Element));
+        }
+
+        StopLeaseTimerWhenIdle();
+    }
+
+    private void StopLeaseTimerWhenIdle()
+    {
+        if (activeGestures.Count == 0)
+        {
+            gestureLeaseTimer.Stop();
+        }
     }
 
     private void AddTransient(FrameworkElement element)
@@ -307,5 +376,14 @@ internal sealed class PointerVisualRenderer(Canvas canvas)
         element.BeginAnimation(UIElement.OpacityProperty, fade);
     }
 
-    private sealed record ActiveGesture(Guid Id, FrameworkElement Element, Point Start);
+    private sealed class ActiveGesture(Guid id, FrameworkElement element, Point start)
+    {
+        public Guid Id { get; } = id;
+
+        public FrameworkElement Element { get; } = element;
+
+        public Point Start { get; } = start;
+
+        public long LastTouchedAt { get; set; }
+    }
 }

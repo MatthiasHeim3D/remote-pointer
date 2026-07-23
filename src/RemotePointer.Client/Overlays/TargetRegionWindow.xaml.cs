@@ -7,6 +7,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
@@ -18,10 +19,13 @@ namespace RemotePointer.Client.Overlays;
 public partial class TargetRegionWindow : Window
 {
     private const int RippleDurationMilliseconds = 500;
-    private const int GestureUpdateIntervalMilliseconds = 50;
+    private const int GestureUpdateIntervalMilliseconds = 16;
+    private const int GestureKeepAliveIntervalMilliseconds = 500;
 
     private readonly RectangleD resetRectangle;
     private readonly PointerVisualRenderer pointerVisuals;
+    private readonly DispatcherTimer gestureUpdateTimer;
+    private readonly List<Point> pendingPathPoints = [];
     private TextBox? activeTextEditor;
     private Point activeTextPosition;
     private MouseButton? activePointerButton;
@@ -29,7 +33,9 @@ public partial class TargetRegionWindow : Window
     private bool pointerDownWithShift;
     private bool isPointerGestureActive;
     private Guid activeGestureId;
-    private long lastGestureUpdateAt;
+    private Point currentGesturePosition;
+    private bool gestureUpdatePending;
+    private long lastGestureSentAt;
     private bool isPointingMode;
     private bool isResizeDragActive;
     private NativePoint resizeDragStartCursor;
@@ -54,6 +60,11 @@ public partial class TargetRegionWindow : Window
 
         InitializeComponent();
         pointerVisuals = new PointerVisualRenderer(RippleCanvas);
+        gestureUpdateTimer = new DispatcherTimer(DispatcherPriority.Input)
+        {
+            Interval = TimeSpan.FromMilliseconds(GestureUpdateIntervalMilliseconds),
+        };
+        gestureUpdateTimer.Tick += OnGestureUpdateTimerTick;
         ApplyRectangle(rectangle);
         AspectLockCheckBox.IsChecked = lockAspectRatio;
         ExpectedAspectText.Text = string.Create(
@@ -281,7 +292,9 @@ public partial class TargetRegionWindow : Window
             && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         isPointerGestureActive = false;
         activeGestureId = Guid.Empty;
-        lastGestureUpdateAt = 0;
+        pendingPathPoints.Clear();
+        gestureUpdatePending = false;
+        gestureUpdateTimer.Stop();
         _ = CaptureMouse();
     }
 
@@ -309,17 +322,17 @@ public partial class TargetRegionWindow : Window
             var startKind = GetGestureKind(start: true, end: false);
             pointerVisuals.Show(startKind, pointerDownPosition, activeGestureId, text: null);
             RaisePointerCaptured(pointerDownPosition, startKind, activeGestureId);
-            lastGestureUpdateAt = 0;
+            currentGesturePosition = pointerDownPosition;
+            lastGestureSentAt = Environment.TickCount64;
+            gestureUpdateTimer.Start();
         }
 
         var updateKind = GetGestureKind(start: false, end: false);
         pointerVisuals.Show(updateKind, current, activeGestureId, text: null);
-
-        var now = Environment.TickCount64;
-        if (now - lastGestureUpdateAt >= GestureUpdateIntervalMilliseconds)
+        QueueGestureUpdate(current);
+        if (pendingPathPoints.Count >= ContractValidator.MaximumPathPointsPerEvent)
         {
-            RaisePointerCaptured(current, updateKind, activeGestureId);
-            lastGestureUpdateAt = now;
+            FlushGestureUpdate();
         }
     }
 
@@ -333,12 +346,24 @@ public partial class TargetRegionWindow : Window
         e.Handled = true;
         var releasePosition = e.GetPosition(TargetSurface);
         ReleaseMouseCapture();
+        gestureUpdateTimer.Stop();
 
         if (isPointerGestureActive)
         {
             var endKind = GetGestureKind(start: false, end: true);
             pointerVisuals.Show(endKind, releasePosition, activeGestureId, text: null);
-            RaisePointerCaptured(releasePosition, endKind, activeGestureId);
+            NormalizedPoint[]? pathPoints = null;
+            if (IsPathGesture())
+            {
+                AddPendingPathPoint(releasePosition);
+                pathPoints = NormalizePathPoints(pendingPathPoints);
+            }
+
+            RaisePointerCaptured(
+                releasePosition,
+                endKind,
+                activeGestureId,
+                pathPoints: pathPoints);
         }
         else if (activePointerButton == MouseButton.Left && pointerDownWithShift)
         {
@@ -353,7 +378,75 @@ public partial class TargetRegionWindow : Window
         activePointerButton = null;
         isPointerGestureActive = false;
         activeGestureId = Guid.Empty;
+        pendingPathPoints.Clear();
+        gestureUpdatePending = false;
     }
+
+    private void OnGestureUpdateTimerTick(object? sender, EventArgs e)
+    {
+        if (!isPointerGestureActive || activePointerButton is null)
+        {
+            gestureUpdateTimer.Stop();
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        if (gestureUpdatePending
+            || now - lastGestureSentAt >= GestureKeepAliveIntervalMilliseconds)
+        {
+            FlushGestureUpdate();
+        }
+    }
+
+    private void QueueGestureUpdate(Point point)
+    {
+        currentGesturePosition = point;
+        gestureUpdatePending = true;
+        if (IsPathGesture())
+        {
+            AddPendingPathPoint(point);
+        }
+    }
+
+    private void AddPendingPathPoint(Point point)
+    {
+        if (pendingPathPoints.Count == 0 || pendingPathPoints[^1] != point)
+        {
+            pendingPathPoints.Add(point);
+        }
+    }
+
+    private void FlushGestureUpdate()
+    {
+        if (!isPointerGestureActive || activePointerButton is null)
+        {
+            return;
+        }
+
+        var updateKind = GetGestureKind(start: false, end: false);
+        var pathPoints = IsPathGesture()
+            ? NormalizePathPoints(pendingPathPoints)
+            : null;
+
+        // Refreshing the active visual also keeps it alive while the pointer is held still.
+        pointerVisuals.Show(
+            updateKind,
+            currentGesturePosition,
+            activeGestureId,
+            text: null,
+            IsPathGesture() ? Array.Empty<Point>() : null);
+        RaisePointerCaptured(
+            currentGesturePosition,
+            updateKind,
+            activeGestureId,
+            pathPoints: pathPoints);
+        pendingPathPoints.Clear();
+        gestureUpdatePending = false;
+        lastGestureSentAt = Environment.TickCount64;
+    }
+
+    private bool IsPathGesture() =>
+        activePointerButton == MouseButton.Left && !pointerDownWithShift;
 
     private PointerKind GetGestureKind(bool start, bool end)
     {
@@ -380,7 +473,8 @@ public partial class TargetRegionWindow : Window
         Point position,
         PointerKind kind,
         Guid? gestureId = null,
-        string? text = null)
+        string? text = null,
+        NormalizedPoint[]? pathPoints = null)
     {
         var width = Math.Max(1d, TargetSurface.ActualWidth);
         var height = Math.Max(1d, TargetSurface.ActualHeight);
@@ -388,7 +482,19 @@ public partial class TargetRegionWindow : Window
             new PointD(position.X, position.Y),
             new RectangleD(0d, 0d, width, height));
 
-        PointerCaptured?.Invoke(this, new PointerCapturedEventArgs(point, kind, gestureId, text));
+        PointerCaptured?.Invoke(
+            this,
+            new PointerCapturedEventArgs(point, kind, gestureId, text, pathPoints));
+    }
+
+    private NormalizedPoint[] NormalizePathPoints(IReadOnlyList<Point> points)
+    {
+        var width = Math.Max(1d, TargetSurface.ActualWidth);
+        var height = Math.Max(1d, TargetSurface.ActualHeight);
+        var rectangle = new RectangleD(0d, 0d, width, height);
+        return points
+            .Select(point => CoordinateMapper.Normalize(new PointD(point.X, point.Y), rectangle))
+            .ToArray();
     }
 
     private void OpenTextEditor(Point position)
@@ -452,6 +558,14 @@ public partial class TargetRegionWindow : Window
         }
 
         Cursor = Cursors.Cross;
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        gestureUpdateTimer.Stop();
+        gestureUpdateTimer.Tick -= OnGestureUpdateTimerTick;
+        pointerVisuals.Clear();
+        base.OnClosed(e);
     }
 
     private void UpdateMetrics()

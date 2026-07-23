@@ -24,9 +24,9 @@
 | Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
 | Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
 | Session lifecycle | Creation, approval, active expiry, termination, presenter and receiver resume |
-| Pointer defenses | TTL, sequence duplicate suppression, 20/s refill, burst of 30 |
+| Pointer defenses | TTL, sequence duplicate suppression, configurable token refill/burst, production defaults of 90/s and 180 |
 | In-memory SignalR | Join/approve/send/acknowledge, both-role reconnect, termination, unauthorized sender |
-| Relay hosting | Health endpoint, 8 KB message limit, single invocation per client |
+| Relay hosting | Health endpoint, 32 KB message limit, single invocation per client |
 | Receiver networking | Session creation, approval presentation, fresh marker acknowledgement, expired marker drop |
 | Presenter networking | Approval gating, receiver dimensions, pointer construction, acknowledgement latency, reconnect drop |
 | Client SignalR transport | Real two-client create/join/approve/send/acknowledge/terminate flow through in-memory relay |

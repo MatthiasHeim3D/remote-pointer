@@ -41,7 +41,7 @@ builder.Services
     {
         options.EnableDetailedErrors = false;
         options.MaximumParallelInvocationsPerClient = 1;
-        options.MaximumReceiveMessageSize = 8 * 1024;
+        options.MaximumReceiveMessageSize = 32 * 1024;
         options.AddFilter<PointerHubAuditFilter>();
     })
     .AddJsonProtocol(options => RemotePointerJson.Configure(options.PayloadSerializerOptions));

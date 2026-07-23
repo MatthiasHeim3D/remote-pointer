@@ -1,3 +1,5 @@
+using RemotePointer.Contracts.Coordinates;
+
 namespace RemotePointer.Contracts.Messages;
 
 public sealed record PointerEventMessage(
@@ -10,4 +12,5 @@ public sealed record PointerEventMessage(
     long SentAtUnixMilliseconds,
     int TimeToLiveMilliseconds,
     Guid? GestureId = null,
-    string? Text = null);
+    string? Text = null,
+    NormalizedPoint[]? PathPoints = null);
