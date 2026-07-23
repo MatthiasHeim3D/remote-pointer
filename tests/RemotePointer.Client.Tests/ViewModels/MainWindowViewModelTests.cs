@@ -226,64 +226,6 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void ShowOverlayCommand_ShowsOverlayOnSelection()
-    {
-        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
-        using var overlay = new FakeOverlayService();
-        using var viewModel = new MainWindowViewModel(
-            new FakeMonitorService([monitor]),
-            overlay);
-
-        viewModel.ShowOverlayCommand.Execute(null);
-
-        Assert.Same(monitor, overlay.ShownMonitor);
-        Assert.True(viewModel.IsOverlayVisible);
-    }
-
-    [Theory]
-    [InlineData("TopLeft", 0d, 0d)]
-    [InlineData("TopRight", 1d, 0d)]
-    [InlineData("Center", 0.5d, 0.5d)]
-    [InlineData("BottomLeft", 0d, 1d)]
-    [InlineData("BottomRight", 1d, 1d)]
-    public void ShowPresetMarkerCommand_SendsExpectedPoint(
-        string preset,
-        double expectedX,
-        double expectedY)
-    {
-        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
-        using var overlay = new FakeOverlayService();
-        using var viewModel = new MainWindowViewModel(
-            new FakeMonitorService([monitor]),
-            overlay);
-        overlay.Show(monitor);
-
-        viewModel.ShowPresetMarkerCommand.Execute(preset);
-
-        Assert.Equal(new NormalizedPoint(expectedX, expectedY), Assert.Single(overlay.Markers));
-    }
-
-    [Fact]
-    public void ShowCustomMarkerCommand_RejectsOutOfRangeCoordinate()
-    {
-        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
-        using var overlay = new FakeOverlayService();
-        using var viewModel = new MainWindowViewModel(
-            new FakeMonitorService([monitor]),
-            overlay)
-        {
-            CustomNormalizedX = -0.1d,
-            CustomNormalizedY = 0.5d,
-        };
-        overlay.Show(monitor);
-
-        viewModel.ShowCustomMarkerCommand.Execute(null);
-
-        Assert.Empty(overlay.Markers);
-        Assert.True(viewModel.IsError);
-    }
-
-    [Fact]
     public void OverlayDisconnectionState_IsPresentedAsError()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);

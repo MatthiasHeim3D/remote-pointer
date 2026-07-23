@@ -17,8 +17,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IMonitorService monitorService;
     private readonly IReceiverOverlayService overlayService;
     private readonly IRelayClient? receiverRelayClient;
-    private double customNormalizedX = 0.5d;
-    private double customNormalizedY = 0.5d;
     private bool disposed;
     private bool isError;
     private bool isOverlayVisible;
@@ -61,10 +59,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         RefreshMonitorsCommand = new RelayCommand(_ => RefreshMonitors());
-        ShowOverlayCommand = new RelayCommand(_ => ShowOverlay());
-        HideOverlayCommand = new RelayCommand(_ => overlayService.Hide());
-        ShowPresetMarkerCommand = new RelayCommand(ShowPresetMarker);
-        ShowCustomMarkerCommand = new RelayCommand(_ => ShowCustomMarker());
         createReceiverSessionCommand = new AsyncRelayCommand(
             _ => CreateReceiverSessionAsync(),
             _ => receiverRelayClient is not null && SelectedMonitor is not null && !HasReceiverSession);
@@ -92,18 +86,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 createReceiverSessionCommand.RaiseCanExecuteChanged();
             }
         }
-    }
-
-    public double CustomNormalizedX
-    {
-        get => customNormalizedX;
-        set => SetProperty(ref customNormalizedX, value);
-    }
-
-    public double CustomNormalizedY
-    {
-        get => customNormalizedY;
-        set => SetProperty(ref customNormalizedY, value);
     }
 
     public string StatusMessage
@@ -153,14 +135,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool CanSelectMonitor => !HasReceiverSession;
 
     public ICommand RefreshMonitorsCommand { get; }
-
-    public ICommand ShowOverlayCommand { get; }
-
-    public ICommand HideOverlayCommand { get; }
-
-    public ICommand ShowPresetMarkerCommand { get; }
-
-    public ICommand ShowCustomMarkerCommand { get; }
 
     public ICommand CreateReceiverSessionCommand => createReceiverSessionCommand;
 
@@ -335,54 +309,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             SetStatus($"The relay could not confirm session termination: {exception.Message}", true);
         }
-    }
-
-    private void ShowOverlay()
-    {
-        if (SelectedMonitor is null)
-        {
-            SetStatus("Select a connected monitor before showing the overlay.", isError: true);
-            return;
-        }
-
-        try
-        {
-            overlayService.Show(SelectedMonitor);
-        }
-        catch (Win32Exception exception)
-        {
-            SetStatus($"The overlay could not be shown: {exception.Message}", isError: true);
-        }
-    }
-
-    private void ShowPresetMarker(object? parameter)
-    {
-        var point = (parameter as string) switch
-        {
-            "TopLeft" => new NormalizedPoint(0d, 0d),
-            "TopRight" => new NormalizedPoint(1d, 0d),
-            "Center" => new NormalizedPoint(0.5d, 0.5d),
-            "BottomLeft" => new NormalizedPoint(0d, 1d),
-            "BottomRight" => new NormalizedPoint(1d, 1d),
-            _ => throw new ArgumentException("Unknown marker preset.", nameof(parameter)),
-        };
-
-        _ = overlayService.ShowMarker(point);
-    }
-
-    private void ShowCustomMarker()
-    {
-        if (!double.IsFinite(CustomNormalizedX)
-            || !double.IsFinite(CustomNormalizedY)
-            || CustomNormalizedX is < 0d or > 1d
-            || CustomNormalizedY is < 0d or > 1d)
-        {
-            SetStatus("Custom coordinates must be between 0.0 and 1.0.", isError: true);
-            return;
-        }
-
-        _ = overlayService.ShowMarker(
-            new NormalizedPoint(CustomNormalizedX, CustomNormalizedY));
     }
 
     private void OnOverlayStateChanged(object? sender, OverlayStateChangedEventArgs e)

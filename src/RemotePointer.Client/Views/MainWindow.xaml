@@ -40,15 +40,14 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Margin="0,0,0,24">
-                <TextBlock FontSize="28" FontWeight="SemiBold" Text="Receiver overlay prototype" />
+                <TextBlock FontSize="28" FontWeight="SemiBold" Text="Receive pointers" />
                 <TextBlock Margin="0,8,0,0"
                            Foreground="#AEB8C8"
                            TextWrapping="Wrap"
-                           Text="Choose a monitor, show the click-through overlay, then place test markers at normalized coordinates. Normal applications should remain fully clickable beneath it." />
+                           Text="Choose the monitor where incoming pointer markers should appear, then create a session and share its pairing code." />
             </StackPanel>
 
             <Border Grid.Row="1"
@@ -70,13 +69,6 @@
                                   IsEnabled="{Binding CanSelectMonitor}"
                                   DisplayMemberPath="SelectionLabel" />
                     </DockPanel>
-                    <WrapPanel Margin="0,14,0,0" IsEnabled="{Binding CanSelectMonitor}">
-                        <Button Command="{Binding ShowOverlayCommand}" Content="Show receiver overlay" />
-                        <Button Command="{Binding HideOverlayCommand}"
-                                Background="#4A5568"
-                                Foreground="White"
-                                Content="Hide overlay" />
-                    </WrapPanel>
                 </StackPanel>
             </Border>
 
@@ -118,38 +110,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="3"
-                    Margin="0,0,0,18"
-                    Padding="20"
-                    Background="#181E2A"
-                    CornerRadius="8">
-                <StackPanel>
-                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="3. Test marker positions" />
-                    <TextBlock Margin="0,6,0,12"
-                               Foreground="#AEB8C8"
-                               Text="Test all four corners and the center on each connected monitor." />
-                    <WrapPanel>
-                        <Button Command="{Binding ShowPresetMarkerCommand}" CommandParameter="TopLeft" Content="Top left" />
-                        <Button Command="{Binding ShowPresetMarkerCommand}" CommandParameter="TopRight" Content="Top right" />
-                        <Button Command="{Binding ShowPresetMarkerCommand}" CommandParameter="Center" Content="Center" />
-                        <Button Command="{Binding ShowPresetMarkerCommand}" CommandParameter="BottomLeft" Content="Bottom left" />
-                        <Button Command="{Binding ShowPresetMarkerCommand}" CommandParameter="BottomRight" Content="Bottom right" />
-                    </WrapPanel>
-                    <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
-                        <TextBlock Margin="0,7,8,0" Text="X" />
-                        <TextBox Width="90"
-                                 Text="{Binding CustomNormalizedX, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock Margin="16,7,8,0" Text="Y" />
-                        <TextBox Width="90"
-                                 Text="{Binding CustomNormalizedY, UpdateSourceTrigger=PropertyChanged}" />
-                        <Button Margin="16,0,0,0"
-                                Command="{Binding ShowCustomMarkerCommand}"
-                                Content="Show custom marker" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Row="4" Padding="16" Background="#181E2A" CornerRadius="8">
+            <Border Grid.Row="3" Padding="16" Background="#181E2A" CornerRadius="8">
                 <StackPanel>
                     <TextBlock FontWeight="SemiBold" Text="Status" />
                     <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding StatusMessage}">
