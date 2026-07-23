@@ -24,6 +24,8 @@ y = overlayTop  + normalizedY * overlayHeight
 
 Normalized coordinates are finite numbers in the inclusive range `0.0` through `1.0`. The rectangle origin may be negative. Rectangle dimensions must be finite and greater than zero.
 
+In Phase 3, presenter clicks are normalized locally and shown in the client status panel. They are not transmitted because relay networking is intentionally deferred. The same normalized event boundary will feed `PointerEventMessage` in the end-to-end phase.
+
 ## Initial messages
 
 - `DisplayDescriptor`: stable display identity, friendly name, pixel dimensions, scale, and clockwise rotation.

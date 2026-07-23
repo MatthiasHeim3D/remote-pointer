@@ -2,7 +2,7 @@
 
 Remote Pointer is a side-band Windows 11 pointer application. It exchanges only normalized pointer coordinates and session metadata through an internal relay; it does not capture screens or inject input.
 
-Implementation proceeds one reviewed phase at a time. Phase 1 establishes the contracts and coordinate logic. Phase 2 adds a local Windows receiver-overlay prototype with monitor selection and test markers. Networking remains deferred to later phases.
+Implementation proceeds one reviewed phase at a time. Phase 1 establishes contracts and coordinate logic. Phase 2 adds the local receiver overlay. Phase 3 adds presenter calibration, click capture, aspect-ratio guidance, local ripple feedback, and the `Ctrl+Alt+P` global toggle. Networking remains deferred to Phase 4 and later.
 
 ## Build
 
@@ -23,6 +23,6 @@ Run the local overlay prototype:
 dotnet run --project src\RemotePointer.Client
 ```
 
-Choose a monitor, select **Show receiver overlay**, and use the five preset marker buttons. The overlay should remain click-through and must not activate when clicking applications beneath it.
+Use **Receive pointers** to test the monitor overlay. Use **Point at another screen** to calibrate a target rectangle, lock it, and enter pointing mode. The receiver overlay remains click-through; the presenter target intentionally consumes clicks only while pointing mode is active.
 
 See [docs/architecture.md](docs/architecture.md) for component boundaries and phase status.

@@ -20,11 +20,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public MainWindowViewModel(
         IMonitorService monitorService,
-        IReceiverOverlayService overlayService)
+        IReceiverOverlayService overlayService,
+        ITargetRegionService? targetRegionService = null)
     {
         this.monitorService = monitorService ?? throw new ArgumentNullException(nameof(monitorService));
         this.overlayService = overlayService ?? throw new ArgumentNullException(nameof(overlayService));
         this.overlayService.StateChanged += OnOverlayStateChanged;
+        Presenter = new PresenterViewModel(targetRegionService ?? new TargetRegionService());
 
         RefreshMonitorsCommand = new RelayCommand(_ => RefreshMonitors());
         ShowOverlayCommand = new RelayCommand(_ => ShowOverlay());
@@ -36,6 +38,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<MonitorDescriptor> Monitors { get; } = [];
+
+    public PresenterViewModel Presenter { get; }
 
     public MonitorDescriptor? SelectedMonitor
     {
@@ -144,6 +148,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         overlayService.StateChanged -= OnOverlayStateChanged;
         overlayService.Dispose();
+        Presenter.Dispose();
         disposed = true;
         GC.SuppressFinalize(this);
     }

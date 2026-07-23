@@ -8,12 +8,16 @@ internal static partial class NativeMethods
     internal const int EnumCurrentSettings = -1;
     internal const int HtTransparent = -1;
     internal const int MaNoActivate = 3;
+    internal const int ModifierAlt = 0x0001;
+    internal const int ModifierControl = 0x0002;
+    internal const int ModifierNoRepeat = 0x4000;
     internal const int MonitorInfoPrimary = 0x00000001;
     internal const int SwpNoActivate = 0x0010;
     internal const int SwpShowWindow = 0x0040;
     internal const int WmDisplayChange = 0x007E;
     internal const int WmMouseActivate = 0x0021;
     internal const int WmNcHitTest = 0x0084;
+    internal const int WmHotKey = 0x0312;
     internal const long WsExLayered = 0x00080000L;
     internal const long WsExNoActivate = 0x08000000L;
     internal const long WsExToolWindow = 0x00000080L;
@@ -73,6 +77,18 @@ internal static partial class NativeMethods
         int width,
         int height,
         uint flags);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool RegisterHotKey(
+        nint window,
+        int hotKeyId,
+        uint modifiers,
+        uint virtualKey);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool UnregisterHotKey(nint window, int hotKeyId);
 }
 
 internal enum MonitorDpiType

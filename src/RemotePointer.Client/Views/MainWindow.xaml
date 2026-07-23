@@ -31,6 +31,8 @@
         </Style>
     </Window.Resources>
 
+    <TabControl Background="#10141D" BorderThickness="0">
+        <TabItem Header="Receive pointers">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <Grid Margin="32">
             <Grid.RowDefinitions>
@@ -130,4 +132,107 @@
             </Border>
         </Grid>
     </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Point at another screen">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <Grid Margin="32">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                        <TextBlock FontSize="28" FontWeight="SemiBold" Text="Presenter target prototype" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="#AEB8C8"
+                                   TextWrapping="Wrap"
+                                   Text="Calibrate the part of your screen that contains the colleague's shared desktop. In pointing mode, clicks inside that rectangle are consumed locally and converted to normalized coordinates." />
+                    </StackPanel>
+
+                    <Border Grid.Row="1"
+                            Margin="0,0,0,18"
+                            Padding="20"
+                            Background="#181E2A"
+                            CornerRadius="8">
+                        <StackPanel>
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="1. Receiver display shape" />
+                            <TextBlock Margin="0,6,0,12"
+                                       Foreground="#AEB8C8"
+                                       Text="Enter the receiver display dimensions used for aspect-ratio guidance." />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Margin="0,7,8,0" Text="Width" />
+                                <TextBox Width="100"
+                                         Text="{Binding Presenter.ExpectedWidthPixels, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Margin="16,7,8,0" Text="Height" />
+                                <TextBox Width="100"
+                                         Text="{Binding Presenter.ExpectedHeightPixels, UpdateSourceTrigger=PropertyChanged}" />
+                                <CheckBox Margin="18,7,0,0"
+                                          Foreground="White"
+                                          IsChecked="{Binding Presenter.AspectRatioLockEnabled}"
+                                          Content="Lock while resizing" />
+                            </StackPanel>
+                            <Button Margin="0,16,8,0"
+                                    HorizontalAlignment="Left"
+                                    Command="{Binding Presenter.CalibrateCommand}"
+                                    Content="Calibrate target area" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="2"
+                            Margin="0,0,0,18"
+                            Padding="20"
+                            Background="#181E2A"
+                            CornerRadius="8">
+                        <StackPanel>
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Pointing mode" />
+                            <TextBlock Margin="0,6,0,12"
+                                       Foreground="#AEB8C8"
+                                       TextWrapping="Wrap"
+                                       Text="After locking the target, toggle pointing with the button or Ctrl+Alt+P. Press Esc to stop immediately." />
+                            <WrapPanel>
+                                <Button Command="{Binding Presenter.TogglePointingCommand}"
+                                        Content="Toggle pointing (Ctrl+Alt+P)" />
+                                <Button Background="#4A5568"
+                                        Foreground="White"
+                                        Command="{Binding Presenter.ExitPointingCommand}"
+                                        Content="Exit pointing" />
+                            </WrapPanel>
+                            <TextBlock Margin="0,10,0,0" Foreground="#AEB8C8">
+                                <Run Text="State: " />
+                                <Run Text="{Binding Presenter.StateLabel, Mode=OneWay}" />
+                                <Run Text="  •  Captured locally: " />
+                                <Run Text="{Binding Presenter.CapturedPointerCount, Mode=OneWay}" />
+                            </TextBlock>
+                            <TextBlock Margin="0,5,0,0"
+                                       Foreground="#E9EDF5"
+                                       Text="{Binding Presenter.LastPointer, Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="3" Padding="16" Background="#181E2A" CornerRadius="8">
+                        <StackPanel>
+                            <TextBlock FontWeight="SemiBold" Text="Presenter status" />
+                            <TextBlock Margin="0,6,0,0"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding Presenter.StatusMessage, Mode=OneWay}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#8FDCB5" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Presenter.IsError}" Value="True">
+                                                <Setter Property="Foreground" Value="#FF9999" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </ScrollViewer>
+        </TabItem>
+    </TabControl>
 </Window>

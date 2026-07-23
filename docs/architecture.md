@@ -30,6 +30,16 @@ Both the control window and receiver overlay listen for `WM_DISPLAYCHANGE`. Reso
 
 Markers are local-only Phase 2 test visuals. Up to five expanding rings can be visible simultaneously, each fading after approximately 900 ms. Their centers are mapped from normalized coordinates into the overlay's current WPF client size.
 
+## Phase 3 design
+
+`TargetRegionService` owns the presenter state machine: inactive, calibrating, ready, and pointing. A calibrated rectangle is retained only in memory for the current process session. Recalibration can preserve the last rectangle, while Reset restores a recommended rectangle matching the receiver's expected aspect ratio.
+
+`TargetRegionWindow` is interactive during calibration. Its header moves the window, a resize thumb changes its dimensions, and an optional ratio lock constrains resizing. The current dimensions, ratio, and relative difference from the receiver shape are displayed continuously. Locking a difference over 2% requires an explicit Allow mismatch choice.
+
+Pointing mode reuses the exact calibrated top-level window bounds with transparent content and a subtle border. Because the pointer window exists only over the target rectangle, normal clicks outside it are unaffected. Left clicks inside are handled by WPF, rendered as local ripples, normalized through the shared `CoordinateMapper`, and never forwarded or injected into the underlying application.
+
+The control window registers `Ctrl+Alt+P` with `RegisterHotKey`; no keyboard or mouse hook is installed. Escape is handled by the focused target window and immediately closes pointing mode. Inactive mode closes the target window entirely.
+
 ## Dependency direction
 
 ```text
@@ -44,4 +54,5 @@ No reference is permitted from contracts back to either host. Client and server 
 
 - Phase 1: implemented.
 - Phase 2: implemented; manual mixed-DPI and display-disconnection verification is required on target hardware.
-- Phases 3–7: not yet implemented.
+- Phase 3: implemented; click-consumption and mixed-DPI calibration require manual verification on target hardware.
+- Phases 4–7: not yet implemented.

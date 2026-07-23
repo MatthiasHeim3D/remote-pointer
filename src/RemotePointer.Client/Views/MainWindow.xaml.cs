@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.ComponentModel;
 using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
 using RemotePointer.Client.ViewModels;
@@ -9,6 +10,7 @@ namespace RemotePointer.Client.Views;
 
 public partial class MainWindow : Window
 {
+    private GlobalHotKeyRegistration? hotKeyRegistration;
     private HwndSource? source;
     private readonly MainWindowViewModel viewModel;
 
@@ -19,7 +21,11 @@ public partial class MainWindow : Window
         var monitorService = new MonitorService();
         var coordinateMapper = new DisplayCoordinateMapper();
         var overlayService = new ReceiverOverlayService(monitorService, coordinateMapper);
-        viewModel = new MainWindowViewModel(monitorService, overlayService);
+        var targetRegionService = new TargetRegionService();
+        viewModel = new MainWindowViewModel(
+            monitorService,
+            overlayService,
+            targetRegionService);
         DataContext = viewModel;
 
         SourceInitialized += OnSourceInitialized;
@@ -31,6 +37,15 @@ public partial class MainWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         source = HwndSource.FromHwnd(handle);
         source?.AddHook(WindowMessageHook);
+
+        try
+        {
+            hotKeyRegistration = new GlobalHotKeyRegistration(handle);
+        }
+        catch (Win32Exception exception)
+        {
+            viewModel.Presenter.ReportHotKeyRegistrationFailure(exception.Message);
+        }
     }
 
     private nint WindowMessageHook(
@@ -50,6 +65,13 @@ public partial class MainWindow : Window
             _ = Dispatcher.InvokeAsync(viewModel.RefreshMonitors, DispatcherPriority.Background);
         }
 
+        if (message == NativeMethods.WmHotKey
+            && wordParameter.ToInt32() == GlobalHotKeyRegistration.TogglePointerHotKeyId)
+        {
+            handled = true;
+            viewModel.Presenter.TogglePointingMode();
+        }
+
         return 0;
     }
 
@@ -57,6 +79,8 @@ public partial class MainWindow : Window
     {
         source?.RemoveHook(WindowMessageHook);
         source = null;
+        hotKeyRegistration?.Dispose();
+        hotKeyRegistration = null;
         viewModel.Dispose();
     }
 }

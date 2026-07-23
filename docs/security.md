@@ -22,6 +22,15 @@ The shared library does not reference Windows desktop APIs. Future Win32 interop
 - Win32 interop is isolated under `RemotePointer.Client/Native` and is limited to display enumeration, DPI inspection, window placement, and extended window styles.
 - Test markers are generated from local normalized coordinates; no screen contents or application metadata are accessed.
 
+## Phase 3 input controls
+
+- Pointing uses a bounded top-level WPF window rather than a low-level mouse hook.
+- Only left clicks delivered inside the calibrated rectangle are observed, handled, and converted to normalized coordinates.
+- No mouse movement or click is injected locally or remotely.
+- `Ctrl+Alt+P` uses `RegisterHotKey`; no keyboard hook is installed.
+- Escape is handled only while the presenter target window is focused.
+- Leaving pointing mode closes the capture window, restoring normal application behavior everywhere.
+
 ## Controls scheduled for later phases
 
 - HTTPS/WSS enforcement and production plaintext refusal.
