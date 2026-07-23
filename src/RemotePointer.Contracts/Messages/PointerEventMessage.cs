@@ -8,4 +8,6 @@ public sealed record PointerEventMessage(
     double NormalizedY,
     PointerKind Kind,
     long SentAtUnixMilliseconds,
-    int TimeToLiveMilliseconds);
+    int TimeToLiveMilliseconds,
+    Guid? GestureId = null,
+    string? Text = null);

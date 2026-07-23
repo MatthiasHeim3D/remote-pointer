@@ -10,14 +10,26 @@ using System.Windows.Shapes;
 using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
+using RemotePointer.Contracts.Messages;
+using RemotePointer.Contracts.Validation;
 
 namespace RemotePointer.Client.Overlays;
 
 public partial class TargetRegionWindow : Window
 {
     private const int RippleDurationMilliseconds = 500;
+    private const int GestureUpdateIntervalMilliseconds = 50;
 
     private readonly RectangleD resetRectangle;
+    private readonly PointerVisualRenderer pointerVisuals;
+    private TextBox? activeTextEditor;
+    private Point activeTextPosition;
+    private MouseButton? activePointerButton;
+    private Point pointerDownPosition;
+    private bool pointerDownWithShift;
+    private bool isPointerGestureActive;
+    private Guid activeGestureId;
+    private long lastGestureUpdateAt;
     private bool isPointingMode;
     private bool isResizeDragActive;
     private NativePoint resizeDragStartCursor;
@@ -41,6 +53,7 @@ public partial class TargetRegionWindow : Window
         ExpectedAspectRatio = expectedAspectRatio;
 
         InitializeComponent();
+        pointerVisuals = new PointerVisualRenderer(RippleCanvas);
         ApplyRectangle(rectangle);
         AspectLockCheckBox.IsChecked = lockAspectRatio;
         ExpectedAspectText.Text = string.Create(
@@ -72,6 +85,7 @@ public partial class TargetRegionWindow : Window
         // layered window's input surface. Alpha 1 is visually imperceptible but keeps
         // the complete calibrated rectangle available for hit testing.
         TargetSurface.Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0));
+        EditorCanvas.IsHitTestVisible = true;
         Cursor = Cursors.Cross;
     }
 
@@ -224,6 +238,23 @@ public partial class TargetRegionWindow : Window
 
     private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        if (isPointingMode && activeTextEditor is not null)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                FinalizeTextEditor();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                RemoveTextEditor();
+                _ = Focus();
+            }
+
+            return;
+        }
+
         if (isPointingMode && e.Key == Key.Escape)
         {
             e.Handled = true;
@@ -231,23 +262,196 @@ public partial class TargetRegionWindow : Window
         }
     }
 
-    private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!isPointingMode)
+        if (!isPointingMode || activeTextEditor is not null || activePointerButton is not null)
+        {
+            return;
+        }
+
+        if (e.ChangedButton is not (MouseButton.Left or MouseButton.Right))
         {
             return;
         }
 
         e.Handled = true;
-        var click = e.GetPosition(TargetSurface);
+        activePointerButton = e.ChangedButton;
+        pointerDownPosition = e.GetPosition(TargetSurface);
+        pointerDownWithShift = e.ChangedButton == MouseButton.Left
+            && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        isPointerGestureActive = false;
+        activeGestureId = Guid.Empty;
+        lastGestureUpdateAt = 0;
+        _ = CaptureMouse();
+    }
+
+    private void OnPreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!isPointingMode || activePointerButton is null || activeTextEditor is not null)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        var current = e.GetPosition(TargetSurface);
+        if (!isPointerGestureActive)
+        {
+            var horizontalDistance = Math.Abs(current.X - pointerDownPosition.X);
+            var verticalDistance = Math.Abs(current.Y - pointerDownPosition.Y);
+            if (horizontalDistance < SystemParameters.MinimumHorizontalDragDistance
+                && verticalDistance < SystemParameters.MinimumVerticalDragDistance)
+            {
+                return;
+            }
+
+            isPointerGestureActive = true;
+            activeGestureId = Guid.NewGuid();
+            var startKind = GetGestureKind(start: true, end: false);
+            pointerVisuals.Show(startKind, pointerDownPosition, activeGestureId, text: null);
+            RaisePointerCaptured(pointerDownPosition, startKind, activeGestureId);
+            lastGestureUpdateAt = 0;
+        }
+
+        var updateKind = GetGestureKind(start: false, end: false);
+        pointerVisuals.Show(updateKind, current, activeGestureId, text: null);
+
+        var now = Environment.TickCount64;
+        if (now - lastGestureUpdateAt >= GestureUpdateIntervalMilliseconds)
+        {
+            RaisePointerCaptured(current, updateKind, activeGestureId);
+            lastGestureUpdateAt = now;
+        }
+    }
+
+    private void OnPreviewMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!isPointingMode || activePointerButton != e.ChangedButton)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        var releasePosition = e.GetPosition(TargetSurface);
+        ReleaseMouseCapture();
+
+        if (isPointerGestureActive)
+        {
+            var endKind = GetGestureKind(start: false, end: true);
+            pointerVisuals.Show(endKind, releasePosition, activeGestureId, text: null);
+            RaisePointerCaptured(releasePosition, endKind, activeGestureId);
+        }
+        else if (activePointerButton == MouseButton.Left && pointerDownWithShift)
+        {
+            OpenTextEditor(pointerDownPosition);
+        }
+        else if (activePointerButton == MouseButton.Left)
+        {
+            ShowRipple(pointerDownPosition);
+            RaisePointerCaptured(pointerDownPosition, PointerKind.Click);
+        }
+
+        activePointerButton = null;
+        isPointerGestureActive = false;
+        activeGestureId = Guid.Empty;
+    }
+
+    private PointerKind GetGestureKind(bool start, bool end)
+    {
+        if (activePointerButton == MouseButton.Right)
+        {
+            return start
+                ? PointerKind.RectangleStart
+                : end ? PointerKind.RectangleEnd : PointerKind.RectangleUpdate;
+        }
+
+        if (pointerDownWithShift)
+        {
+            return start
+                ? PointerKind.LineStart
+                : end ? PointerKind.LineEnd : PointerKind.LineUpdate;
+        }
+
+        return start
+            ? PointerKind.PathStart
+            : end ? PointerKind.PathEnd : PointerKind.PathUpdate;
+    }
+
+    private void RaisePointerCaptured(
+        Point position,
+        PointerKind kind,
+        Guid? gestureId = null,
+        string? text = null)
+    {
         var width = Math.Max(1d, TargetSurface.ActualWidth);
         var height = Math.Max(1d, TargetSurface.ActualHeight);
         var point = CoordinateMapper.Normalize(
-            new PointD(click.X, click.Y),
+            new PointD(position.X, position.Y),
             new RectangleD(0d, 0d, width, height));
 
-        ShowRipple(click);
-        PointerCaptured?.Invoke(this, new PointerCapturedEventArgs(point));
+        PointerCaptured?.Invoke(this, new PointerCapturedEventArgs(point, kind, gestureId, text));
+    }
+
+    private void OpenTextEditor(Point position)
+    {
+        RemoveTextEditor();
+        activeTextPosition = position;
+        activeTextEditor = new TextBox
+        {
+            Width = 260d,
+            MaxLength = ContractValidator.MaximumPointerTextLength,
+            Padding = new Thickness(8d, 5d, 8d, 5d),
+            FontSize = 17d,
+            Foreground = Brushes.White,
+            Background = new SolidColorBrush(Color.FromArgb(240, 17, 23, 32)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92)),
+            BorderThickness = new Thickness(2d),
+            CaretBrush = Brushes.White,
+            AcceptsReturn = false,
+        };
+        Canvas.SetLeft(activeTextEditor, position.X + 14d);
+        Canvas.SetTop(activeTextEditor, position.Y - 8d);
+        EditorCanvas.Children.Add(activeTextEditor);
+        Cursor = Cursors.Arrow;
+        _ = Dispatcher.InvokeAsync(
+            () =>
+            {
+                _ = activeTextEditor?.Focus();
+                if (activeTextEditor is not null)
+                {
+                    Keyboard.Focus(activeTextEditor);
+                }
+            });
+    }
+
+    private void FinalizeTextEditor()
+    {
+        if (activeTextEditor is null)
+        {
+            return;
+        }
+
+        var text = activeTextEditor.Text.Trim();
+        var position = activeTextPosition;
+        RemoveTextEditor();
+        _ = Focus();
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        pointerVisuals.Show(PointerKind.Text, position, gestureId: null, text);
+        RaisePointerCaptured(position, PointerKind.Text, text: text);
+    }
+
+    private void RemoveTextEditor()
+    {
+        if (activeTextEditor is not null)
+        {
+            EditorCanvas.Children.Remove(activeTextEditor);
+            activeTextEditor = null;
+        }
+
+        Cursor = Cursors.Cross;
     }
 
     private void UpdateMetrics()

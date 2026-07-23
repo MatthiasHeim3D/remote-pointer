@@ -162,6 +162,35 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void ReceiverSession_ForwardsGesturePayloadToOverlay()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        viewModel.CreateReceiverSessionCommand.Execute(null);
+        var gestureId = Guid.NewGuid();
+        var pointer = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.2d,
+            0.8d,
+            PointerKind.RectangleUpdate,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            2_000,
+            gestureId);
+
+        relay.RaisePointer(pointer);
+
+        Assert.Same(pointer, Assert.Single(overlay.Pointers));
+        Assert.Equal(pointer.EventId, relay.SentAcknowledgement?.EventId);
+    }
+
+    [Fact]
     public void ReceiverWithoutActiveSession_DropsPointerWithoutAcknowledging()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
@@ -340,6 +369,8 @@ public sealed class MainWindowViewModelTests
 
         public List<NormalizedPoint> Markers { get; } = [];
 
+        public List<PointerEventMessage> Pointers { get; } = [];
+
         public void Show(MonitorDescriptor monitor)
         {
             ShownMonitor = monitor;
@@ -358,14 +389,21 @@ public sealed class MainWindowViewModelTests
                 new OverlayStateChangedEventArgs("Overlay hidden.", false, false));
         }
 
-        public bool ShowMarker(NormalizedPoint point)
+        public bool ShowPointer(PointerEventMessage pointerEvent)
         {
             if (!IsVisible)
             {
                 return false;
             }
 
-            Markers.Add(point);
+            Pointers.Add(pointerEvent);
+            if (pointerEvent.Kind == PointerKind.Click)
+            {
+                Markers.Add(new NormalizedPoint(
+                    pointerEvent.NormalizedX,
+                    pointerEvent.NormalizedY));
+            }
+
             return true;
         }
 

@@ -10,6 +10,7 @@ using System.Windows.Threading;
 using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
+using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Overlays;
 
@@ -22,6 +23,7 @@ public partial class ReceiverOverlayWindow : Window
     private readonly IMonitorService monitorService;
     private readonly IDisplayCoordinateMapper coordinateMapper;
     private readonly LinkedList<FrameworkElement> markers = [];
+    private readonly PointerVisualRenderer pointerVisuals;
     private readonly string displayId;
     private HwndSource? source;
     private nint handle;
@@ -38,12 +40,38 @@ public partial class ReceiverOverlayWindow : Window
         displayId = monitor.Display.DisplayId;
 
         InitializeComponent();
+        pointerVisuals = new PointerVisualRenderer(MarkerCanvas);
         SourceInitialized += OnSourceInitialized;
     }
 
     public event EventHandler? SelectedMonitorDisconnected;
 
-    public void ShowMarker(NormalizedPoint normalizedPoint)
+    public void ShowPointer(PointerEventMessage pointerEvent)
+    {
+        ArgumentNullException.ThrowIfNull(pointerEvent);
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.InvokeAsync(() => ShowPointer(pointerEvent));
+            return;
+        }
+
+        var normalizedPoint = new NormalizedPoint(
+            pointerEvent.NormalizedX,
+            pointerEvent.NormalizedY);
+        if (pointerEvent.Kind is PointerKind.Click or PointerKind.DoubleClick or PointerKind.Attention)
+        {
+            ShowMarker(normalizedPoint);
+            return;
+        }
+
+        pointerVisuals.Show(
+            pointerEvent.Kind,
+            ToOverlayPoint(normalizedPoint),
+            pointerEvent.GestureId,
+            pointerEvent.Text);
+    }
+
+    private void ShowMarker(NormalizedPoint normalizedPoint)
     {
         if (!Dispatcher.CheckAccess())
         {
@@ -51,20 +79,7 @@ public partial class ReceiverOverlayWindow : Window
             return;
         }
 
-        var overlayWidth = MarkerCanvas.ActualWidth > 0d
-            ? MarkerCanvas.ActualWidth
-            : coordinateMapper.PhysicalPixelsToDips(
-                monitor.Bounds.Width,
-                monitor.Display.ScaleFactor);
-        var overlayHeight = MarkerCanvas.ActualHeight > 0d
-            ? MarkerCanvas.ActualHeight
-            : coordinateMapper.PhysicalPixelsToDips(
-                monitor.Bounds.Height,
-                monitor.Display.ScaleFactor);
-        var point = coordinateMapper.ToOverlayPoint(
-            normalizedPoint,
-            overlayWidth,
-            overlayHeight);
+        var point = ToOverlayPoint(normalizedPoint);
         var marker = CreateMarker();
 
         while (markers.Count >= MaximumMarkers)
@@ -81,6 +96,7 @@ public partial class ReceiverOverlayWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        pointerVisuals.Clear();
         source?.RemoveHook(WindowMessageHook);
         source = null;
         base.OnClosed(e);
@@ -169,6 +185,22 @@ public partial class ReceiverOverlayWindow : Window
         {
             throw new Win32Exception(Marshal.GetLastPInvokeError(), "The overlay could not be positioned.");
         }
+    }
+
+    private Point ToOverlayPoint(NormalizedPoint normalizedPoint)
+    {
+        var overlayWidth = MarkerCanvas.ActualWidth > 0d
+            ? MarkerCanvas.ActualWidth
+            : coordinateMapper.PhysicalPixelsToDips(
+                monitor.Bounds.Width,
+                monitor.Display.ScaleFactor);
+        var overlayHeight = MarkerCanvas.ActualHeight > 0d
+            ? MarkerCanvas.ActualHeight
+            : coordinateMapper.PhysicalPixelsToDips(
+                monitor.Bounds.Height,
+                monitor.Display.ScaleFactor);
+        var point = coordinateMapper.ToOverlayPoint(normalizedPoint, overlayWidth, overlayHeight);
+        return new Point(point.X, point.Y);
     }
 
     private static Grid CreateMarker()

@@ -24,7 +24,7 @@ y = overlayTop  + normalizedY * overlayHeight
 
 Normalized coordinates are finite numbers in the inclusive range `0.0` through `1.0`. The rectangle origin may be negative. Rectangle dimensions must be finite and greater than zero.
 
-The Phase 5 presenter sends each captured click immediately as a `PointerEventMessage`. The receiver revalidates it immediately before marker display and returns `PointerAcknowledgement` only after the overlay accepts it. No pointer event is persisted or queued during a connection interruption.
+The presenter sends each captured pointer event immediately as a `PointerEventMessage`. A click is one event. Paths, lines, and rectangles use start/update/end events sharing a gesture ID; updates are limited by the client to 20 Hz. Text annotations carry at most 256 plain-text characters and are finalized explicitly with Enter. The receiver revalidates every event immediately before display and returns `PointerAcknowledgement` only after the overlay accepts it. No pointer event or text is persisted or queued during a connection interruption.
 
 ## Initial messages
 

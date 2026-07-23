@@ -99,6 +99,30 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
+    public void GesturePointer_PreservesKindAndGestureId()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new PresenterViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+        var gestureId = Guid.NewGuid();
+
+        service.RaisePointer(
+            new NormalizedPoint(0.3d, 0.4d),
+            PointerKind.LineUpdate,
+            gestureId);
+
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        Assert.Equal(PointerKind.LineUpdate, sent.Kind);
+        Assert.Equal(gestureId, sent.GestureId);
+    }
+
+    [Fact]
     public void SessionEnded_ExitsPointingAndClearsApproval()
     {
         using var service = new FakeTargetRegionService();
@@ -302,8 +326,14 @@ public sealed class PresenterViewModelTests
                 new TargetRegionStateChangedEventArgs(state, message, isError));
         }
 
-        public void RaisePointer(NormalizedPoint point) =>
-            PointerCaptured?.Invoke(this, new PointerCapturedEventArgs(point));
+        public void RaisePointer(
+            NormalizedPoint point,
+            PointerKind kind = PointerKind.Click,
+            Guid? gestureId = null,
+            string? text = null) =>
+            PointerCaptured?.Invoke(
+                this,
+                new PointerCapturedEventArgs(point, kind, gestureId, text));
 
         public void Dispose()
         {

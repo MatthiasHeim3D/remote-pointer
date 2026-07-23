@@ -13,13 +13,16 @@
         MinWidth="280"
         MinHeight="180"
         PreviewKeyDown="OnPreviewKeyDown"
-        PreviewMouseLeftButtonDown="OnPreviewMouseLeftButtonDown">
+        PreviewMouseDown="OnPreviewMouseDown"
+        PreviewMouseMove="OnPreviewMouseMove"
+        PreviewMouseUp="OnPreviewMouseUp">
     <Border x:Name="OuterBorder"
             BorderBrush="#FFCC4D"
             BorderThickness="3"
             Background="#22007ACC">
         <Grid x:Name="TargetSurface">
             <Canvas x:Name="RippleCanvas" IsHitTestVisible="False" />
+            <Canvas x:Name="EditorCanvas" IsHitTestVisible="False" />
 
             <Border x:Name="CalibrationPanel"
                     VerticalAlignment="Top"

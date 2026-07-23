@@ -1,4 +1,4 @@
-using RemotePointer.Contracts.Coordinates;
+using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
 
@@ -12,5 +12,5 @@ public interface IReceiverOverlayService : IDisposable
 
     void Hide();
 
-    bool ShowMarker(NormalizedPoint point);
+    bool ShowPointer(PointerEventMessage pointerEvent);
 }

@@ -4,6 +4,8 @@ namespace RemotePointer.Contracts.Validation;
 
 public static class ContractValidator
 {
+    public const int MaximumPointerTextLength = 256;
+
     public static ValidationResult Validate(
         PointerEventMessage? message,
         DateTimeOffset now,
@@ -23,6 +25,7 @@ public static class ContractValidator
         AddNormalizedCoordinate(errors, message.NormalizedX, nameof(message.NormalizedX));
         AddNormalizedCoordinate(errors, message.NormalizedY, nameof(message.NormalizedY));
         AddValue(errors, Enum.IsDefined(message.Kind), nameof(message.Kind));
+        AddPointerPayloadErrors(errors, message);
         AddRange(errors, message.SentAtUnixMilliseconds >= 0, nameof(message.SentAtUnixMilliseconds));
         AddRange(
             errors,
@@ -49,6 +52,41 @@ public static class ContractValidator
         }
 
         return ValidationResult.Failure(errors);
+    }
+
+    private static void AddPointerPayloadErrors(
+        ICollection<ValidationError> errors,
+        PointerEventMessage message)
+    {
+        var isGesture = message.Kind is
+            PointerKind.PathStart or PointerKind.PathUpdate or PointerKind.PathEnd or
+            PointerKind.LineStart or PointerKind.LineUpdate or PointerKind.LineEnd or
+            PointerKind.RectangleStart or PointerKind.RectangleUpdate or PointerKind.RectangleEnd;
+        if (isGesture && (!message.GestureId.HasValue || message.GestureId.Value == Guid.Empty))
+        {
+            AddRequired(errors, condition: false, nameof(message.GestureId));
+        }
+
+        if (!isGesture && message.GestureId is not null)
+        {
+            AddValue(errors, condition: false, nameof(message.GestureId));
+        }
+
+        if (message.Kind == PointerKind.Text)
+        {
+            AddRequired(
+                errors,
+                !string.IsNullOrWhiteSpace(message.Text),
+                nameof(message.Text));
+            AddRange(
+                errors,
+                message.Text is null || message.Text.Length <= MaximumPointerTextLength,
+                nameof(message.Text));
+        }
+        else if (message.Text is not null)
+        {
+            AddValue(errors, condition: false, nameof(message.Text));
+        }
     }
 
     public static ValidationResult Validate(DisplayDescriptor? display)

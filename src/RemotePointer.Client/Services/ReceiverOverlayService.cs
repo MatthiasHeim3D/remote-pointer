@@ -1,5 +1,5 @@
 using RemotePointer.Client.Overlays;
-using RemotePointer.Contracts.Coordinates;
+using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
 
@@ -40,9 +40,10 @@ public sealed class ReceiverOverlayService(
         HideOverlay(raiseEvent: true);
     }
 
-    public bool ShowMarker(NormalizedPoint point)
+    public bool ShowPointer(PointerEventMessage pointerEvent)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+        ArgumentNullException.ThrowIfNull(pointerEvent);
 
         if (overlay?.IsVisible != true)
         {
@@ -55,7 +56,7 @@ public sealed class ReceiverOverlayService(
             return false;
         }
 
-        overlay.ShowMarker(point);
+        overlay.ShowPointer(pointerEvent);
         return true;
     }
 

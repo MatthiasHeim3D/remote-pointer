@@ -8,7 +8,7 @@
 | Denormalization | Negative-origin rectangle and invalid normalized input |
 | Numeric safety | NaN, positive/negative infinity, zero/negative dimensions |
 | Aspect ratio | Landscape, portrait, ultrawide, exact and over-2% tolerance |
-| Pointer validation | Inclusive boundaries, stale TTL, TTL boundary, future timestamps, identity, sequence, kind |
+| Pointer validation | Inclusive boundaries, stale TTL, TTL boundary, future timestamps, identity, sequence, gesture identity, bounded text, kind |
 | Display/join validation | Dimensions, DPI scale, rotation, pairing-code formatting, required identity/version |
 | Sequence handling | Increasing values, duplicates, bounded reordering, significantly old values |
 | JSON policy | camelCase, string enums, integer enum rejection, unknown-member rejection |
@@ -68,7 +68,7 @@
 3. Move it onto each sender monitor and select **Fullscreen**. With ratio lock enabled, confirm the largest receiver-shaped rectangle is centered within that monitor. Disable ratio lock and confirm it fills the complete monitor.
 4. With ratio lock disabled, create a difference greater than 2%, and verify Lock requires the explicit Allow mismatch override.
 5. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.
-6. Enable pointing with the button. Click inside the target and confirm a local ripple plus normalized coordinates in the control window.
+6. Enable pointing. Verify left-click highlights, left-drag draws a fading path, Shift+left-drag draws a fading line, Shift+left-click opens a text box finalized by Enter, and right-drag draws a fading box. Confirm each appears locally and on the receiver.
 7. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
 8. Click outside the rectangle and confirm the underlying application behaves normally.
 9. Press Escape and confirm normal clicking is restored immediately.

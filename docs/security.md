@@ -2,7 +2,7 @@
 
 ## Narrow data boundary
 
-The protocol contains only display geometry, normalized pointer events, acknowledgements, and session metadata. The solution has no screen-capture, audio, input-injection, clipboard, file-transfer, process-inspection, UI Automation, or conferencing-integration API.
+The protocol contains only display geometry, normalized pointer events, deliberate transient text annotations, acknowledgements, and session metadata. The solution has no screen-capture, audio, input-injection, clipboard, file-transfer, process-inspection, UI Automation, or conferencing-integration API.
 
 The shared library does not reference Windows desktop APIs. Client Win32 interop is restricted to monitor geometry, overlay styles, display-change messages, and global hotkey registration under `RemotePointer.Client/Native`.
 
@@ -25,7 +25,8 @@ The shared library does not reference Windows desktop APIs. Client Win32 interop
 ## Phase 3 input controls
 
 - Pointing uses a bounded top-level WPF window rather than a low-level mouse hook.
-- Only left clicks delivered inside the calibrated rectangle are observed, handled, and converted to normalized coordinates.
+- Only explicit pointer gestures delivered inside the calibrated rectangle are observed and converted to normalized coordinates while pointing mode is active.
+- Keyboard text is observed only after Shift+left-click opens the visible annotation editor; Enter finalizes at most 256 plain-text characters. Text is transient, is not interpreted as markup, and is never persisted or logged.
 - No mouse movement or click is injected locally or remotely.
 - `Ctrl+Alt+P` uses `RegisterHotKey`; no keyboard hook is installed.
 - Escape is handled only while the presenter target window is focused.

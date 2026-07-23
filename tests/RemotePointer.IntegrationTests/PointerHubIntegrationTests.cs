@@ -157,7 +157,11 @@ public sealed class PointerHubIntegrationTests
                 created.Credential.ReconnectToken));
         Assert.NotEqual(created.Credential.ReconnectToken, rotatedReceiverCredential.ReconnectToken);
 
-        var secondPointer = CreatePointer(created.SessionId, sequenceNumber: 1);
+        var secondPointer = CreatePointer(created.SessionId, sequenceNumber: 1) with
+        {
+            Kind = PointerKind.RectangleStart,
+            GestureId = Guid.NewGuid(),
+        };
         await resumedPresenter.InvokeAsync("SendPointer", secondPointer);
         Assert.Equal(
             secondPointer,

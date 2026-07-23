@@ -37,6 +37,38 @@ public sealed class RemotePointerJsonTests
     }
 
     [Fact]
+    public void Options_RoundTripGestureAndTextPayloads()
+    {
+        var gesture = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session",
+            2,
+            0.1d,
+            0.9d,
+            PointerKind.LineStart,
+            1_000,
+            2_000,
+            Guid.NewGuid());
+        var text = gesture with
+        {
+            EventId = Guid.NewGuid(),
+            Kind = PointerKind.Text,
+            GestureId = null,
+            Text = "Look here",
+        };
+
+        var gestureResult = JsonSerializer.Deserialize<PointerEventMessage>(
+            JsonSerializer.Serialize(gesture, RemotePointerJson.CreateOptions()),
+            RemotePointerJson.CreateOptions());
+        var textResult = JsonSerializer.Deserialize<PointerEventMessage>(
+            JsonSerializer.Serialize(text, RemotePointerJson.CreateOptions()),
+            RemotePointerJson.CreateOptions());
+
+        Assert.Equal(gesture, gestureResult);
+        Assert.Equal(text, textResult);
+    }
+
+    [Fact]
     public void Options_RejectUnknownMembers()
     {
         const string json = """

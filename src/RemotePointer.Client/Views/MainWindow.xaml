@@ -161,7 +161,7 @@
                         <TextBlock Margin="0,8,0,0"
                                    Foreground="#AEB8C8"
                                    TextWrapping="Wrap"
-                                   Text="Calibrate the part of your screen that contains the colleague's shared desktop. In pointing mode, clicks inside that rectangle are consumed locally and converted to normalized coordinates." />
+                                   Text="Calibrate the part of your screen that contains the colleague's shared desktop. In pointing mode, pointer gestures inside that rectangle are consumed locally and converted to normalized coordinates." />
                     </StackPanel>
 
                     <Border Grid.Row="1"
@@ -258,7 +258,7 @@
                             <TextBlock Margin="0,6,0,12"
                                        Foreground="#AEB8C8"
                                        TextWrapping="Wrap"
-                                       Text="After locking the target, toggle pointing with the button or Ctrl+Alt+P. Press Esc to stop immediately." />
+                                        Text="Left-click to highlight; left-drag to draw; Shift+left-drag for a line; Shift+left-click for text; right-drag for a box. Press Esc to stop." />
                             <WrapPanel>
                                 <Button Command="{Binding Presenter.TogglePointingCommand}"
                                         Content="Toggle pointing (Ctrl+Alt+P)" />

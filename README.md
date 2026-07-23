@@ -1,6 +1,6 @@
 # Remote Pointer
 
-Remote Pointer is a side-band Windows 11 pointer application. It exchanges only normalized pointer coordinates and session metadata through an internal relay; it does not capture screens or inject input.
+Remote Pointer is a side-band Windows 11 pointer application. It exchanges normalized pointer gestures, deliberate transient text annotations, and session metadata through an internal relay; it does not capture screens or inject input.
 
 Phases 1-5 provide the contracts, desktop overlays, relay, and end-to-end workflow. Phase 6 hardens that workflow with HTTPS enforcement, DPAPI-protected crash recovery, structured audit events, safe error boundaries, dependency auditing, and a threat model.
 
@@ -22,7 +22,7 @@ dotnet run --project src\RemotePointer.Client
 dotnet run --project src\RemotePointer.Client
 ```
 
-In the first client, use **Receive pointers**, select a monitor, and create a session. The presenter can enter its pairing code or, when relay discovery is enabled and the receiver opts in, select it from the visible-receiver list. The receiver must approve either request. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and the presenter target consumes clicks only while pointing mode is active.
+In the first client, use **Receive pointers**, select a monitor, and create a session. The presenter can enter its pairing code or, when relay discovery is enabled and the receiver opts in, select it from the visible-receiver list. The receiver must approve either request. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and the presenter target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, and right-drag draws a box.
 
 ## Small-network deployment
 

@@ -4,7 +4,7 @@
 
 This model covers the Windows client, the ASP.NET Core relay, Caddy, the shared contracts, local client state, and the HTTPS/WSS connection between them. Conferencing applications, organization identity infrastructure, and endpoint management are external dependencies.
 
-The primary objectives are to prevent remote control, prevent disclosure of screen or input content, restrict pointer delivery to one explicitly approved presenter and receiver, keep credentials confidential, reject stale or abusive traffic, and fail closed when identity or transport state is uncertain.
+The primary objectives are to prevent remote control, prevent unintended disclosure of screen or input content, restrict pointer delivery to one explicitly approved presenter and receiver, keep credentials confidential, reject stale or abusive traffic, and fail closed when identity or transport state is uncertain.
 
 ## Assets and trust boundaries
 
@@ -14,6 +14,7 @@ The primary objectives are to prevent remote control, prevent disclosure of scre
 | Pairing code | Receiver UI and transient relay response | One-time, ten-minute lifetime, hash-only relay storage |
 | Session secret | Receiver memory | Cryptographic generation; never logged or sent to presenter |
 | Normalized pointer event | Client memory and relay transit | TLS, TTL, authorization, sequence window, rate limit; never persisted |
+| Deliberate text annotation | Client memory and relay transit | Explicit editor, 256-character limit, plain-text rendering, TLS, TTL, authorization; never persisted or logged |
 | Receiver display metadata | Session memory | Session membership and role authorization |
 | Audit records | Server structured log and current-user client JSONL | No coordinates, tokens, pairing codes, screen data, or exception messages |
 

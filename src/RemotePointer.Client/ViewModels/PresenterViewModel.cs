@@ -455,10 +455,15 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     private async void OnPointerCaptured(object? sender, PointerCapturedEventArgs e)
     {
-        CapturedPointerCount++;
+        if (e.Kind is PointerKind.Click or PointerKind.Text or PointerKind.PathEnd
+            or PointerKind.LineEnd or PointerKind.RectangleEnd)
+        {
+            CapturedPointerCount++;
+        }
+
         LastPointer = string.Create(
             CultureInfo.InvariantCulture,
-            $"Normalized X {e.Point.X:0.0000}, Y {e.Point.Y:0.0000}");
+            $"{e.Kind}: normalized X {e.Point.X:0.0000}, Y {e.Point.Y:0.0000}");
 
         if (relayClient is null)
         {
@@ -479,9 +484,11 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             Interlocked.Increment(ref sequenceNumber),
             e.Point.X,
             e.Point.Y,
-            PointerKind.Click,
+            e.Kind,
             sentAt,
-            pointerTtlMilliseconds);
+            pointerTtlMilliseconds,
+            e.GestureId,
+            e.Text);
         pendingAcknowledgements[pointerEvent.EventId] = sentAt;
 
         try

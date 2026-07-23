@@ -505,10 +505,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            var displayed = overlayService.ShowMarker(
-                new NormalizedPoint(
-                    e.PointerEvent.NormalizedX,
-                    e.PointerEvent.NormalizedY));
+            var displayed = overlayService.ShowPointer(e.PointerEvent);
             if (displayed && receiverRelayClient is not null)
             {
                 await receiverRelayClient.AcknowledgePointerAsync(

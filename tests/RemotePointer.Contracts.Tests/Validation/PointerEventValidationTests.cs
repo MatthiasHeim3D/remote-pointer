@@ -116,6 +116,79 @@ public sealed class PointerEventValidationTests
         Assert.True(result.Errors.Count >= 5);
     }
 
+    [Theory]
+    [InlineData(PointerKind.PathStart)]
+    [InlineData(PointerKind.PathUpdate)]
+    [InlineData(PointerKind.PathEnd)]
+    [InlineData(PointerKind.LineStart)]
+    [InlineData(PointerKind.LineUpdate)]
+    [InlineData(PointerKind.LineEnd)]
+    [InlineData(PointerKind.RectangleStart)]
+    [InlineData(PointerKind.RectangleUpdate)]
+    [InlineData(PointerKind.RectangleEnd)]
+    public void Validate_RequiresGestureIdForGestureEvents(PointerKind kind)
+    {
+        var result = ContractValidator.Validate(CreateValidMessage() with { Kind = kind }, Now);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Message.Contains("GestureId", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_AcceptsGestureEventWithGestureId()
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with
+            {
+                Kind = PointerKind.PathUpdate,
+                GestureId = Guid.NewGuid(),
+            },
+            Now);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_AcceptsBoundedTextEvent()
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with
+            {
+                Kind = PointerKind.Text,
+                Text = "Please look here",
+            },
+            Now);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Validate_RejectsMissingText(string? text)
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with { Kind = PointerKind.Text, Text = text },
+            Now);
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_RejectsOversizedText()
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with
+            {
+                Kind = PointerKind.Text,
+                Text = new string('x', ContractValidator.MaximumPointerTextLength + 1),
+            },
+            Now);
+
+        Assert.False(result.IsValid);
+    }
+
     private static PointerEventMessage CreateValidMessage() => new(
         Guid.Parse("4b646d0f-bfd8-4f77-949f-d18d67cc1879"),
         "session-id",

@@ -168,6 +168,25 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void ApprovedPresenter_CanRelayValidatedGesturePointer()
+    {
+        var context = CreateContext();
+        var approved = CreateApprovedSession(context);
+        var pointer = CreatePointer(
+            context.TimeProvider.GetUtcNow(),
+            approved.Created.SessionId,
+            0) with
+        {
+            Kind = PointerKind.PathStart,
+            GestureId = Guid.NewGuid(),
+        };
+
+        var result = context.Manager.AcceptPointer(approved.PresenterConnectionId, pointer);
+
+        Assert.Equal(PointerRelayDisposition.Accepted, result.Disposition);
+    }
+
+    [Fact]
     public void UnauthorizedConnection_CannotSendPointer()
     {
         var context = CreateContext();
