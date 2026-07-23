@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Net;
 using RemotePointer.Contracts.Messages;
 using RemotePointer.Contracts.Serialization;
 using RemotePointer.Server.Hubs;
@@ -169,6 +170,87 @@ public sealed class PointerHubIntegrationTests
         response.EnsureSuccessStatusCode();
         Assert.Equal(8 * 1024, hubOptions.MaximumReceiveMessageSize);
         Assert.Equal(1, hubOptions.MaximumParallelInvocationsPerClient);
+    }
+
+    [Fact]
+    public async Task Production_RejectsPlaintextWithoutRedirectAndAddsHstsToHttps()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseEnvironment("Production"));
+        using var plaintextClient = factory.CreateClient(
+            new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                BaseAddress = new Uri("http://localhost"),
+            });
+
+        using var plaintextResponse = await plaintextClient.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.BadRequest, plaintextResponse.StatusCode);
+        Assert.Null(plaintextResponse.Headers.Location);
+
+        using var secureClient = factory.CreateClient(
+            new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                BaseAddress = new Uri("https://pointer.example.test"),
+            });
+        using var secureResponse = await secureClient.GetAsync("/health");
+
+        secureResponse.EnsureSuccessStatusCode();
+        Assert.True(secureResponse.Headers.Contains("Strict-Transport-Security"));
+    }
+
+    [Fact]
+    public async Task HubRateLimit_RejectsThirtyFirstImmediatePointer()
+    {
+        using var factory = CreateFactory();
+        await using var receiver = CreateConnection(factory, "receiver-rate", "Receiver");
+        await using var presenter = CreateConnection(factory, "presenter-rate", "Presenter");
+        var joinRequested = CompletionSource<PresenterDescriptor>();
+        var presenterCredential = CompletionSource<SessionCredential>();
+        var allPointersReceived = CompletionSource<int>();
+        var receivedCount = 0;
+        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
+        receiver.On<PointerEventMessage>(
+            "PointerReceived",
+            _ =>
+            {
+                var count = Interlocked.Increment(ref receivedCount);
+                if (count == 30)
+                {
+                    allPointersReceived.TrySetResult(count);
+                }
+            });
+        presenter.On<SessionCredential>("SessionCredentialIssued", presenterCredential.SetResult);
+        await receiver.StartAsync();
+        await presenter.StartAsync();
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSession",
+            CreateDisplay());
+        _ = await presenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinSession",
+            new JoinRequest(
+                created.PairingCode,
+                ClientRole.Presenter,
+                "presenter-rate",
+                "1.0.0"));
+        var pending = await joinRequested.Task.WaitAsync(TestTimeout);
+        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, pending.ConnectionId);
+        _ = await presenterCredential.Task.WaitAsync(TestTimeout);
+
+        for (var sequence = 0; sequence < 30; sequence++)
+        {
+            await presenter.InvokeAsync(
+                "SendPointer",
+                CreatePointer(created.SessionId, sequence));
+        }
+
+        await Assert.ThrowsAsync<HubException>(
+            () => presenter.InvokeAsync(
+                "SendPointer",
+                CreatePointer(created.SessionId, 30)));
+        Assert.Equal(30, await allPointersReceived.Task.WaitAsync(TestTimeout));
     }
 
     private static WebApplicationFactory<Program> CreateFactory() =>

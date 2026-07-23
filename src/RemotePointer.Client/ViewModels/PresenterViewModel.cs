@@ -28,7 +28,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private string lastAcknowledgement = "No remote marker acknowledgement yet.";
     private string lastPointer = "No local pointers captured yet.";
     private string pairingCode = string.Empty;
-    private long sequenceNumber;
+    private long sequenceNumber = CreateSequenceBase();
     private TargetRegionState state = TargetRegionState.Inactive;
     private string statusMessage;
     private string connectionMessage;
@@ -134,6 +134,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public string ServerUrl => relayClient?.ServerUrl ?? "Not configured";
 
+    public bool HasRecoverableSession => relayClient?.Credential?.Role == ClientRole.Presenter;
+
     public bool IsError
     {
         get => isError;
@@ -194,6 +196,14 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public ICommand EndSessionCommand => endSessionCommand;
 
+    public async Task RestoreSessionAsync()
+    {
+        if (relayClient is not null)
+        {
+            _ = await relayClient.TryResumeSessionAsync();
+        }
+    }
+
     public void TogglePointingMode()
     {
         if (relayClient is not null && !IsSessionApproved)
@@ -213,6 +223,13 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public void ReportHotKeyRegistrationFailure(string message) =>
         SetStatus(message, isError: true);
+
+    public void ReportSharedProfileRecoverySkipped()
+    {
+        ConnectionMessage =
+            "Saved receiver and presenter roles share this Windows profile; automatic recovery was skipped.";
+        SetStatus("Create or join a new session for this client window.", false);
+    }
 
     public void Dispose()
     {
@@ -280,15 +297,12 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         try
         {
             await relayClient.EndSessionAsync();
+            ClearSessionState();
             SetStatus("Presenter session ended.", false);
         }
         catch (Exception exception)
         {
             SetStatus($"The relay could not confirm session termination: {exception.Message}", true);
-        }
-        finally
-        {
-            ClearSessionState();
         }
     }
 
@@ -417,7 +431,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         IsJoinPending = false;
         IsSessionApproved = false;
         pendingAcknowledgements.Clear();
-        sequenceNumber = 0;
+        sequenceNumber = Math.Max(sequenceNumber, CreateSequenceBase());
     }
 
     private void RaiseNetworkCommandStates()
@@ -448,4 +462,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         StatusMessage = message;
         IsError = isError;
     }
+
+    private static long CreateSequenceBase() =>
+        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_024L;
 }

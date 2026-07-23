@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Net.Http;
+using System.IO;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,11 +14,15 @@ namespace RemotePointer.Client.Services;
 public sealed class SignalRRelayClient : IRelayClient
 {
     private readonly SemaphoreSlim connectionGate = new(1, 1);
+    private readonly IClientAuditLog? auditLog;
     private readonly HubConnection connection;
     private readonly string clientInstanceId;
+    private readonly ClientRole? expectedRole;
+    private readonly IProtectedSessionStore? sessionStore;
     private readonly SynchronizationContext? synchronizationContext;
     private readonly object stateLock = new();
     private bool disposed;
+    private bool receiverApproved;
     private SessionCredential? credential;
     private string? sessionId;
     private RelayConnectionStatus status = RelayConnectionStatus.Disconnected;
@@ -25,14 +30,50 @@ public sealed class SignalRRelayClient : IRelayClient
     public SignalRRelayClient(
         ClientSettings settings,
         IClientInstanceIdProvider clientInstanceIdProvider,
+        ClientRole? expectedRole = null,
+        IProtectedSessionStore? sessionStore = null,
+        IClientAuditLog? auditLog = null)
+        : this(
+            ValidateProductionSettings(settings),
+            clientInstanceIdProvider,
+            null,
+            null,
+            expectedRole,
+            sessionStore,
+            auditLog)
+    {
+    }
+
+    internal SignalRRelayClient(
+        ClientSettings settings,
+        IClientInstanceIdProvider clientInstanceIdProvider,
         Func<HttpMessageHandler>? messageHandlerFactory = null,
-        HttpTransportType? transport = null)
+        HttpTransportType? transport = null,
+        ClientRole? expectedRole = null,
+        IProtectedSessionStore? sessionStore = null,
+        IClientAuditLog? auditLog = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(clientInstanceIdProvider);
 
         ServerUrl = settings.Server.BaseUrl.TrimEnd('/');
         clientInstanceId = clientInstanceIdProvider.GetClientInstanceId();
+        this.expectedRole = expectedRole;
+        this.sessionStore = sessionStore;
+        this.auditLog = auditLog;
+        if ((expectedRole is null) != (sessionStore is null))
+        {
+            throw new ArgumentException(
+                "An expected role and protected session store must be supplied together.");
+        }
+
+        if (expectedRole is not null)
+        {
+            credential = sessionStore!.Load(expectedRole.Value, clientInstanceId);
+            sessionId = credential?.SessionId;
+            receiverApproved = credential?.Role == ClientRole.Receiver;
+        }
+
         synchronizationContext = SynchronizationContext.Current;
         var hubUrl = $"{ServerUrl}/hubs/pointer"
             + $"?clientInstanceId={Uri.EscapeDataString(clientInstanceId)}"
@@ -110,11 +151,38 @@ public sealed class SignalRRelayClient : IRelayClient
         }
     }
 
+    public async Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default)
+    {
+        var currentCredential = Credential;
+        if (currentCredential is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+            await ResumeSessionAsync(currentCredential, cancellationToken).ConfigureAwait(false);
+            SetStatus(RelayConnectionStatus.Connected, "Recovered and resumed the previous session.");
+            auditLog?.Write(
+                ClientAuditEvent.SessionRestored,
+                sessionId: currentCredential.SessionId,
+                role: currentCredential.Role);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            HandleResumeFailure(exception);
+            return false;
+        }
+    }
+
     public async Task<CreateSessionResponse> CreateReceiverSessionAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default)
     {
         EnsureValid(ContractValidator.Validate(display));
+        DiscardRecoveredCredential(ClientRole.Receiver);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var response = await connection.InvokeAsync<CreateSessionResponse>(
                 "CreateReceiverSession",
@@ -129,6 +197,7 @@ public sealed class SignalRRelayClient : IRelayClient
         string pairingCode,
         CancellationToken cancellationToken = default)
     {
+        DiscardRecoveredCredential(ClientRole.Presenter);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var request = new JoinRequest(
             pairingCode,
@@ -221,10 +290,15 @@ public sealed class SignalRRelayClient : IRelayClient
     public async Task EndSessionAsync(CancellationToken cancellationToken = default)
     {
         var currentSessionId = SessionId;
-        if (currentSessionId is null || connection.State != HubConnectionState.Connected)
+        if (currentSessionId is null)
         {
-            ClearSession();
-            return;
+            throw new InvalidOperationException("No active session is available to end.");
+        }
+
+        if (connection.State != HubConnectionState.Connected)
+        {
+            throw new InvalidOperationException(
+                "The relay is disconnected, so session termination could not be confirmed.");
         }
 
         await connection.InvokeAsync("EndSession", currentSessionId, cancellationToken)
@@ -259,8 +333,17 @@ public sealed class SignalRRelayClient : IRelayClient
             issuedCredential => SetSession(issuedCredential.SessionId, issuedCredential));
         connection.On<SessionStateMessage>(
             "SessionApproved",
-            state => Publish(
-                () => SessionApproved?.Invoke(this, new RelaySessionStateEventArgs(state))));
+            state =>
+            {
+                if (state.Approved && Credential is { } approvedCredential)
+                {
+                    receiverApproved = approvedCredential.Role == ClientRole.Receiver;
+                    PersistCredential(approvedCredential);
+                }
+
+                Publish(
+                    () => SessionApproved?.Invoke(this, new RelaySessionStateEventArgs(state)));
+            });
         connection.On<PointerEventMessage>(
             "PointerReceived",
             pointerEvent => Publish(
@@ -276,7 +359,12 @@ public sealed class SignalRRelayClient : IRelayClient
             reason =>
             {
                 var expired = reason.Contains("expired", StringComparison.OrdinalIgnoreCase);
+                var endedSessionId = SessionId;
                 ClearSession();
+                auditLog?.Write(
+                    ClientAuditEvent.SessionEnded,
+                    sessionId: endedSessionId,
+                    role: expectedRole);
                 SetStatus(
                     expired ? RelayConnectionStatus.SessionExpired : RelayConnectionStatus.Connected,
                     reason);
@@ -342,31 +430,55 @@ public sealed class SignalRRelayClient : IRelayClient
 
         try
         {
-            var resumedCredential = await connection.InvokeAsync<SessionCredential>(
-                    "ResumeSession",
-                    new SessionResumeRequest(
-                        currentCredential.SessionId,
-                        currentCredential.Role,
-                        currentCredential.ClientInstanceId,
-                        currentCredential.SessionToken,
-                        currentCredential.ReconnectToken))
-                .ConfigureAwait(false);
-            SetSession(resumedCredential.SessionId, resumedCredential);
+            await ResumeSessionAsync(currentCredential, CancellationToken.None).ConfigureAwait(false);
             SetStatus(RelayConnectionStatus.Connected, "Reconnected and resumed session.");
+            auditLog?.Write(
+                ClientAuditEvent.SessionRestored,
+                sessionId: currentCredential.SessionId,
+                role: currentCredential.Role);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            ClearSession();
-            SetStatus(
-                RelayConnectionStatus.SessionExpired,
-                "The previous session could not be resumed.");
-            Publish(
-                () => SessionEnded?.Invoke(
-                    this,
-                    new RelaySessionEndedEventArgs(
-                        "The previous session could not be resumed.",
-                        expired: true)));
+            HandleResumeFailure(exception);
         }
+    }
+
+    private async Task ResumeSessionAsync(
+        SessionCredential currentCredential,
+        CancellationToken cancellationToken)
+    {
+        var resumedCredential = await connection.InvokeAsync<SessionCredential>(
+                "ResumeSession",
+                new SessionResumeRequest(
+                    currentCredential.SessionId,
+                    currentCredential.Role,
+                    currentCredential.ClientInstanceId,
+                    currentCredential.SessionToken,
+                    currentCredential.ReconnectToken),
+                cancellationToken)
+            .ConfigureAwait(false);
+        SetSession(resumedCredential.SessionId, resumedCredential);
+    }
+
+    private void HandleResumeFailure(Exception exception)
+    {
+        var currentCredential = Credential;
+        auditLog?.Write(
+            ClientAuditEvent.SessionRestoreFailed,
+            ClientAuditLevel.Warning,
+            currentCredential?.SessionId,
+            currentCredential?.Role ?? expectedRole,
+            exception: exception);
+        ClearSession();
+        SetStatus(
+            RelayConnectionStatus.SessionExpired,
+            "The previous session could not be resumed.");
+        Publish(
+            () => SessionEnded?.Invoke(
+                this,
+                new RelaySessionEndedEventArgs(
+                    "The previous session could not be resumed.",
+                    expired: true)));
     }
 
     private bool CanSend(ClientRole role, SessionCredential? currentCredential) =>
@@ -374,21 +486,84 @@ public sealed class SignalRRelayClient : IRelayClient
         && connection.State == HubConnectionState.Connected
         && currentCredential?.Role == role;
 
+    private void DiscardRecoveredCredential(ClientRole role)
+    {
+        if (expectedRole == role && Credential is not null)
+        {
+            ClearSession();
+        }
+    }
+
     private void SetSession(string newSessionId, SessionCredential newCredential)
     {
+        if (expectedRole is not null && newCredential.Role != expectedRole)
+        {
+            throw new InvalidOperationException("The relay issued a credential for the wrong role.");
+        }
+
         lock (stateLock)
         {
             sessionId = newSessionId;
             credential = newCredential;
         }
+
+        if (newCredential.Role == ClientRole.Presenter || receiverApproved)
+        {
+            PersistCredential(newCredential);
+        }
+    }
+
+    private void PersistCredential(SessionCredential credentialToPersist)
+    {
+        if (sessionStore is null)
+        {
+            return;
+        }
+
+        try
+        {
+            sessionStore.Save(credentialToPersist);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or System.Security.Cryptography.CryptographicException)
+        {
+            auditLog?.Write(
+                ClientAuditEvent.SessionCredentialProtectionFailed,
+                ClientAuditLevel.Warning,
+                credentialToPersist.SessionId,
+                credentialToPersist.Role,
+                exception: exception);
+        }
     }
 
     private void ClearSession()
     {
+        ClientRole? role;
         lock (stateLock)
         {
+            role = credential?.Role ?? expectedRole;
             sessionId = null;
             credential = null;
+            receiverApproved = false;
+        }
+
+        if (role is not null && sessionStore is not null)
+        {
+            try
+            {
+                sessionStore.Clear(role.Value);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                auditLog?.Write(
+                    ClientAuditEvent.SessionCredentialProtectionFailed,
+                    ClientAuditLevel.Warning,
+                    role: role,
+                    exception: exception);
+            }
         }
     }
 
@@ -398,6 +573,15 @@ public sealed class SignalRRelayClient : IRelayClient
         {
             status = newStatus;
         }
+
+        auditLog?.Write(
+            ClientAuditEvent.ConnectionStateChanged,
+            newStatus is RelayConnectionStatus.Disconnected or RelayConnectionStatus.SessionExpired
+                ? ClientAuditLevel.Warning
+                : ClientAuditLevel.Information,
+            SessionId,
+            expectedRole,
+            newStatus);
 
         Publish(
             () => ConnectionStatusChanged?.Invoke(
@@ -420,6 +604,13 @@ public sealed class SignalRRelayClient : IRelayClient
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         return version is null ? "1.0.0" : version.ToString(3);
+    }
+
+    private static ClientSettings ValidateProductionSettings(ClientSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        settings.Validate();
+        return settings;
     }
 
     private static void EnsureValid(ValidationResult result)

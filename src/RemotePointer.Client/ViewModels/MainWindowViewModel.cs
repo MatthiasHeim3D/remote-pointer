@@ -168,6 +168,29 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public ICommand EndReceiverSessionCommand => endReceiverSessionCommand;
 
+    public async Task RestoreSessionsAsync()
+    {
+        var canRestoreReceiver = receiverRelayClient?.Credential?.Role == ClientRole.Receiver;
+        var canRestorePresenter = Presenter.HasRecoverableSession;
+        if (canRestoreReceiver && canRestorePresenter)
+        {
+            ReceiverConnectionMessage =
+                "Saved receiver and presenter roles share this Windows profile; automatic recovery was skipped.";
+            Presenter.ReportSharedProfileRecoverySkipped();
+            return;
+        }
+
+        if (canRestoreReceiver && receiverRelayClient is not null)
+        {
+            _ = await receiverRelayClient.TryResumeSessionAsync();
+        }
+
+        if (canRestorePresenter)
+        {
+            await Presenter.RestoreSessionAsync();
+        }
+    }
+
     public void RefreshMonitors()
     {
         var previousDisplayId = SelectedMonitor?.Display.DisplayId;
@@ -304,16 +327,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             await receiverRelayClient.EndSessionAsync();
+            overlayService.Hide();
+            ClearReceiverSession();
             SetStatus("Receiver session ended.", false);
         }
         catch (Exception exception)
         {
             SetStatus($"The relay could not confirm session termination: {exception.Message}", true);
-        }
-        finally
-        {
-            overlayService.Hide();
-            ClearReceiverSession();
         }
     }
 
@@ -388,6 +408,36 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (e.State.Approved)
         {
+            if (receiverRelayClient?.Credential?.Role == ClientRole.Receiver)
+            {
+                receiverSessionId = e.State.SessionId;
+                PairingCode = "—";
+                PairingExpiration = string.Create(
+                    CultureInfo.CurrentCulture,
+                    $"Active session expires {e.State.ExpiresAt.ToLocalTime():g}.");
+                if (e.State.ReceiverDisplay is not null)
+                {
+                    var restoredMonitor = Monitors.FirstOrDefault(
+                        monitor => string.Equals(
+                            monitor.Display.DisplayId,
+                            e.State.ReceiverDisplay.DisplayId,
+                            StringComparison.OrdinalIgnoreCase));
+                    if (restoredMonitor is null)
+                    {
+                        RaiseReceiverSessionProperties();
+                        SetStatus(
+                            "The session resumed, but its receiver monitor is not connected.",
+                            true);
+                        return;
+                    }
+
+                    SelectedMonitor = restoredMonitor;
+                    overlayService.Show(restoredMonitor);
+                }
+
+                RaiseReceiverSessionProperties();
+            }
+
             SetStatus("Presenter approved. Incoming pointers are enabled.", false);
         }
     }
@@ -396,8 +446,26 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
+            var activeSessionId = receiverSessionId;
+            if (activeSessionId is null
+                || !string.Equals(
+                    e.PointerEvent.SessionId,
+                    activeSessionId,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
             var now = DateTimeOffset.UtcNow;
             if (!ContractValidator.Validate(e.PointerEvent, now).IsValid)
+            {
+                return;
+            }
+
+            if (!string.Equals(
+                    receiverSessionId,
+                    activeSessionId,
+                    StringComparison.Ordinal))
             {
                 return;
             }

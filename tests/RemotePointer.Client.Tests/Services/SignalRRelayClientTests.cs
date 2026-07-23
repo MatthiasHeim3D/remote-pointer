@@ -88,6 +88,92 @@ public sealed class SignalRRelayClientTests
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ProtectedReceiverCredential_ResumesAfterClientRestartAndRotatesToken()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+        var server = factory.Server;
+        var settings = CreateSettings(server.BaseAddress);
+        using var sessionDirectory = new TemporaryDirectory();
+        var store = new ProtectedSessionStore(
+            new ReversingDataProtector(),
+            sessionDirectory: sessionDirectory.Path);
+        await using var receiver = new SignalRRelayClient(
+            settings,
+            new FixedClientInstanceIdProvider("receiver-client"),
+            server.CreateHandler,
+            HttpTransportType.LongPolling,
+            ClientRole.Receiver,
+            store);
+        await using var presenter = new SignalRRelayClient(
+            settings,
+            new FixedClientInstanceIdProvider("presenter-client"),
+            server.CreateHandler,
+            HttpTransportType.LongPolling);
+        var joinRequested = CompletionSource<PresenterDescriptor>();
+        var presenterApproved = CompletionSource<SessionStateMessage>();
+        var receiverApproved = CompletionSource<SessionStateMessage>();
+        receiver.PresenterJoinRequested += (_, e) => joinRequested.TrySetResult(e.Presenter);
+        receiver.SessionApproved += (_, e) => receiverApproved.TrySetResult(e.State);
+        presenter.SessionApproved += (_, e) => presenterApproved.TrySetResult(e.State);
+        var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
+        Assert.Null(store.Load(ClientRole.Receiver, "receiver-client"));
+        _ = await presenter.RequestToJoinSessionAsync(created.PairingCode);
+        var descriptor = await joinRequested.Task.WaitAsync(TestTimeout);
+        await receiver.ApprovePresenterAsync(created.SessionId, descriptor.ConnectionId);
+        _ = await presenterApproved.Task.WaitAsync(TestTimeout);
+        _ = await receiverApproved.Task.WaitAsync(TestTimeout);
+        var originalReconnectToken = Assert.IsType<SessionCredential>(receiver.Credential)
+            .ReconnectToken;
+        Assert.Equal(
+            originalReconnectToken,
+            store.Load(ClientRole.Receiver, "receiver-client")?.ReconnectToken);
+
+        await receiver.DisposeAsync();
+
+        await using var recoveredReceiver = new SignalRRelayClient(
+            settings,
+            new FixedClientInstanceIdProvider("receiver-client"),
+            server.CreateHandler,
+            HttpTransportType.LongPolling,
+            ClientRole.Receiver,
+            store);
+        var recoveredState = CompletionSource<SessionStateMessage>();
+        var pointerReceived = CompletionSource<PointerEventMessage>();
+        recoveredReceiver.SessionApproved += (_, e) => recoveredState.TrySetResult(e.State);
+        recoveredReceiver.PointerReceived += (_, e) => pointerReceived.TrySetResult(e.PointerEvent);
+
+        Assert.True(await recoveredReceiver.TryResumeSessionAsync());
+        Assert.True((await recoveredState.Task.WaitAsync(TestTimeout)).Approved);
+        Assert.NotEqual(originalReconnectToken, recoveredReceiver.Credential?.ReconnectToken);
+        Assert.Equal(
+            recoveredReceiver.Credential,
+            store.Load(ClientRole.Receiver, "receiver-client"));
+
+        var pointer = new PointerEventMessage(
+            Guid.NewGuid(),
+            created.SessionId,
+            0,
+            0.5d,
+            0.5d,
+            PointerKind.Click,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            2_000);
+        Assert.True(await presenter.SendPointerAsync(pointer));
+        Assert.Equal(pointer, await pointerReceived.Task.WaitAsync(TestTimeout));
+        await recoveredReceiver.EndSessionAsync();
+    }
+
+    private static ClientSettings CreateSettings(Uri baseAddress) => new()
+    {
+        Server = new ServerSettings
+        {
+            BaseUrl = baseAddress.ToString(),
+            ReconnectDelaysSeconds = [0, 1],
+        },
+    };
+
     private static TaskCompletionSource<T> CompletionSource<T>() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -103,5 +189,27 @@ public sealed class SignalRRelayClientTests
         : IClientInstanceIdProvider
     {
         public string GetClientInstanceId() => value;
+    }
+
+    private sealed class ReversingDataProtector : IDataProtector
+    {
+        public byte[] Protect(byte[] plaintext) => [.. plaintext.Reverse()];
+
+        public byte[] Unprotect(byte[] protectedData) => [.. protectedData.Reverse()];
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public TemporaryDirectory()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"RemotePointer.Tests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public void Dispose() => Directory.Delete(Path, recursive: true);
     }
 }

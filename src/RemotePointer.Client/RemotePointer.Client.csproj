@@ -21,4 +21,5 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  <Import Project="..\..\build\CodeSigning.targets" />
 </Project>

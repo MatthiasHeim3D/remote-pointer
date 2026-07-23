@@ -24,6 +24,8 @@ public interface IRelayClient : IAsyncDisposable
 
     SessionCredential? Credential { get; }
 
+    Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default);
+
     Task<CreateSessionResponse> CreateReceiverSessionAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default);

@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.SignalR;
 using RemotePointer.Contracts.Serialization;
 using RemotePointer.Server.Health;
 using RemotePointer.Server.Hubs;
 using RemotePointer.Server.RateLimiting;
+using RemotePointer.Server.Security;
 using RemotePointer.Server.Sessions;
 using PointerSessionOptions = RemotePointer.Server.Sessions.SessionOptions;
 
@@ -30,13 +32,16 @@ builder.Services
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISessionSecretGenerator, SessionSecretGenerator>();
 builder.Services.AddSingleton<ISessionManager, SessionManager>();
+builder.Services.AddSingleton<PointerHubAuditFilter>();
 builder.Services.AddHostedService<SessionExpirationService>();
+builder.Services.AddProblemDetails();
 builder.Services
     .AddSignalR(options =>
     {
         options.EnableDetailedErrors = false;
         options.MaximumParallelInvocationsPerClient = 1;
         options.MaximumReceiveMessageSize = 8 * 1024;
+        options.AddFilter<PointerHubAuditFilter>();
     })
     .AddJsonProtocol(options => RemotePointerJson.Configure(options.PayloadSerializerOptions));
 builder.Services
@@ -47,7 +52,34 @@ var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseHttpsRedirection();
+    app.UseExceptionHandler();
+    app.UseHsts();
+    app.Use(
+        async (context, next) =>
+        {
+            if (!context.Request.IsHttps)
+            {
+                var logger = context.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("RemotePointer.Server.TransportSecurity");
+                logger.LogWarning(
+                    AuditEventIds.PlaintextRejected,
+                    "Plaintext request rejected. Path={Path}",
+                    context.Request.Path);
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsJsonAsync(
+                        new
+                        {
+                            type = "https-required",
+                            title = "HTTPS is required.",
+                            status = StatusCodes.Status400BadRequest,
+                        })
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            await next(context).ConfigureAwait(false);
+        });
 }
 
 app.MapHealthChecks("/health");

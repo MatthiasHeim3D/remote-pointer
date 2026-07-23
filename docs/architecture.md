@@ -54,13 +54,25 @@ A hosted cleanup service expires unused pairing sessions and active sessions. Th
 
 ## Phase 5 design
 
-`SignalRRelayClient` is the WPF-independent client transport boundary. It creates the connection lazily, uses the shared strict JSON policy, reports explicit connection states, and keeps role credentials only in memory. Receiver and presenter use separate connections while sharing one durable random client-instance ID stored under the current user's local application data.
+`SignalRRelayClient` is the WPF-independent client transport boundary. It creates the connection lazily, uses the shared strict JSON policy, and reports explicit connection states. Receiver and presenter use separate connections while sharing one durable random client-instance ID stored under the current user's local application data. Phase 6 adds protected restart recovery without changing this live transport boundary.
 
 The receiver view model creates a session for the selected display, presents the one-time code, exposes the pending machine name for explicit approval, and locks monitor selection for the session. Incoming events are validated against TTL again immediately before display. Acknowledgements are sent only when the overlay accepts the marker.
 
 The presenter view model cannot calibrate or point until approval supplies the receiver dimensions. Each captured click gets a new event ID and monotonic sequence number and is sent immediately. Events are never queued: a send during disconnection or reconnection returns a dropped status. Receiver acknowledgements are correlated in memory to show click-to-display latency.
 
 SignalR automatic reconnect invokes `ResumeSession` with the role credential and single-use reconnect token, then replaces the credential with the rotated result. Failure to resume clears the session and exits presenter pointing. Either participant can invoke termination. The notification-area icon reports inactive, connected receiver/presenter, or active pointing state; minimizing hides the control window until the icon is opened.
+
+## Phase 6 design
+
+The production relay exposes an HTTPS-only Kestrel endpoint. A second application-layer guard rejects any plaintext request without redirecting it, HSTS is emitted for secure production hosts, detailed hub errors remain disabled, and an exception handler produces safe production responses. Stable audit event IDs cover connection, creation, join, rejection, approval, resume, termination, expiry, plaintext refusal, validation failure, and unexpected hub faults.
+
+The client persists only `SessionCredential` recovery documents. They are serialized, encrypted with Windows DPAPI `CurrentUser`, atomically replaced under `%LocalAppData%\RemotePointer\Sessions`, and discarded when corrupt, expired, wrong-role, or bound to a different client identity. Startup attempts resume, accepts the server's rotated reconnect token, and atomically protects the replacement. Receiver display selection is reconstructed from server session state; presenter calibration geometry remains intentionally ephemeral.
+
+Automatic startup recovery runs only when the Windows profile contains one saved role. If both role files exist—as in a two-process, same-profile local test—neither process automatically replaces the other process's SignalR route. Creating or joining a new session discards only that role's recovered credential before binding the new connection.
+
+Client lifecycle and fault events are JSON Lines records under `%LocalAppData%\RemotePointer\Logs`. The fixed schema permits event, level, session ID, role, exception type, and numeric error code; it has no coordinate, credential, pairing-code, exception-message, or arbitrary payload field. WPF dispatcher, AppDomain, and unobserved-task boundaries record failures without exposing details to the user.
+
+Release analyzers remain warnings-as-errors. The dependency inventory and vulnerability scan are documented, and the publish pipeline can Authenticode-sign the x64 executable and managed entry assembly using a certificate selected by thumbprint without storing private-key material in the repository.
 
 ## Dependency direction
 
@@ -79,4 +91,5 @@ No reference is permitted from contracts back to either host. Client and server 
 - Phase 3: implemented; click-consumption and mixed-DPI calibration require manual verification on target hardware.
 - Phase 4: implemented and covered by in-memory SignalR integration tests.
 - Phase 5: implemented; LAN p95 latency and the full mixed-DPI matrix require manual target-environment verification.
-- Phases 6–7: not yet implemented.
+- Phase 6: implemented; organization-PKI deployment and signed-artifact verification require the organization's certificate infrastructure.
+- Phase 7: not yet implemented.

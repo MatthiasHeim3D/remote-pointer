@@ -1,6 +1,6 @@
 # Test matrix
 
-## Automated coverage through Phase 5
+## Automated coverage through Phase 6
 
 | Area | Cases |
 | --- | --- |
@@ -28,6 +28,10 @@
 | Receiver networking | Session creation, approval presentation, fresh marker acknowledgement, expired marker drop |
 | Presenter networking | Approval gating, receiver dimensions, pointer construction, acknowledgement latency, reconnect drop |
 | Client SignalR transport | Real two-client create/join/approve/send/acknowledge/terminate flow through in-memory relay |
+| Production transport | Plaintext refusal without redirect, secure health response, HSTS |
+| Protected recovery | At-rest token opacity, corruption/identity rejection, restart resume, token rotation, post-recovery pointer |
+| Audit privacy | Structured client record excludes exception messages, credentials, and coordinate fields |
+| Hub rate limiting | Real transport accepts burst of 30 and rejects immediate event 31 |
 
 ## Manual display matrix for Phases 2–5
 
@@ -79,3 +83,13 @@
 8. Restore connectivity within the reconnect window. Confirm both roles resume and newly captured pointers work without re-pairing.
 9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
 10. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
+
+## Phase 6 manual procedure
+
+1. On distinct Windows user profiles or endpoints, establish and approve a session, then terminate one client from Task Manager while leaving the relay running.
+2. Restart that client. Confirm it reports recovered/resumed state, rotates its reconnect token, and resumes receiver markers or presenter approval. Recalibrate the presenter because calibration geometry is intentionally not persisted.
+3. End the recovered session and confirm the corresponding protected role file under `%LocalAppData%\RemotePointer\Sessions` is removed.
+4. Inspect `%LocalAppData%\RemotePointer\Logs\audit-YYYYMMDD.jsonl`. Confirm records are valid JSON and contain no coordinates, pairing codes, session/reconnect tokens, exception messages, screen metadata, or typed data.
+5. Start a Production relay with an organization test certificate. Confirm HTTPS health succeeds, an HTTP request is refused without redirect, HSTS is present, and an untrusted certificate causes the client connection to fail.
+6. Publish with a non-production code-signing certificate and `EnableCodeSigning=true`. Verify both the executable and DLL signatures and timestamp with `Get-AuthenticodeSignature` or `signtool verify /pa /all /v`.
+7. Repeat the full Phase 5 display matrix as a standard user and confirm no administrator rights are required by the client.

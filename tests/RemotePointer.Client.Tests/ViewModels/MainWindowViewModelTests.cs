@@ -10,6 +10,52 @@ namespace RemotePointer.Client.Tests.ViewModels;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public async Task RestoreSessions_SkipsBothRolesForSharedProfileTestClients()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(1);
+        var receiverRelay = new FakeRelayClient
+        {
+            Credential = new SessionCredential(
+                "receiver-session",
+                ClientRole.Receiver,
+                "shared-client",
+                new string('s', 32),
+                new string('r', 32),
+                expiresAt),
+            SessionId = "receiver-session",
+            ResumeResult = true,
+        };
+        var presenterRelay = new FakeRelayClient
+        {
+            Credential = new SessionCredential(
+                "presenter-session",
+                ClientRole.Presenter,
+                "shared-client",
+                new string('t', 32),
+                new string('u', 32),
+                expiresAt),
+            SessionId = "presenter-session",
+            ResumeResult = true,
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: receiverRelay,
+            presenterRelayClient: presenterRelay);
+
+        await viewModel.RestoreSessionsAsync();
+
+        Assert.Equal(0, receiverRelay.ResumeCount);
+        Assert.Equal(0, presenterRelay.ResumeCount);
+        Assert.Contains(
+            "skipped",
+            viewModel.ReceiverConnectionMessage,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ReceiverSession_ApprovesPresenterAndDisplaysFreshPointerWithAcknowledgement()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
@@ -72,6 +118,55 @@ public sealed class MainWindowViewModelTests
 
         Assert.Empty(overlay.Markers);
         Assert.Null(relay.SentAcknowledgement);
+    }
+
+    [Fact]
+    public void ReceiverWithoutActiveSession_DropsPointerWithoutAcknowledging()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        overlay.Show(monitor);
+        var pointer = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.5d,
+            0.5d,
+            PointerKind.Click,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            2_000);
+
+        relay.RaisePointer(pointer);
+
+        Assert.Empty(overlay.Markers);
+        Assert.Null(relay.SentAcknowledgement);
+    }
+
+    [Fact]
+    public void ReceiverSession_EndFailureKeepsLocalSessionActive()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        relay.EndException = new InvalidOperationException("Relay unavailable.");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        viewModel.CreateReceiverSessionCommand.Execute(null);
+        overlay.Show(monitor);
+
+        viewModel.EndReceiverSessionCommand.Execute(null);
+
+        Assert.True(viewModel.HasReceiverSession);
+        Assert.True(overlay.IsVisible);
+        Assert.True(viewModel.IsError);
+        Assert.Contains("could not confirm", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -30,6 +30,7 @@ public sealed class PresenterViewModelTests
         Assert.Equal(0.25d, sent.NormalizedX);
         Assert.Equal(0.75d, sent.NormalizedY);
         Assert.Equal(2_000, sent.TimeToLiveMilliseconds);
+        Assert.True(sent.SequenceNumber > 1_000_000);
         Assert.Equal(2_560d, viewModel.ExpectedWidthPixels);
         Assert.Equal(1_440d, viewModel.ExpectedHeightPixels);
         Assert.Contains("42 ms", viewModel.LastAcknowledgement, StringComparison.Ordinal);
@@ -72,6 +73,29 @@ public sealed class PresenterViewModelTests
 
         Assert.False(viewModel.IsSessionApproved);
         Assert.Equal(1, service.ExitCount);
+    }
+
+    [Fact]
+    public void EndSessionFailure_KeepsPresenterSessionActive()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            EndException = new InvalidOperationException("Relay unavailable."),
+        };
+        using var viewModel = new PresenterViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        viewModel.EndSessionCommand.Execute(null);
+
+        Assert.True(viewModel.IsSessionApproved);
+        Assert.True(viewModel.IsError);
+        Assert.Contains("could not confirm", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

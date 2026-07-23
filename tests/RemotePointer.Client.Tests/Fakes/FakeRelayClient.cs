@@ -39,7 +39,20 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public int EndCount { get; private set; }
 
+    public Exception? EndException { get; set; }
+
     public bool Disposed { get; private set; }
+
+    public bool ResumeResult { get; set; }
+
+    public int ResumeCount { get; private set; }
+
+    public Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        ResumeCount++;
+        return Task.FromResult(ResumeResult);
+    }
 
     public Task<CreateSessionResponse> CreateReceiverSessionAsync(
         DisplayDescriptor display,
@@ -101,6 +114,11 @@ internal sealed class FakeRelayClient : IRelayClient
     {
         _ = cancellationToken;
         EndCount++;
+        if (EndException is not null)
+        {
+            return Task.FromException(EndException);
+        }
+
         SessionId = null;
         Credential = null;
         return Task.CompletedTask;

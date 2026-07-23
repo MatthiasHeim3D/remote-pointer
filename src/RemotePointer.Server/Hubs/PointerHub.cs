@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR;
 using RemotePointer.Contracts.Messages;
 using RemotePointer.Server.Sessions;
+using RemotePointer.Server.Security;
 
 namespace RemotePointer.Server.Hubs;
 
@@ -11,6 +12,7 @@ public sealed class PointerHub(
     public override Task OnConnectedAsync()
     {
         logger.LogInformation(
+            AuditEventIds.ClientConnected,
             "Relay client connected. ConnectionId={ConnectionId} ClientInstanceId={ClientInstanceId}",
             Context.ConnectionId,
             GetOptionalQueryValue("clientInstanceId"));
@@ -23,12 +25,14 @@ public sealed class PointerHub(
         if (exception is null)
         {
             logger.LogInformation(
+                AuditEventIds.ClientDisconnected,
                 "Relay client disconnected. ConnectionId={ConnectionId}",
                 Context.ConnectionId);
         }
         else
         {
             logger.LogWarning(
+                AuditEventIds.ClientDisconnected,
                 exception,
                 "Relay client disconnected with an error. ConnectionId={ConnectionId}",
                 Context.ConnectionId);
@@ -51,6 +55,7 @@ public sealed class PointerHub(
                     GroupName(response.SessionId))
                 .ConfigureAwait(false);
             logger.LogInformation(
+                AuditEventIds.SessionCreated,
                 "Receiver session created. SessionId={SessionId} ClientInstanceId={ClientInstanceId} ExpiresAt={ExpiresAt}",
                 response.SessionId,
                 clientInstanceId,
@@ -89,6 +94,7 @@ public sealed class PointerHub(
                     .PresenterJoinRequested(result.Presenter)
                     .ConfigureAwait(false);
                 logger.LogInformation(
+                    AuditEventIds.PresenterJoinRequested,
                     "Presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
                     result.Response.SessionId,
                     request.ClientInstanceId);
@@ -96,6 +102,7 @@ public sealed class PointerHub(
             else
             {
                 logger.LogWarning(
+                    AuditEventIds.PresenterJoinRejected,
                     "Presenter join rejected. ClientInstanceId={ClientInstanceId} Reason={Reason}",
                     request.ClientInstanceId,
                     result.Response.Reason);
@@ -131,6 +138,7 @@ public sealed class PointerHub(
                 .SessionApproved(result.State)
                 .ConfigureAwait(false);
             logger.LogInformation(
+                AuditEventIds.PresenterApproved,
                 "Presenter approved. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
                 result.SessionId,
                 result.PresenterCredential.ClientInstanceId);
@@ -206,6 +214,7 @@ public sealed class PointerHub(
                 .ConfigureAwait(false);
             await Clients.Caller.SessionApproved(result.State).ConfigureAwait(false);
             logger.LogInformation(
+                AuditEventIds.SessionResumed,
                 "Session participant resumed. SessionId={SessionId} Role={Role} ClientInstanceId={ClientInstanceId}",
                 request.SessionId,
                 request.Role,
@@ -227,6 +236,7 @@ public sealed class PointerHub(
                 .SessionEnded("The session was ended by a participant.")
                 .ConfigureAwait(false);
             logger.LogInformation(
+                AuditEventIds.SessionEnded,
                 "Session ended. SessionId={SessionId} PointerCount={PointerCount}",
                 result.SessionId,
                 result.PointerCount);
@@ -245,6 +255,7 @@ public sealed class PointerHub(
 
     private void LogValidationFailure(string code, string operation) =>
         logger.LogWarning(
+            AuditEventIds.OperationRejected,
             "Relay operation rejected. Operation={Operation} Code={Code} ConnectionId={ConnectionId}",
             operation,
             code,

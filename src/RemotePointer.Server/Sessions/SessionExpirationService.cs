@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using RemotePointer.Server.Hubs;
+using RemotePointer.Server.Security;
 
 namespace RemotePointer.Server.Sessions;
 
@@ -21,6 +22,7 @@ public sealed class SessionExpirationService(
                     .SessionEnded("The session expired.")
                     .ConfigureAwait(false);
                 logger.LogInformation(
+                    AuditEventIds.SessionExpired,
                     "Session expired. SessionId={SessionId} PointerCount={PointerCount}",
                     session.SessionId,
                     session.PointerCount);

@@ -2,7 +2,7 @@
 
 Remote Pointer is a side-band Windows 11 pointer application. It exchanges only normalized pointer coordinates and session metadata through an internal relay; it does not capture screens or inject input.
 
-Implementation proceeds one reviewed phase at a time. Phases 1–4 provide the contracts, desktop overlays, and relay. Phase 5 connects the receiver and presenter workflows end to end with approval, acknowledgements, automatic session resume, termination, and notification-area status.
+Implementation proceeds one reviewed phase at a time. Phases 1–5 provide the contracts, desktop overlays, relay, and end-to-end workflow. Phase 6 hardens that workflow with production HTTPS refusal, DPAPI-protected crash recovery, stable structured audit events, safe error boundaries, dependency auditing, a threat model, and Authenticode signing configuration.
 
 ## Build
 

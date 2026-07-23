@@ -64,3 +64,5 @@ Clients connect to `/hubs/pointer` with a `clientInstanceId` query parameter and
 Implemented server-to-client methods are `PresenterJoinRequested`, `SessionCredentialIssued`, `SessionApproved`, `PointerReceived`, `PointerDisplayed`, and `SessionEnded`.
 
 The desktop client uses automatic reconnect delays from `appsettings.json`. An active role resumes with `SessionResumeRequest`; the returned credential contains the rotated reconnect token. A failed resume clears local session state. Pending, unapproved presenter requests have no credential and therefore must be submitted again after a connection loss.
+
+For client-process recovery, approved role credentials are stored as versioned DPAPI-protected documents. Startup sends the same `SessionResumeRequest` used by automatic reconnect. Successful resume replaces the stored reconnect token with the server's rotated value before subsequent recovery. The recovery file contains no pointer event, coordinate, calibration rectangle, pairing code, or display image.

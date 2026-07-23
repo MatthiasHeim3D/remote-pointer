@@ -39,14 +39,12 @@ public sealed class ClientSettings
         return settings;
     }
 
-    private void Validate()
+    internal void Validate()
     {
         if (!Uri.TryCreate(Server.BaseUrl, UriKind.Absolute, out var serverUri)
-            || (serverUri.Scheme != Uri.UriSchemeHttps
-                && !(serverUri.Scheme == Uri.UriSchemeHttp && serverUri.IsLoopback)))
+            || serverUri.Scheme != Uri.UriSchemeHttps)
         {
-            throw new InvalidOperationException(
-                "Server BaseUrl must use HTTPS, except for loopback development addresses.");
+            throw new InvalidOperationException("Server BaseUrl must use HTTPS.");
         }
 
         if (Server.ReconnectDelaysSeconds.Length == 0

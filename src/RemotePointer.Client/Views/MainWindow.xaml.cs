@@ -16,7 +16,7 @@ public partial class MainWindow : Window
     private readonly SystemTrayIcon trayIcon;
     private readonly MainWindowViewModel viewModel;
 
-    public MainWindow()
+    public MainWindow(IClientAuditLog? auditLog = null)
     {
         InitializeComponent();
 
@@ -26,8 +26,21 @@ public partial class MainWindow : Window
         var targetRegionService = new TargetRegionService();
         var settings = ClientSettings.Load();
         var clientInstanceIdProvider = new ClientInstanceIdProvider();
-        var receiverRelayClient = new SignalRRelayClient(settings, clientInstanceIdProvider);
-        var presenterRelayClient = new SignalRRelayClient(settings, clientInstanceIdProvider);
+        var protectedSessionStore = new ProtectedSessionStore(
+            new DpapiDataProtector(),
+            auditLog);
+        var receiverRelayClient = new SignalRRelayClient(
+            settings,
+            clientInstanceIdProvider,
+            expectedRole: RemotePointer.Contracts.Messages.ClientRole.Receiver,
+            sessionStore: protectedSessionStore,
+            auditLog: auditLog);
+        var presenterRelayClient = new SignalRRelayClient(
+            settings,
+            clientInstanceIdProvider,
+            expectedRole: RemotePointer.Contracts.Messages.ClientRole.Presenter,
+            sessionStore: protectedSessionStore,
+            auditLog: auditLog);
         viewModel = new MainWindowViewModel(
             monitorService,
             overlayService,
@@ -41,6 +54,7 @@ public partial class MainWindow : Window
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged += OnViewModelPropertyChanged;
         StateChanged += OnWindowStateChanged;
+        Loaded += OnLoaded;
 
         SourceInitialized += OnSourceInitialized;
         Closed += OnClosed;
@@ -91,6 +105,7 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        Loaded -= OnLoaded;
         StateChanged -= OnWindowStateChanged;
         viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged -= OnViewModelPropertyChanged;
@@ -100,6 +115,13 @@ public partial class MainWindow : Window
         hotKeyRegistration = null;
         trayIcon.Dispose();
         viewModel.Dispose();
+    }
+
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        await viewModel.RestoreSessionsAsync();
     }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)
