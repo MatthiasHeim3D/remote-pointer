@@ -1,5 +1,6 @@
 using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
+using RemotePointer.Client.Tests.Fakes;
 using RemotePointer.Client.ViewModels;
 using RemotePointer.Contracts.Coordinates;
 using RemotePointer.Contracts.Messages;
@@ -8,6 +9,71 @@ namespace RemotePointer.Client.Tests.ViewModels;
 
 public sealed class MainWindowViewModelTests
 {
+    [Fact]
+    public void ReceiverSession_ApprovesPresenterAndDisplaysFreshPointerWithAcknowledgement()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+
+        viewModel.CreateReceiverSessionCommand.Execute(null);
+        var presenter = new PresenterDescriptor(
+            "connection-1",
+            "presenter-1",
+            "Presenter PC",
+            "1.0.0");
+        relay.RaiseJoinRequest(presenter);
+        viewModel.ApprovePresenterCommand.Execute(null);
+        var pointer = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.25d,
+            0.75d,
+            PointerKind.Click,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            2_000);
+
+        relay.RaisePointer(pointer);
+
+        Assert.Equal("AB2D4E", viewModel.PairingCode);
+        Assert.Equal("connection-1", relay.ApprovedPresenter?.ConnectionId);
+        Assert.Equal(new NormalizedPoint(0.25d, 0.75d), Assert.Single(overlay.Markers));
+        Assert.Equal(pointer.EventId, relay.SentAcknowledgement?.EventId);
+        Assert.False(viewModel.CanSelectMonitor);
+    }
+
+    [Fact]
+    public void ReceiverSession_DropsExpiredPointerWithoutAcknowledging()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        viewModel.CreateReceiverSessionCommand.Execute(null);
+        var expired = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.5d,
+            0.5d,
+            PointerKind.Click,
+            DateTimeOffset.UtcNow.AddSeconds(-3).ToUnixTimeMilliseconds(),
+            2_000);
+
+        relay.RaisePointer(expired);
+
+        Assert.Empty(overlay.Markers);
+        Assert.Null(relay.SentAcknowledgement);
+    }
+
     [Fact]
     public void Constructor_LoadsAndSelectsFirstMonitor()
     {
@@ -147,6 +213,27 @@ public sealed class MainWindowViewModelTests
             new PhysicalRectangle(isPrimary ? 0 : -width, 0, width, 1_080),
             new PhysicalRectangle(isPrimary ? 0 : -width, 0, width, 1_040),
             isPrimary);
+
+    private static FakeRelayClient CreateReceiverRelay()
+    {
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(8);
+        var credential = new SessionCredential(
+            "session-1",
+            ClientRole.Receiver,
+            "receiver-1",
+            new string('s', 32),
+            new string('r', 32),
+            expiresAt);
+        return new FakeRelayClient
+        {
+            CreateResponse = new CreateSessionResponse(
+                "session-1",
+                "AB2D4E",
+                new string('x', 32),
+                credential,
+                DateTimeOffset.UtcNow.AddMinutes(10)),
+        };
+    }
 
     private sealed class FakeMonitorService(IReadOnlyList<MonitorDescriptor> monitors)
         : IMonitorService

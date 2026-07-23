@@ -1,11 +1,79 @@
 using RemotePointer.Client.Services;
+using RemotePointer.Client.Tests.Fakes;
 using RemotePointer.Client.ViewModels;
 using RemotePointer.Contracts.Coordinates;
+using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Tests.ViewModels;
 
 public sealed class PresenterViewModelTests
 {
+    [Fact]
+    public void ApprovedPointer_IsSentAndAcknowledgementLatencyIsShown()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new PresenterViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 2_560, 1_440, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        relay.RaiseAcknowledgement(
+            new PointerAcknowledgement(sent.EventId, sent.SentAtUnixMilliseconds + 42));
+
+        Assert.Equal("session-1", sent.SessionId);
+        Assert.Equal(0.25d, sent.NormalizedX);
+        Assert.Equal(0.75d, sent.NormalizedY);
+        Assert.Equal(2_000, sent.TimeToLiveMilliseconds);
+        Assert.Equal(2_560d, viewModel.ExpectedWidthPixels);
+        Assert.Equal(1_440d, viewModel.ExpectedHeightPixels);
+        Assert.Contains("42 ms", viewModel.LastAcknowledgement, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReconnectingPointer_IsDroppedInsteadOfQueued()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new PresenterViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+        relay.RaiseConnectionStatus(RelayConnectionStatus.Reconnecting, "Reconnecting.");
+
+        service.RaisePointer(new NormalizedPoint(0.5d, 0.5d));
+
+        Assert.True(viewModel.IsError);
+        Assert.Contains("dropped", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SessionEnded_ExitsPointingAndClearsApproval()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new PresenterViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        relay.RaiseSessionEnded("Ended by receiver.");
+
+        Assert.False(viewModel.IsSessionApproved);
+        Assert.Equal(1, service.ExitCount);
+    }
+
     [Fact]
     public void CalibrateCommand_SendsExpectedAspectRatioAndLockPreference()
     {
@@ -121,6 +189,8 @@ public sealed class PresenterViewModelTests
 
         public int ToggleCount { get; private set; }
 
+        public int ExitCount { get; private set; }
+
         public void BeginCalibration(double expectedAspectRatio, bool lockAspectRatio)
         {
             BeginCalibrationCount++;
@@ -132,6 +202,7 @@ public sealed class PresenterViewModelTests
 
         public void ExitPointingMode()
         {
+            ExitCount++;
         }
 
         public void RaiseState(TargetRegionState state, string message, bool isError = false)

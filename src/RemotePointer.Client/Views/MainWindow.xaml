@@ -1,11 +1,11 @@
 <Window x:Class="RemotePointer.Client.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Remote Pointer — Local Overlay Prototype"
+        Title="Remote Pointer"
         Width="760"
-        Height="650"
+        Height="760"
         MinWidth="680"
-        MinHeight="600"
+        MinHeight="650"
         WindowStartupLocation="CenterScreen"
         Background="#10141D">
     <Window.Resources>
@@ -40,6 +40,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Margin="0,0,0,24">
@@ -57,7 +58,7 @@
                     CornerRadius="8">
                 <StackPanel>
                     <TextBlock FontSize="16" FontWeight="SemiBold" Text="1. Select receiver monitor" />
-                    <DockPanel Margin="0,12,0,0">
+                    <DockPanel Margin="0,12,0,0" IsEnabled="{Binding CanSelectMonitor}">
                         <Button DockPanel.Dock="Right"
                                 Margin="10,0,0,0"
                                 Command="{Binding RefreshMonitorsCommand}"
@@ -66,9 +67,10 @@
                                   Padding="8,5"
                                   ItemsSource="{Binding Monitors}"
                                   SelectedItem="{Binding SelectedMonitor}"
+                                  IsEnabled="{Binding CanSelectMonitor}"
                                   DisplayMemberPath="SelectionLabel" />
                     </DockPanel>
-                    <WrapPanel Margin="0,14,0,0">
+                    <WrapPanel Margin="0,14,0,0" IsEnabled="{Binding CanSelectMonitor}">
                         <Button Command="{Binding ShowOverlayCommand}" Content="Show receiver overlay" />
                         <Button Command="{Binding HideOverlayCommand}"
                                 Background="#4A5568"
@@ -84,7 +86,45 @@
                     Background="#181E2A"
                     CornerRadius="8">
                 <StackPanel>
-                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Test marker positions" />
+                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Network session" />
+                    <TextBlock Margin="0,6,0,0" Foreground="#AEB8C8" TextWrapping="Wrap">
+                        <Run Text="Relay: " />
+                        <Run Text="{Binding ReceiverServerUrl, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock Margin="0,3,0,12" Foreground="#AEB8C8"
+                               Text="{Binding ReceiverConnectionMessage, Mode=OneWay}" />
+                    <WrapPanel>
+                        <Button Command="{Binding CreateReceiverSessionCommand}"
+                                Content="Create session" />
+                        <Button Command="{Binding EndReceiverSessionCommand}"
+                                Background="#C35E65"
+                                Foreground="White"
+                                Content="End session" />
+                    </WrapPanel>
+                    <TextBlock Margin="0,8,0,0" Foreground="#AEB8C8" Text="Pairing code" />
+                    <TextBlock Margin="0,2,0,0"
+                               FontFamily="Consolas"
+                               FontSize="30"
+                               FontWeight="Bold"
+                               Text="{Binding PairingCode, Mode=OneWay}" />
+                    <TextBlock Margin="0,2,0,10" Foreground="#AEB8C8"
+                               Text="{Binding PairingExpiration, Mode=OneWay}" />
+                    <TextBlock FontWeight="SemiBold"
+                               Text="{Binding PendingPresenterName, Mode=OneWay}" />
+                    <Button Margin="0,10,8,0"
+                            HorizontalAlignment="Left"
+                            Command="{Binding ApprovePresenterCommand}"
+                            Content="Approve presenter" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3"
+                    Margin="0,0,0,18"
+                    Padding="20"
+                    Background="#181E2A"
+                    CornerRadius="8">
+                <StackPanel>
+                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="3. Test marker positions" />
                     <TextBlock Margin="0,6,0,12"
                                Foreground="#AEB8C8"
                                Text="Test all four corners and the center on each connected monitor." />
@@ -109,7 +149,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Grid.Row="3" Padding="16" Background="#181E2A" CornerRadius="8">
+            <Border Grid.Row="4" Padding="16" Background="#181E2A" CornerRadius="8">
                 <StackPanel>
                     <TextBlock FontWeight="SemiBold" Text="Status" />
                     <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Text="{Binding StatusMessage}">
@@ -142,6 +182,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Margin="0,0,0,24">
@@ -158,7 +199,45 @@
                             Background="#181E2A"
                             CornerRadius="8">
                         <StackPanel>
-                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="1. Receiver display shape" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="1. Connect to receiver" />
+                            <TextBlock Margin="0,6,0,0" Foreground="#AEB8C8" TextWrapping="Wrap">
+                                <Run Text="Relay: " />
+                                <Run Text="{Binding Presenter.ServerUrl, Mode=OneWay}" />
+                            </TextBlock>
+                            <TextBlock Margin="0,3,0,12" Foreground="#AEB8C8"
+                                       Text="{Binding Presenter.ConnectionMessage, Mode=OneWay}" />
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right"
+                                        Margin="10,0,0,0"
+                                        Command="{Binding Presenter.JoinSessionCommand}"
+                                        Content="Request to join" />
+                                <TextBox MinHeight="38"
+                                         MaxLength="10"
+                                         CharacterCasing="Upper"
+                                         FontFamily="Consolas"
+                                         FontSize="18"
+                                         Text="{Binding Presenter.PairingCode, UpdateSourceTrigger=PropertyChanged}" />
+                            </DockPanel>
+                            <WrapPanel Margin="0,12,0,0">
+                                <Button Command="{Binding Presenter.EndSessionCommand}"
+                                        Background="#C35E65"
+                                        Foreground="White"
+                                        Content="End session" />
+                            </WrapPanel>
+                            <TextBlock Margin="0,3,0,0" Foreground="#AEB8C8">
+                                <Run Text="Approved: " />
+                                <Run Text="{Binding Presenter.IsSessionApproved, Mode=OneWay}" />
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="2"
+                            Margin="0,0,0,18"
+                            Padding="20"
+                            Background="#181E2A"
+                            CornerRadius="8">
+                        <StackPanel>
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Receiver display shape" />
                             <TextBlock Margin="0,6,0,12"
                                        Foreground="#AEB8C8"
                                        Text="Enter the receiver display dimensions used for aspect-ratio guidance." />
@@ -181,13 +260,13 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Grid.Row="2"
+                    <Border Grid.Row="3"
                             Margin="0,0,0,18"
                             Padding="20"
                             Background="#181E2A"
                             CornerRadius="8">
                         <StackPanel>
-                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Pointing mode" />
+                            <TextBlock FontSize="16" FontWeight="SemiBold" Text="3. Pointing mode" />
                             <TextBlock Margin="0,6,0,12"
                                        Foreground="#AEB8C8"
                                        TextWrapping="Wrap"
@@ -209,10 +288,13 @@
                             <TextBlock Margin="0,5,0,0"
                                        Foreground="#E9EDF5"
                                        Text="{Binding Presenter.LastPointer, Mode=OneWay}" />
+                            <TextBlock Margin="0,5,0,0"
+                                       Foreground="#AEB8C8"
+                                       Text="{Binding Presenter.LastAcknowledgement, Mode=OneWay}" />
                         </StackPanel>
                     </Border>
 
-                    <Border Grid.Row="3" Padding="16" Background="#181E2A" CornerRadius="8">
+                    <Border Grid.Row="4" Padding="16" Background="#181E2A" CornerRadius="8">
                         <StackPanel>
                             <TextBlock FontWeight="SemiBold" Text="Presenter status" />
                             <TextBlock Margin="0,6,0,0"

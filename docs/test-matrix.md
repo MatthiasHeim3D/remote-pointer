@@ -1,6 +1,6 @@
 # Test matrix
 
-## Automated coverage through Phase 2
+## Automated coverage through Phase 5
 
 | Area | Cases |
 | --- | --- |
@@ -25,20 +25,23 @@
 | Pointer defenses | TTL, sequence duplicate suppression, 20/s refill, burst of 30 |
 | In-memory SignalR | Join/approve/send/acknowledge, both-role reconnect, termination, unauthorized sender |
 | Relay hosting | Health endpoint, 8 KB message limit, single invocation per client |
+| Receiver networking | Session creation, approval presentation, fresh marker acknowledgement, expired marker drop |
+| Presenter networking | Approval gating, receiver dimensions, pointer construction, acknowledgement latency, reconnect drop |
+| Client SignalR transport | Real two-client create/join/approve/send/acknowledge/terminate flow through in-memory relay |
 
 ## Manual display matrix for Phases 2–5
 
 | Scenario | Presenter | Receiver | Status |
 | --- | ---: | ---: | --- |
-| Single monitor | 100% DPI | 100% DPI | Ready for manual Phase 2 test |
-| Mixed scaling | 125% DPI | 150% DPI | Ready for manual Phase 2 test |
-| High scaling | 200% DPI | 100% DPI | Ready for manual Phase 2 test |
-| Different resolutions | 1920×1080 | 2560×1440 | Ready for manual Phase 2 test |
-| Ultrawide to standard | 3440×1440 | 1920×1080 | Pending Phase 3 |
-| Portrait receiver | Landscape | Portrait | Ready for manual Phase 2 test |
-| Secondary left of primary | Yes | Yes | Ready for manual Phase 2 test |
-| Runtime resolution change | Yes | Yes | Ready for manual Phase 2 test |
-| Monitor disconnected | Yes | Yes | Ready for manual Phase 2 test |
+| Single monitor | 100% DPI | 100% DPI | Ready for manual Phase 5 test |
+| Mixed scaling | 125% DPI | 150% DPI | Ready for manual Phase 5 test |
+| High scaling | 200% DPI | 100% DPI | Ready for manual Phase 5 test |
+| Different resolutions | 1920×1080 | 2560×1440 | Ready for manual Phase 5 test |
+| Ultrawide to standard | 3440×1440 | 1920×1080 | Ready for manual Phase 5 test |
+| Portrait receiver | Landscape | Portrait | Ready for manual Phase 5 test |
+| Secondary left of primary | Yes | Yes | Ready for manual Phase 5 test |
+| Runtime resolution change | Yes | Yes | Ready for manual Phase 5 test |
+| Monitor disconnected | Yes | Yes | Ready for manual Phase 5 test |
 
 ## Phase 2 manual procedure
 
@@ -50,8 +53,6 @@
 6. Repeat with mixed scaling, negative virtual-screen origins, and portrait orientation.
 7. Change the selected monitor's resolution and confirm the overlay is repositioned and resized.
 8. Disconnect the selected monitor and confirm the overlay disappears and the control window shows an error.
-
-End-to-end latency, reconnect behavior, authorization, expiry, and rate-limit tests require the Phase 4 relay and Phase 5 client networking.
 
 ## Phase 3 manual procedure
 
@@ -65,3 +66,16 @@ End-to-end latency, reconnect behavior, authorization, expiry, and rate-limit te
 8. Press Escape and confirm normal clicking is restored immediately.
 9. Repeat entry and exit with `Ctrl+Alt+P`, including while another application is active.
 10. Repeat on mixed-DPI monitors and with a target rectangle on a monitor left of the primary display.
+
+## Phase 5 manual procedure
+
+1. Trust the local ASP.NET Core development certificate and start the HTTPS relay.
+2. Start two client processes. In the receiver, select a monitor and create a session.
+3. Enter the displayed code in the presenter. Confirm the receiver shows the presenter's machine name and that calibration remains disabled until approval.
+4. Approve the presenter, calibrate the shared desktop region, and enable pointing.
+5. Click the four corners and center. Confirm equivalent receiver positions, a local ripple, and a displayed acknowledgement latency.
+6. End the session from each role in separate runs. Confirm the receiver overlay disappears and presenter pointing exits immediately.
+7. During an active session, interrupt relay connectivity and click while the UI shows Reconnecting. Confirm those clicks are reported as dropped and do not appear after reconnection.
+8. Restore connectivity within the reconnect window. Confirm both roles resume and newly captured pointers work without re-pairing.
+9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
+10. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.

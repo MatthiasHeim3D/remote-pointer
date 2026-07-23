@@ -163,7 +163,7 @@ public partial class TargetRegionWindow : Window
         e.Handled = true;
     }
 
-    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (isPointingMode && e.Key == Key.Escape)
         {
@@ -234,7 +234,7 @@ public partial class TargetRegionWindow : Window
         Height = rectangle.Height;
     }
 
-    private void ShowRipple(Point click)
+    private void ShowRipple(System.Windows.Point click)
     {
         const double diameter = 54d;
         var ring = new Ellipse
@@ -244,7 +244,7 @@ public partial class TargetRegionWindow : Window
             Stroke = new SolidColorBrush(Color.FromRgb(255, 92, 92)),
             StrokeThickness = 4d,
             IsHitTestVisible = false,
-            RenderTransformOrigin = new Point(0.5d, 0.5d),
+            RenderTransformOrigin = new System.Windows.Point(0.5d, 0.5d),
             RenderTransform = new ScaleTransform(0.25d, 0.25d),
         };
         Canvas.SetLeft(ring, click.X - (diameter / 2d));

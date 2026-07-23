@@ -24,7 +24,7 @@ y = overlayTop  + normalizedY * overlayHeight
 
 Normalized coordinates are finite numbers in the inclusive range `0.0` through `1.0`. The rectangle origin may be negative. Rectangle dimensions must be finite and greater than zero.
 
-The Phase 3 client still reports presenter clicks locally. Phase 4 can relay `PointerEventMessage`; connecting the desktop workflows to the hub is intentionally deferred to Phase 5.
+The Phase 5 presenter sends each captured click immediately as a `PointerEventMessage`. The receiver revalidates it immediately before marker display and returns `PointerAcknowledgement` only after the overlay accepts it. No pointer event is persisted or queued during a connection interruption.
 
 ## Initial messages
 
@@ -62,3 +62,5 @@ Clients connect to `/hubs/pointer` with a `clientInstanceId` query parameter and
 - `EndSession(sessionId)`
 
 Implemented server-to-client methods are `PresenterJoinRequested`, `SessionCredentialIssued`, `SessionApproved`, `PointerReceived`, `PointerDisplayed`, and `SessionEnded`.
+
+The desktop client uses automatic reconnect delays from `appsettings.json`. An active role resumes with `SessionResumeRequest`; the returned credential contains the rotated reconnect token. A failed resume clears local session state. Pending, unapproved presenter requests have no credential and therefore must be submitted again after a connection loss.

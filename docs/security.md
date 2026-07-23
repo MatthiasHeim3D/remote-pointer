@@ -52,3 +52,13 @@ No development certificate-bypass switch will be included in production builds.
 - SignalR receive payloads are limited to 8 KB.
 - Structured logs omit pairing secrets, role tokens, reconnect tokens, and individual pointer coordinates.
 - Production uses HTTPS redirection; no certificate-validation bypass exists.
+
+## Phase 5 client controls
+
+- The client accepts HTTPS relay URLs, with plaintext HTTP limited to loopback development addresses.
+- TLS certificate validation uses the platform default; there is no bypass callback or configuration switch.
+- Role credentials remain in process memory. Only the random client-instance ID is persisted under the current user's local application data.
+- Calibration geometry lasts only for the process session and is never sent to the relay.
+- Pointer sends are dropped while disconnected or reconnecting and are not replayed after resume.
+- The receiver repeats structural and TTL validation immediately before display and acknowledges only displayed markers.
+- Termination or failed resume removes the overlay, exits pointing, and clears the in-memory session state.

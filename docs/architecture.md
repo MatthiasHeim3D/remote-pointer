@@ -10,7 +10,7 @@ Remote Pointer has three deployable or reusable components:
 | `RemotePointer.Server` | Validate, authorize, rate-limit, and relay transient pointer events | Access either user's desktop |
 | `RemotePointer.Contracts` | Transport-neutral messages, coordinate math, JSON policy, and structural validation | Depend on WPF, SignalR, or ASP.NET Core |
 
-Both clients will establish outbound HTTPS/WSS connections to the server. The server will place the approved presenter and receiver in a session-specific SignalR group. Peer-to-peer connectivity is deliberately excluded.
+Both clients establish outbound HTTPS/WSS connections to the server. The server places the approved presenter and receiver in a session-specific SignalR group. Peer-to-peer connectivity is deliberately excluded.
 
 ## Phase 1 design
 
@@ -52,6 +52,16 @@ Pointer acceptance applies strict JSON/contract validation, current role authori
 
 A hosted cleanup service expires unused pairing sessions and active sessions. The relay uses structured JSON console logging and records aggregate pointer counts only when a session ends or expires.
 
+## Phase 5 design
+
+`SignalRRelayClient` is the WPF-independent client transport boundary. It creates the connection lazily, uses the shared strict JSON policy, reports explicit connection states, and keeps role credentials only in memory. Receiver and presenter use separate connections while sharing one durable random client-instance ID stored under the current user's local application data.
+
+The receiver view model creates a session for the selected display, presents the one-time code, exposes the pending machine name for explicit approval, and locks monitor selection for the session. Incoming events are validated against TTL again immediately before display. Acknowledgements are sent only when the overlay accepts the marker.
+
+The presenter view model cannot calibrate or point until approval supplies the receiver dimensions. Each captured click gets a new event ID and monotonic sequence number and is sent immediately. Events are never queued: a send during disconnection or reconnection returns a dropped status. Receiver acknowledgements are correlated in memory to show click-to-display latency.
+
+SignalR automatic reconnect invokes `ResumeSession` with the role credential and single-use reconnect token, then replaces the credential with the rotated result. Failure to resume clears the session and exits presenter pointing. Either participant can invoke termination. The notification-area icon reports inactive, connected receiver/presenter, or active pointing state; minimizing hides the control window until the icon is opened.
+
 ## Dependency direction
 
 ```text
@@ -68,4 +78,5 @@ No reference is permitted from contracts back to either host. Client and server 
 - Phase 2: implemented; manual mixed-DPI and display-disconnection verification is required on target hardware.
 - Phase 3: implemented; click-consumption and mixed-DPI calibration require manual verification on target hardware.
 - Phase 4: implemented and covered by in-memory SignalR integration tests.
-- Phases 5–7: not yet implemented.
+- Phase 5: implemented; LAN p95 latency and the full mixed-DPI matrix require manual target-environment verification.
+- Phases 6–7: not yet implemented.

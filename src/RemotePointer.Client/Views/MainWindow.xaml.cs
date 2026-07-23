@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.ComponentModel;
+using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
 using RemotePointer.Client.ViewModels;
@@ -12,6 +13,7 @@ public partial class MainWindow : Window
 {
     private GlobalHotKeyRegistration? hotKeyRegistration;
     private HwndSource? source;
+    private readonly SystemTrayIcon trayIcon;
     private readonly MainWindowViewModel viewModel;
 
     public MainWindow()
@@ -22,11 +24,23 @@ public partial class MainWindow : Window
         var coordinateMapper = new DisplayCoordinateMapper();
         var overlayService = new ReceiverOverlayService(monitorService, coordinateMapper);
         var targetRegionService = new TargetRegionService();
+        var settings = ClientSettings.Load();
+        var clientInstanceIdProvider = new ClientInstanceIdProvider();
+        var receiverRelayClient = new SignalRRelayClient(settings, clientInstanceIdProvider);
+        var presenterRelayClient = new SignalRRelayClient(settings, clientInstanceIdProvider);
         viewModel = new MainWindowViewModel(
             monitorService,
             overlayService,
-            targetRegionService);
+            targetRegionService,
+            receiverRelayClient,
+            presenterRelayClient,
+            settings.Pointer.DefaultTtlMilliseconds);
         DataContext = viewModel;
+
+        trayIcon = new SystemTrayIcon(ShowFromTray, ExitFromTray);
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        viewModel.Presenter.PropertyChanged += OnViewModelPropertyChanged;
+        StateChanged += OnWindowStateChanged;
 
         SourceInitialized += OnSourceInitialized;
         Closed += OnClosed;
@@ -77,10 +91,54 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        StateChanged -= OnWindowStateChanged;
+        viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        viewModel.Presenter.PropertyChanged -= OnViewModelPropertyChanged;
         source?.RemoveHook(WindowMessageHook);
         source = null;
         hotKeyRegistration?.Dispose();
         hotKeyRegistration = null;
+        trayIcon.Dispose();
         viewModel.Dispose();
+    }
+
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == System.Windows.WindowState.Minimized)
+        {
+            Hide();
+            ShowInTaskbar = false;
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        var status = viewModel.Presenter.IsPointing
+            ? "Pointing active"
+            : viewModel.Presenter.IsSessionApproved
+                ? "Presenter connected"
+                : viewModel.HasReceiverSession
+                    ? "Receiving session active"
+                    : "Inactive";
+        trayIcon.SetStatus(status);
+    }
+
+    private void ShowFromTray()
+    {
+        _ = Dispatcher.InvokeAsync(
+            () =>
+            {
+                ShowInTaskbar = true;
+                Show();
+                WindowState = System.Windows.WindowState.Normal;
+                Activate();
+            });
+    }
+
+    private void ExitFromTray()
+    {
+        _ = Dispatcher.InvokeAsync(Close);
     }
 }
