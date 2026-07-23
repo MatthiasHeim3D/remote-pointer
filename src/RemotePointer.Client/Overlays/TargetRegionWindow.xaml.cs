@@ -1,10 +1,13 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
+using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
 
@@ -157,6 +160,26 @@ public partial class TargetRegionWindow : Window
         e.Handled = true;
     }
 
+    private void OnFullscreenClicked(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetCurrentMonitorBounds(out var monitorBounds))
+        {
+            AspectWarningText.Text = "The current monitor bounds could not be determined.";
+            AspectWarningText.Foreground = new SolidColorBrush(Color.FromRgb(255, 157, 157));
+            AspectWarningText.Visibility = Visibility.Visible;
+            e.Handled = true;
+            return;
+        }
+
+        ApplyRectangle(TargetRegionGeometry.FitWithin(
+            monitorBounds,
+            ExpectedAspectRatio,
+            AspectLockCheckBox.IsChecked == true));
+        AllowOverrideCheckBox.IsChecked = false;
+        UpdateMetrics();
+        e.Handled = true;
+    }
+
     private void OnCancelClicked(object sender, RoutedEventArgs e)
     {
         CalibrationCancelled?.Invoke(this, EventArgs.Empty);
@@ -232,6 +255,33 @@ public partial class TargetRegionWindow : Window
         Top = rectangle.Top;
         Width = rectangle.Width;
         Height = rectangle.Height;
+    }
+
+    private bool TryGetCurrentMonitorBounds(out RectangleD bounds)
+    {
+        var windowHandle = new WindowInteropHelper(this).Handle;
+        var monitorHandle = NativeMethods.MonitorFromWindow(
+            windowHandle,
+            NativeMethods.MonitorDefaultToNearest);
+        var monitorInfo = new MonitorInfoEx
+        {
+            Size = (uint)Marshal.SizeOf<MonitorInfoEx>(),
+        };
+
+        if (monitorHandle == 0 || !NativeMethods.GetMonitorInfo(monitorHandle, ref monitorInfo))
+        {
+            bounds = default;
+            return false;
+        }
+
+        var topLeft = PointFromScreen(new Point(monitorInfo.Monitor.Left, monitorInfo.Monitor.Top));
+        var bottomRight = PointFromScreen(new Point(monitorInfo.Monitor.Right, monitorInfo.Monitor.Bottom));
+        bounds = new RectangleD(
+            Left + topLeft.X,
+            Top + topLeft.Y,
+            bottomRight.X - topLeft.X,
+            bottomRight.Y - topLeft.Y);
+        return bounds.Width > 0d && bounds.Height > 0d;
     }
 
     private void ShowRipple(System.Windows.Point click)

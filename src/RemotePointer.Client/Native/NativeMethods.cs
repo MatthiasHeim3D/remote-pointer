@@ -12,6 +12,7 @@ internal static partial class NativeMethods
     internal const int ModifierControl = 0x0002;
     internal const int ModifierNoRepeat = 0x4000;
     internal const int MonitorInfoPrimary = 0x00000001;
+    internal const uint MonitorDefaultToNearest = 0x00000002;
     internal const int SwpNoActivate = 0x0010;
     internal const int SwpShowWindow = 0x0040;
     internal const int WmDisplayChange = 0x007E;
@@ -42,6 +43,9 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll", EntryPoint = "GetMonitorInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetMonitorInfo(nint monitor, ref MonitorInfoEx monitorInfo);
+
+    [LibraryImport("user32.dll")]
+    internal static partial nint MonitorFromWindow(nint window, uint flags);
 
     [LibraryImport("shcore.dll")]
     internal static partial int GetDpiForMonitor(

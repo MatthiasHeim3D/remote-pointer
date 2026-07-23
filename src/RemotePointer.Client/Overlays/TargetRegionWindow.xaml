@@ -77,6 +77,10 @@
                                 Content="Lock region" />
                         <Button Margin="0,0,8,4"
                                 Padding="12,6"
+                                Click="OnFullscreenClicked"
+                                Content="Fullscreen" />
+                        <Button Margin="0,0,8,4"
+                                Padding="12,6"
                                 Click="OnResetClicked"
                                 Content="Reset" />
                         <Button Margin="0,0,4,4"

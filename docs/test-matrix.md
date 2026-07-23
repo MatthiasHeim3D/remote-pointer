@@ -16,7 +16,7 @@
 | Overlay coordinate mapping | Four boundaries and center at 2560×1440 |
 | Monitor selection | Initial selection, refresh preservation, selected-display disconnection |
 | Marker commands | Four corners, center, invalid custom coordinates, overlay state errors |
-| Calibration geometry | Locked/unlocked resize, horizontal/vertical ratio preservation, minimum dimensions |
+| Calibration geometry | Locked/unlocked resize, horizontal/vertical ratio preservation, minimum dimensions, fullscreen monitor fitting |
 | Presenter state | Expected-ratio validation, calibration request, ready/pointing transitions, hotkey errors |
 | Presenter capture reporting | Normalized local pointer count and coordinate presentation |
 | Pairing and secrets | Friendly cryptographic codes, hashing, one-time consumption, expiry |
@@ -65,14 +65,15 @@
 
 1. Approve a presenter session, confirm the receiver dimensions appear automatically, and select **Calibrate target area**.
 2. Move and resize the calibration window over a normal application. Verify dimensions and aspect-ratio difference update continuously.
-3. Disable ratio lock, create a difference greater than 2%, and verify Lock requires the explicit Allow mismatch override.
-4. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.
-5. Enable pointing with the button. Click inside the target and confirm a local ripple plus normalized coordinates in the control window.
-6. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
-7. Click outside the rectangle and confirm the underlying application behaves normally.
-8. Press Escape and confirm normal clicking is restored immediately.
-9. Repeat entry and exit with `Ctrl+Alt+P`, including while another application is active.
-10. Repeat on mixed-DPI monitors and with a target rectangle on a monitor left of the primary display.
+3. Move it onto each sender monitor and select **Fullscreen**. With ratio lock enabled, confirm the largest receiver-shaped rectangle is centered within that monitor. Disable ratio lock and confirm it fills the complete monitor.
+4. With ratio lock disabled, create a difference greater than 2%, and verify Lock requires the explicit Allow mismatch override.
+5. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.
+6. Enable pointing with the button. Click inside the target and confirm a local ripple plus normalized coordinates in the control window.
+7. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
+8. Click outside the rectangle and confirm the underlying application behaves normally.
+9. Press Escape and confirm normal clicking is restored immediately.
+10. Repeat entry and exit with `Ctrl+Alt+P`, including while another application is active.
+11. Repeat on mixed-DPI monitors and with a target rectangle on a monitor left of the primary display.
 
 ## Phase 5 manual procedure
 

@@ -56,6 +56,37 @@ public static class TargetRegionGeometry
         return new PointD(width, height);
     }
 
+    public static RectangleD FitWithin(
+        RectangleD bounds,
+        double expectedAspectRatio,
+        bool lockAspectRatio)
+    {
+        EnsureFinite(bounds.Left, nameof(bounds));
+        EnsureFinite(bounds.Top, nameof(bounds));
+        EnsurePositiveFinite(bounds.Width, nameof(bounds));
+        EnsurePositiveFinite(bounds.Height, nameof(bounds));
+        EnsurePositiveFinite(expectedAspectRatio, nameof(expectedAspectRatio));
+
+        if (!lockAspectRatio)
+        {
+            return bounds;
+        }
+
+        var width = bounds.Width;
+        var height = width / expectedAspectRatio;
+        if (height > bounds.Height)
+        {
+            height = bounds.Height;
+            width = height * expectedAspectRatio;
+        }
+
+        return new RectangleD(
+            bounds.Left + ((bounds.Width - width) / 2d),
+            bounds.Top + ((bounds.Height - height) / 2d),
+            width,
+            height);
+    }
+
     public static double DifferenceFromExpected(
         double width,
         double height,

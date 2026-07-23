@@ -74,6 +74,47 @@ public sealed class TargetRegionGeometryTests
         Assert.Equal(0d, result, precision: 12);
     }
 
+    [Fact]
+    public void FitWithin_CentersLargestMatchingLandscapeRectangle()
+    {
+        var result = TargetRegionGeometry.FitWithin(
+            new(-1_920d, 0d, 1_920d, 1_200d),
+            expectedAspectRatio: 16d / 9d,
+            lockAspectRatio: true);
+
+        Assert.Equal(-1_920d, result.Left, precision: 12);
+        Assert.Equal(60d, result.Top, precision: 12);
+        Assert.Equal(1_920d, result.Width, precision: 12);
+        Assert.Equal(1_080d, result.Height, precision: 12);
+    }
+
+    [Fact]
+    public void FitWithin_CentersLargestMatchingPortraitRectangle()
+    {
+        var result = TargetRegionGeometry.FitWithin(
+            new(0d, -200d, 1_920d, 1_080d),
+            expectedAspectRatio: 9d / 16d,
+            lockAspectRatio: true);
+
+        Assert.Equal(656.25d, result.Left, precision: 12);
+        Assert.Equal(-200d, result.Top, precision: 12);
+        Assert.Equal(607.5d, result.Width, precision: 12);
+        Assert.Equal(1_080d, result.Height, precision: 12);
+    }
+
+    [Fact]
+    public void FitWithin_FillsBoundsWhenAspectRatioIsUnlocked()
+    {
+        var bounds = new RemotePointer.Contracts.Coordinates.RectangleD(-500d, 100d, 2_560d, 1_440d);
+
+        var result = TargetRegionGeometry.FitWithin(
+            bounds,
+            expectedAspectRatio: 16d / 9d,
+            lockAspectRatio: false);
+
+        Assert.Equal(bounds, result);
+    }
+
     [Theory]
     [InlineData(double.NaN, 360d)]
     [InlineData(640d, 0d)]
