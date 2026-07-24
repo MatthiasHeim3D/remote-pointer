@@ -18,16 +18,28 @@ public sealed class PointerHubIntegrationTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
-    public async Task Discovery_DirectJoinAndReceiverDisplayUpdate_PreserveReceiverApproval()
+    public async Task Discovery_DirectJoinAndPresenterDisconnect_PreserveReceiverAvailability()
     {
         using var factory = CreateFactory(receiverDiscoveryEnabled: true);
         await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
         await using var presenter = CreateConnection(factory, "presenter-client", "Presenter Machine");
         var joinRequested = CompletionSource<PresenterDescriptor>();
         var approved = CompletionSource<SessionStateMessage>();
+        var availableAgain = CompletionSource<SessionStateMessage>();
+        var presenterDisconnected = CompletionSource<string>();
         var displayChanged = CompletionSource<DisplayDescriptor>();
         receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
+        receiver.On<SessionStateMessage>(
+            "SessionApproved",
+            state =>
+            {
+                if (!state.Approved)
+                {
+                    availableAgain.TrySetResult(state);
+                }
+            });
         presenter.On<SessionStateMessage>("SessionApproved", approved.SetResult);
+        presenter.On<string>("SessionEnded", presenterDisconnected.SetResult);
         presenter.On<DisplayDescriptor>("ReceiverDisplayChanged", displayChanged.SetResult);
         await receiver.StartAsync();
         await presenter.StartAsync();
@@ -37,10 +49,6 @@ public sealed class PointerHubIntegrationTests
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
             CreateDisplay());
-        Assert.True(await receiver.InvokeAsync<bool>(
-            "SetReceiverDiscoverable",
-            created.SessionId,
-            true));
         var listed = Assert.Single(
             await presenter.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
         Assert.Equal("Receiver Machine", listed.DisplayName);
@@ -63,6 +71,22 @@ public sealed class PointerHubIntegrationTests
             90);
         await receiver.InvokeAsync("UpdateReceiverDisplay", created.SessionId, updatedDisplay);
         Assert.Equal(updatedDisplay, await displayChanged.Task.WaitAsync(TestTimeout));
+
+        await presenter.InvokeAsync("EndSession", created.SessionId);
+        Assert.Contains(
+            "Disconnected",
+            await presenterDisconnected.Task.WaitAsync(TestTimeout),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True((await availableAgain.Task.WaitAsync(TestTimeout)).ReceiverDiscoverable);
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(
+                await presenter.InvokeAsync<AvailableReceiverDescriptor[]>(
+                    "GetAvailableReceivers")).SessionId);
+        var nextJoin = await presenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+        Assert.True(nextJoin.Accepted);
     }
 
     [Fact]

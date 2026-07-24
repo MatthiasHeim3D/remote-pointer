@@ -49,7 +49,6 @@ public sealed class SignalRRelayClientTests
         presenter.SessionEnded += (_, e) => presenterEnded.TrySetResult(e.Reason);
 
         var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
-        Assert.True(await receiver.SetReceiverDiscoverableAsync(true));
         var join = await presenter.RequestToJoinReceiverAsync(created.SessionId);
         var descriptor = await joinRequested.Task.WaitAsync(TestTimeout);
         await receiver.ApprovePresenterAsync(created.SessionId, descriptor.ConnectionId);
@@ -119,8 +118,7 @@ public sealed class SignalRRelayClientTests
         receiver.SessionApproved += (_, e) => receiverApproved.TrySetResult(e.State);
         presenter.SessionApproved += (_, e) => presenterApproved.TrySetResult(e.State);
         var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
-        Assert.Null(store.Load(ClientRole.Receiver, "receiver-client"));
-        Assert.True(await receiver.SetReceiverDiscoverableAsync(true));
+        Assert.Equal(created.Credential, store.Load(ClientRole.Receiver, "receiver-client"));
         _ = await presenter.RequestToJoinReceiverAsync(created.SessionId);
         var descriptor = await joinRequested.Task.WaitAsync(TestTimeout);
         await receiver.ApprovePresenterAsync(created.SessionId, descriptor.ConnectionId);

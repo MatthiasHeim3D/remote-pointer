@@ -276,7 +276,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         ConnectionMessage =
             "Saved receiver and presenter roles share this Windows profile; automatic recovery was skipped.";
-        SetStatus("Create or join a new session for this client window.", false);
+        SetStatus("Request access to an available receiver in this client window.", false);
     }
 
     public void Dispose()
@@ -383,11 +383,11 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         {
             await relayClient.EndSessionAsync();
             ClearSessionState();
-            SetStatus("Presenter session ended.", false);
+            SetStatus("Disconnected from the receiver.", false);
         }
         catch (Exception exception)
         {
-            SetStatus($"The relay could not confirm session termination: {exception.Message}", true);
+            SetStatus($"The relay could not confirm disconnection: {exception.Message}", true);
         }
     }
 
@@ -434,7 +434,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         var sessionId = relayClient.SessionId;
         if (!IsSessionApproved || sessionId is null)
         {
-            SetStatus("Pointer dropped because there is no approved session.", true);
+            SetStatus("Pointer dropped because there is no approved receiver connection.", true);
             return;
         }
 

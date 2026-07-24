@@ -22,12 +22,11 @@ public sealed class MainWindowViewModelTests
             receiverRelayClient: relay);
 
         await viewModel.InitializeAsync();
-        viewModel.CreateReceiverSessionCommand.Execute(null);
-        viewModel.ReceiverDiscoverable = true;
-        viewModel.SetReceiverDiscoverableCommand.Execute(null);
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
 
         Assert.True(viewModel.ReceiverDiscoveryEnabled);
-        Assert.True(viewModel.CanSetReceiverDiscoverable);
+        Assert.True(viewModel.CanSetReceiverAvailability);
+        Assert.Equal(ReceiverAvailability.Available, viewModel.ReceiverAvailability);
         Assert.True(relay.IsDiscoverable);
     }
 
@@ -42,7 +41,8 @@ public sealed class MainWindowViewModelTests
             monitors,
             overlay,
             receiverRelayClient: relay);
-        viewModel.CreateReceiverSessionCommand.Execute(null);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
         monitors.Monitors = [CreateMonitor("DISPLAY1", isPrimary: true, width: 2_560)];
 
         await viewModel.HandleDisplayConfigurationChangedAsync();
@@ -97,7 +97,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void ReceiverSession_ApprovesPresenterAndDisplaysFreshPointerWithAcknowledgement()
+    public async Task ReceiverSession_ApprovesPresenterAndDisplaysFreshPointerWithAcknowledgement()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
         using var overlay = new FakeOverlayService();
@@ -107,7 +107,8 @@ public sealed class MainWindowViewModelTests
             overlay,
             receiverRelayClient: relay);
 
-        viewModel.CreateReceiverSessionCommand.Execute(null);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
         var presenter = new PresenterDescriptor(
             "connection-1",
             "presenter-1",
@@ -134,7 +135,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void ReceiverSession_DropsExpiredPointerWithoutAcknowledging()
+    public async Task ReceiverSession_DropsExpiredPointerWithoutAcknowledging()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
         using var overlay = new FakeOverlayService();
@@ -143,7 +144,8 @@ public sealed class MainWindowViewModelTests
             new FakeMonitorService([monitor]),
             overlay,
             receiverRelayClient: relay);
-        viewModel.CreateReceiverSessionCommand.Execute(null);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
         var expired = new PointerEventMessage(
             Guid.NewGuid(),
             "session-1",
@@ -161,7 +163,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void ReceiverSession_ForwardsGesturePayloadToOverlay()
+    public async Task ReceiverSession_ForwardsGesturePayloadToOverlay()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
         using var overlay = new FakeOverlayService();
@@ -170,7 +172,8 @@ public sealed class MainWindowViewModelTests
             new FakeMonitorService([monitor]),
             overlay,
             receiverRelayClient: relay);
-        viewModel.CreateReceiverSessionCommand.Execute(null);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
         var gestureId = Guid.NewGuid();
         var pointer = new PointerEventMessage(
             Guid.NewGuid(),
@@ -217,25 +220,25 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void ReceiverSession_EndFailureKeepsLocalSessionActive()
+    public async Task ReceiverAvailability_UpdateFailureKeepsPreviousState()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
         using var overlay = new FakeOverlayService();
         var relay = CreateReceiverRelay();
-        relay.EndException = new InvalidOperationException("Relay unavailable.");
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([monitor]),
             overlay,
             receiverRelayClient: relay);
-        viewModel.CreateReceiverSessionCommand.Execute(null);
-        overlay.Show(monitor);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
+        relay.DiscoverabilityException = new InvalidOperationException("Relay unavailable.");
 
-        viewModel.EndReceiverSessionCommand.Execute(null);
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Invisible);
 
         Assert.True(viewModel.HasReceiverSession);
-        Assert.True(overlay.IsVisible);
+        Assert.Equal(ReceiverAvailability.Available, viewModel.ReceiverAvailability);
         Assert.True(viewModel.IsError);
-        Assert.Contains("could not confirm", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("availability", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -332,6 +335,7 @@ public sealed class MainWindowViewModelTests
             expiresAt);
         return new FakeRelayClient
         {
+            Capabilities = new RelayCapabilities(true),
             CreateResponse = new CreateSessionResponse(
                 "session-1",
                 "AB2D4E",

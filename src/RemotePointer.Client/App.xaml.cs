@@ -62,7 +62,7 @@ public partial class App : System.Windows.Application
             exception: e.Exception);
         e.Handled = true;
         MessageBox.Show(
-            "Remote Pointer encountered an unexpected error and must close. The session can be recovered when the application restarts.",
+            "Remote Pointer encountered an unexpected error and must close. The connection can be recovered when the application restarts.",
             "Remote Pointer error",
             MessageBoxButton.OK,
             MessageBoxImage.Error);

@@ -89,6 +89,7 @@ public sealed class SessionManager : ISessionManager
                     rateLimitOptions.EventsPerSecond,
                     rateLimitOptions.BurstSize,
                     now));
+            session.IsDiscoverable = sessionOptions.ReceiverDiscoveryEnabled;
 
             sessions.Add(sessionId, session);
             pairingCodeSessions.Add(pairingCodeHash, sessionId);
@@ -326,7 +327,6 @@ public sealed class SessionManager : ISessionManager
                 secretGenerator.HashSecret(sessionToken),
                 secretGenerator.HashSecret(reconnectToken));
             session.PendingPresenter = null;
-            session.IsDiscoverable = false;
             connections[presenterConnectionId] = new ConnectionMembership(
                 session.Id,
                 ClientRole.Presenter,
@@ -495,6 +495,20 @@ public sealed class SessionManager : ISessionManager
             }
 
             var session = GetActiveSession(sessionId);
+            if (membership.Role == ClientRole.Presenter)
+            {
+                connections.Remove(connectionId);
+                session.Presenter = null;
+                return new SessionTerminationResult(
+                    session.Id,
+                    [connectionId],
+                    session.PointerCount,
+                    ReceiverPreserved: true,
+                    PresenterConnectionId: connectionId,
+                    ReceiverConnectionId: session.Receiver.ConnectionId,
+                    State: CreateState(session));
+            }
+
             return TerminateSessionNoLock(session);
         }
     }

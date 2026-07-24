@@ -47,7 +47,7 @@
                 <TextBlock Margin="0,8,0,0"
                            Foreground="#AEB8C8"
                            TextWrapping="Wrap"
-                           Text="Choose the monitor where incoming pointer markers should appear, create a session, and make it visible to presenters." />
+                           Text="Choose the monitor where incoming pointer markers should appear, then set this receiver to Available." />
             </StackPanel>
 
             <Border Grid.Row="1"
@@ -78,27 +78,21 @@
                     Background="#181E2A"
                     CornerRadius="8">
                 <StackPanel>
-                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Network session" />
+                    <TextBlock FontSize="16" FontWeight="SemiBold" Text="2. Availability" />
                     <TextBlock Margin="0,6,0,0" Foreground="#AEB8C8" TextWrapping="Wrap">
                         <Run Text="Relay: " />
                         <Run Text="{Binding ReceiverServerUrl, Mode=OneWay}" />
                     </TextBlock>
                     <TextBlock Margin="0,3,0,12" Foreground="#AEB8C8"
                                Text="{Binding ReceiverConnectionMessage, Mode=OneWay}" />
-                    <WrapPanel>
-                        <Button Command="{Binding CreateReceiverSessionCommand}"
-                                Content="Create session" />
-                        <Button Command="{Binding EndReceiverSessionCommand}"
-                                Background="#C35E65"
-                                Foreground="White"
-                                Content="End session" />
-                    </WrapPanel>
-                    <CheckBox Margin="0,8,0,0"
-                              Foreground="White"
-                              IsEnabled="{Binding CanSetReceiverDiscoverable}"
-                              IsChecked="{Binding ReceiverDiscoverable, Mode=TwoWay}"
-                              Command="{Binding SetReceiverDiscoverableCommand}"
-                              Content="Visible to presenters on this relay" />
+                    <TextBlock Margin="0,8,0,6"
+                               Foreground="#AEB8C8"
+                               Text="Receiver state" />
+                    <ComboBox MinHeight="38"
+                              Padding="8,5"
+                              IsEnabled="{Binding CanSetReceiverAvailability}"
+                              ItemsSource="{Binding ReceiverAvailabilityOptions}"
+                              SelectedItem="{Binding ReceiverAvailability, Mode=TwoWay}" />
                     <TextBlock Margin="0,4,0,10"
                                Foreground="#AEB8C8"
                                TextWrapping="Wrap"
@@ -196,10 +190,10 @@
                                 <Button Command="{Binding Presenter.EndSessionCommand}"
                                         Background="#C35E65"
                                         Foreground="White"
-                                        Content="End session" />
+                                        Content="Disconnect" />
                             </WrapPanel>
                             <TextBlock Margin="0,3,0,0" Foreground="#AEB8C8">
-                                <Run Text="Approved: " />
+                                <Run Text="Connected: " />
                                 <Run Text="{Binding Presenter.IsSessionApproved, Mode=OneWay}" />
                             </TextBlock>
                         </StackPanel>

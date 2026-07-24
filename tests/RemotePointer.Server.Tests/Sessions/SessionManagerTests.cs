@@ -31,14 +31,10 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void DiscoverableReceiver_CanReceiveDirectJoinRequestButStillRequiresApproval()
+    public void Receiver_IsAutomaticallyDiscoverableAndDirectJoinStillRequiresApproval()
     {
         var context = CreateContext(receiverDiscoveryEnabled: true);
         var created = CreateReceiver(context);
-        Assert.True(context.Manager.SetReceiverDiscoverable(
-            created.SessionId,
-            "receiver-connection",
-            true));
 
         var available = Assert.Single(context.Manager.GetAvailableReceivers());
         Assert.Equal(created.SessionId, available.SessionId);
@@ -79,10 +75,6 @@ public sealed class SessionManagerTests
     {
         var context = CreateContext(receiverDiscoveryEnabled: true);
         var created = CreateReceiver(context);
-        _ = context.Manager.SetReceiverDiscoverable(
-            created.SessionId,
-            "receiver-connection",
-            true);
         context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
 
         var expired = context.Manager.CollectExpiredSessions();
@@ -352,9 +344,9 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void EitherApprovedParticipant_CanEndSession()
+    public void PresenterEnd_PreservesAvailableReceiverForAnotherRequest()
     {
-        var context = CreateContext();
+        var context = CreateContext(receiverDiscoveryEnabled: true);
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.EndSession(
@@ -362,6 +354,31 @@ public sealed class SessionManagerTests
             approved.PresenterConnectionId);
 
         Assert.Equal(approved.Created.SessionId, result.SessionId);
+        Assert.True(result.ReceiverPreserved);
+        Assert.DoesNotContain("receiver-connection", result.ConnectionIds);
+        Assert.Contains(approved.PresenterConnectionId, result.ConnectionIds);
+        Assert.Equal(1, context.Manager.ActiveSessionCount);
+        Assert.Equal(
+            approved.Created.SessionId,
+            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
+        var nextJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(approved.Created.SessionId, "next-presenter", "1.0.0"),
+            "next-presenter-connection",
+            "Next Presenter");
+        Assert.True(nextJoin.Response.Accepted);
+    }
+
+    [Fact]
+    public void ReceiverEnd_RemovesReceiverAndPresenter()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var approved = CreateApprovedSession(context);
+
+        var result = context.Manager.EndSession(
+            approved.Created.SessionId,
+            "receiver-connection");
+
+        Assert.False(result.ReceiverPreserved);
         Assert.Contains("receiver-connection", result.ConnectionIds);
         Assert.Contains(approved.PresenterConnectionId, result.ConnectionIds);
         Assert.Equal(0, context.Manager.ActiveSessionCount);

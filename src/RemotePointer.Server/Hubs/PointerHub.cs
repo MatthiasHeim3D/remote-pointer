@@ -321,13 +321,35 @@ public sealed class PointerHub(
         try
         {
             var result = sessionManager.EndSession(sessionId, Context.ConnectionId);
-            await Clients.Group(GroupName(sessionId))
-                .SessionEnded("The session was ended by a participant.")
-                .ConfigureAwait(false);
+            if (result.ReceiverPreserved
+                && result.PresenterConnectionId is not null
+                && result.State is not null)
+            {
+                await Groups.RemoveFromGroupAsync(
+                        result.PresenterConnectionId,
+                        GroupName(sessionId))
+                    .ConfigureAwait(false);
+                await Clients.Client(result.PresenterConnectionId)
+                    .SessionEnded("Disconnected from the receiver.")
+                    .ConfigureAwait(false);
+                if (result.ReceiverConnectionId is not null)
+                {
+                    await Clients.Client(result.ReceiverConnectionId)
+                        .SessionApproved(result.State)
+                        .ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                await Clients.Group(GroupName(sessionId))
+                    .SessionEnded("The receiver connection ended and is no longer available.")
+                    .ConfigureAwait(false);
+            }
             logger.LogInformation(
                 AuditEventIds.SessionEnded,
-                "Session ended. SessionId={SessionId} PointerCount={PointerCount}",
+                "Connection ended. SessionId={SessionId} ReceiverPreserved={ReceiverPreserved} PointerCount={PointerCount}",
                 result.SessionId,
+                result.ReceiverPreserved,
                 result.PointerCount);
         }
         catch (SessionOperationException exception)

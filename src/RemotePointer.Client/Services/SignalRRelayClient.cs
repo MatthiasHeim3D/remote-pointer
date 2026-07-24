@@ -22,7 +22,6 @@ public sealed class SignalRRelayClient : IRelayClient
     private readonly SynchronizationContext? synchronizationContext;
     private readonly object stateLock = new();
     private bool disposed;
-    private bool receiverApproved;
     private SessionCredential? credential;
     private string? sessionId;
     private RelayConnectionStatus status = RelayConnectionStatus.Disconnected;
@@ -71,7 +70,6 @@ public sealed class SignalRRelayClient : IRelayClient
         {
             credential = sessionStore!.Load(expectedRole.Value, clientInstanceId);
             sessionId = credential?.SessionId;
-            receiverApproved = credential?.Role == ClientRole.Receiver;
         }
 
         synchronizationContext = SynchronizationContext.Current;
@@ -220,7 +218,7 @@ public sealed class SignalRRelayClient : IRelayClient
         CancellationToken cancellationToken = default)
     {
         var currentSessionId = SessionId
-            ?? throw new InvalidOperationException("No receiver session is active.");
+            ?? throw new InvalidOperationException("This receiver is not available on the relay.");
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         return await connection.InvokeAsync<bool>(
                 "SetReceiverDiscoverable",
@@ -263,7 +261,7 @@ public sealed class SignalRRelayClient : IRelayClient
     {
         EnsureValid(ContractValidator.Validate(display));
         var currentSessionId = SessionId
-            ?? throw new InvalidOperationException("No receiver session is active.");
+            ?? throw new InvalidOperationException("This receiver is not available on the relay.");
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await connection.InvokeAsync(
                 "UpdateReceiverDisplay",
@@ -351,7 +349,7 @@ public sealed class SignalRRelayClient : IRelayClient
         if (connection.State != HubConnectionState.Connected)
         {
             throw new InvalidOperationException(
-                "The relay is disconnected, so session termination could not be confirmed.");
+                "The relay is disconnected, so disconnection could not be confirmed.");
         }
 
         await connection.InvokeAsync("EndSession", currentSessionId, cancellationToken)
@@ -388,10 +386,9 @@ public sealed class SignalRRelayClient : IRelayClient
             "SessionApproved",
             state =>
             {
-                if (state.Approved && Credential is { } approvedCredential)
+                if (Credential is { } credentialToPersist)
                 {
-                    receiverApproved = approvedCredential.Role == ClientRole.Receiver;
-                    PersistCredential(approvedCredential);
+                    PersistCredential(credentialToPersist);
                 }
 
                 Publish(
@@ -566,10 +563,7 @@ public sealed class SignalRRelayClient : IRelayClient
             credential = newCredential;
         }
 
-        if (newCredential.Role == ClientRole.Presenter || receiverApproved)
-        {
-            PersistCredential(newCredential);
-        }
+        PersistCredential(newCredential);
     }
 
     private void PersistCredential(SessionCredential credentialToPersist)
@@ -605,7 +599,6 @@ public sealed class SignalRRelayClient : IRelayClient
             role = credential?.Role ?? expectedRole;
             sessionId = null;
             credential = null;
-            receiverApproved = false;
         }
 
         if (role is not null && sessionStore is not null)

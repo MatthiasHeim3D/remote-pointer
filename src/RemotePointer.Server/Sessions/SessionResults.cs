@@ -42,4 +42,8 @@ public sealed record ResumeSessionResult(
 public sealed record SessionTerminationResult(
     string SessionId,
     IReadOnlyList<string> ConnectionIds,
-    long PointerCount);
+    long PointerCount,
+    bool ReceiverPreserved = false,
+    string? PresenterConnectionId = null,
+    string? ReceiverConnectionId = null,
+    SessionStateMessage? State = null);

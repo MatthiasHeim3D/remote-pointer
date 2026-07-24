@@ -37,6 +37,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public bool IsDiscoverable { get; private set; }
 
+    public Exception? DiscoverabilityException { get; set; }
+
     public DisplayDescriptor? UpdatedReceiverDisplay { get; private set; }
 
     public string? RequestedReceiverSessionId { get; private set; }
@@ -90,6 +92,7 @@ internal sealed class FakeRelayClient : IRelayClient
         var response = CreateResponse ?? throw new InvalidOperationException("No create response configured.");
         SessionId = response.SessionId;
         Credential = response.Credential;
+        IsDiscoverable = Capabilities.ReceiverDiscoveryEnabled;
         return Task.FromResult(response);
     }
 
@@ -98,6 +101,11 @@ internal sealed class FakeRelayClient : IRelayClient
         CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
+        if (DiscoverabilityException is not null)
+        {
+            return Task.FromException<bool>(DiscoverabilityException);
+        }
+
         IsDiscoverable = discoverable;
         return Task.FromResult(discoverable);
     }

@@ -144,8 +144,12 @@ public partial class MainWindow : Window
             ? "Pointing active"
             : viewModel.Presenter.IsSessionApproved
                 ? "Presenter connected"
-                : viewModel.HasReceiverSession
-                    ? "Receiving session active"
+                : viewModel.HasConnectedPresenter
+                    ? "Receiving pointers"
+                    : viewModel.HasReceiverSession
+                    ? viewModel.ReceiverAvailability == ReceiverAvailability.Available
+                        ? "Receiver available"
+                        : "Receiver invisible"
                     : "Inactive";
         trayIcon.SetStatus(status);
     }
