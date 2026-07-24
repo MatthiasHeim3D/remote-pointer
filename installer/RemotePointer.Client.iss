@@ -46,6 +46,9 @@ Source: "{#RelayRootCertificate}"; DestDir: "{app}"; DestName: "relay-root.crt";
 [Icons]
 Name: "{userprograms}\Remote Pointer"; Filename: "{app}\RemotePointer.Client.exe"; WorkingDir: "{app}"
 
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "RemotePointer"; Flags: uninsdeletevalue
+
 [Run]
 #ifdef RelayRootCertificate
 Filename: "{sys}\certutil.exe"; Parameters: "-user -f -addstore Root ""{app}\relay-root.crt"""; StatusMsg: "Trusting the relay HTTPS certificate..."; Flags: runhidden waituntilterminated; Tasks: trustrelay
