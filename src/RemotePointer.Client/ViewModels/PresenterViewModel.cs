@@ -500,7 +500,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private async void OnPointerCaptured(object? sender, PointerCapturedEventArgs e)
     {
         if (e.Kind is PointerKind.Click or PointerKind.Text or PointerKind.PathEnd
-            or PointerKind.LineEnd or PointerKind.RectangleEnd)
+            or PointerKind.LineEnd or PointerKind.RectangleEnd or PointerKind.CircleEnd)
         {
             CapturedPointerCount++;
         }

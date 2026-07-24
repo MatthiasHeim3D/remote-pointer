@@ -75,6 +75,15 @@ internal sealed class PointerVisualRenderer
             case PointerKind.RectangleEnd:
                 UpdateRectangle(gestureId, point, end: true);
                 break;
+            case PointerKind.CircleStart:
+                StartCircle(gestureId, point);
+                break;
+            case PointerKind.CircleUpdate:
+                UpdateCircle(gestureId, point, end: false);
+                break;
+            case PointerKind.CircleEnd:
+                UpdateCircle(gestureId, point, end: true);
+                break;
             case PointerKind.Text when !string.IsNullOrWhiteSpace(text):
                 ShowText(point, text);
                 break;
@@ -204,6 +213,47 @@ internal sealed class PointerVisualRenderer
         rectangle.Width = Math.Abs(point.X - gesture.Start.X);
         rectangle.Height = Math.Abs(point.Y - gesture.Start.Y);
         CompleteOrTouch(gesture, end);
+    }
+
+    private void StartCircle(Guid? gestureId, Point point)
+    {
+        var circle = new Ellipse
+        {
+            Stroke = AccentBrush,
+            StrokeThickness = 4d,
+            Fill = AccentFillBrush,
+            IsHitTestVisible = false,
+        };
+        Canvas.SetLeft(circle, point.X);
+        Canvas.SetTop(circle, point.Y);
+        if (TryStartGesture(gestureId, circle, point, out var gesture))
+        {
+            TouchGesture(gesture);
+        }
+    }
+
+    private void UpdateCircle(Guid? gestureId, Point point, bool end)
+    {
+        if (!TryGetGesture<Ellipse>(gestureId, out var gesture, out var circle))
+        {
+            return;
+        }
+
+        var bounds = CalculateCircleBounds(gesture.Start, point);
+        Canvas.SetLeft(circle, bounds.Left);
+        Canvas.SetTop(circle, bounds.Top);
+        circle.Width = bounds.Width;
+        circle.Height = bounds.Height;
+        CompleteOrTouch(gesture, end);
+    }
+
+    internal static Rect CalculateCircleBounds(Point center, Point edge)
+    {
+        var radius = Math.Sqrt(
+            Math.Pow(edge.X - center.X, 2d)
+            + Math.Pow(edge.Y - center.Y, 2d));
+        var diameter = radius * 2d;
+        return new Rect(center.X - radius, center.Y - radius, diameter, diameter);
     }
 
     private void ShowText(Point point, string text)

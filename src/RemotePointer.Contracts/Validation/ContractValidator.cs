@@ -64,7 +64,8 @@ public static class ContractValidator
         var isGesture = message.Kind is
             PointerKind.PathStart or PointerKind.PathUpdate or PointerKind.PathEnd or
             PointerKind.LineStart or PointerKind.LineUpdate or PointerKind.LineEnd or
-            PointerKind.RectangleStart or PointerKind.RectangleUpdate or PointerKind.RectangleEnd;
+            PointerKind.RectangleStart or PointerKind.RectangleUpdate or PointerKind.RectangleEnd or
+            PointerKind.CircleStart or PointerKind.CircleUpdate or PointerKind.CircleEnd;
         if (isGesture && (!message.GestureId.HasValue || message.GestureId.Value == Guid.Empty))
         {
             AddRequired(errors, condition: false, nameof(message.GestureId));

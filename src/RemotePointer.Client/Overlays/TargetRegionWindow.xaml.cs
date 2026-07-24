@@ -278,8 +278,7 @@ public partial class TargetRegionWindow : Window
         e.Handled = true;
         activePointerButton = e.ChangedButton;
         pointerDownPosition = e.GetPosition(TargetSurface);
-        pointerDownWithShift = e.ChangedButton == MouseButton.Left
-            && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        pointerDownWithShift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         isPointerGestureActive = false;
         activeGestureId = Guid.Empty;
         pendingPathPoints.Clear();
@@ -438,16 +437,33 @@ public partial class TargetRegionWindow : Window
     private bool IsPathGesture() =>
         activePointerButton == MouseButton.Left && !pointerDownWithShift;
 
-    private PointerKind GetGestureKind(bool start, bool end)
+    private PointerKind GetGestureKind(bool start, bool end) => GetGestureKind(
+        activePointerButton ?? throw new InvalidOperationException("No pointer gesture is active."),
+        pointerDownWithShift,
+        start,
+        end);
+
+    internal static PointerKind GetGestureKind(
+        MouseButton pointerButton,
+        bool withShift,
+        bool start,
+        bool end)
     {
-        if (activePointerButton == MouseButton.Right)
+        if (pointerButton == MouseButton.Right)
         {
+            if (withShift)
+            {
+                return start
+                    ? PointerKind.CircleStart
+                    : end ? PointerKind.CircleEnd : PointerKind.CircleUpdate;
+            }
+
             return start
                 ? PointerKind.RectangleStart
                 : end ? PointerKind.RectangleEnd : PointerKind.RectangleUpdate;
         }
 
-        if (pointerDownWithShift)
+        if (withShift)
         {
             return start
                 ? PointerKind.LineStart

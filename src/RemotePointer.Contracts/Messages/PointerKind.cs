@@ -15,4 +15,7 @@ public enum PointerKind
     RectangleStart,
     RectangleUpdate,
     RectangleEnd,
+    CircleStart,
+    CircleUpdate,
+    CircleEnd,
 }

@@ -127,6 +127,9 @@ public sealed class PointerEventValidationTests
     [InlineData(PointerKind.RectangleStart)]
     [InlineData(PointerKind.RectangleUpdate)]
     [InlineData(PointerKind.RectangleEnd)]
+    [InlineData(PointerKind.CircleStart)]
+    [InlineData(PointerKind.CircleUpdate)]
+    [InlineData(PointerKind.CircleEnd)]
     public void Validate_RequiresGestureIdForGestureEvents(PointerKind kind)
     {
         var result = ContractValidator.Validate(CreateValidMessage() with { Kind = kind }, Now);

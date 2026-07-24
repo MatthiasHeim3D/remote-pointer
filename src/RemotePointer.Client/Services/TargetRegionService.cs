@@ -130,7 +130,7 @@ public sealed class TargetRegionService : ITargetRegionService
 
         SetState(
             TargetRegionState.Pointing,
-            "Pointing active. Click, drag, Shift+drag, Shift+click, or right-drag; press Esc or Ctrl+Alt+P to stop.");
+            "Pointing active. Click, drag, Shift+drag, Shift+click, right-drag, or Shift+right-drag; press Esc or Ctrl+Alt+P to stop.");
         var pointingWindow = window;
         pointingWindow.Show();
 
