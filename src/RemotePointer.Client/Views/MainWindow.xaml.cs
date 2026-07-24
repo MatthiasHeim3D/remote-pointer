@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.Win32;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Native;
@@ -51,12 +52,14 @@ public partial class MainWindow : Window
             receiverRelayClient,
             presenterRelayClient,
             settings.Pointer.DefaultTtlMilliseconds,
-            settings);
+            settings,
+            new StartupRegistrationService());
         DataContext = viewModel;
 
         trayIcon = new SystemTrayIcon(ShowFromTray, ExitFromTray);
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged += OnViewModelPropertyChanged;
+        viewModel.SettingsRestartRequested += OnSettingsRestartRequested;
         StateChanged += OnWindowStateChanged;
         Loaded += OnLoaded;
 
@@ -115,6 +118,7 @@ public partial class MainWindow : Window
         StateChanged -= OnWindowStateChanged;
         viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged -= OnViewModelPropertyChanged;
+        viewModel.SettingsRestartRequested -= OnSettingsRestartRequested;
         source?.RemoveHook(WindowMessageHook);
         source = null;
         hotKeyRegistration?.Dispose();
@@ -202,7 +206,52 @@ public partial class MainWindow : Window
         _ = e;
         if (!suppressAutoHide)
         {
+            viewModel.IsAvailabilityMenuOpen = false;
             Hide();
+        }
+    }
+
+    private void OnPreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        if (viewModel.IsAvailabilityMenuOpen
+            && !ProfileButton.IsMouseOver
+            && !AvailabilityPanel.IsMouseOver)
+        {
+            viewModel.IsAvailabilityMenuOpen = false;
+        }
+    }
+
+    private void OnSettingsRestartRequested(object? sender, EventArgs e)
+    {
+        suppressAutoHide = true;
+        try
+        {
+            var result = MessageBox.Show(
+                this,
+                "Some changes require Remote Pointer to restart. Restart now?",
+                "Restart Remote Pointer",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var executablePath = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(executablePath))
+            {
+                _ = Process.Start(new ProcessStartInfo(executablePath)
+                {
+                    UseShellExecute = true,
+                });
+                Application.Current.Shutdown();
+            }
+        }
+        finally
+        {
+            suppressAutoHide = false;
         }
     }
 

@@ -17,10 +17,12 @@ dotnet test RemotePointer.sln --configuration Release --no-build
 Start the local relay, then start two client processes:
 
 ```powershell
-dotnet run --project src\RemotePointer.Server --launch-profile https
-dotnet run --project src\RemotePointer.Client
-dotnet run --project src\RemotePointer.Client
+.\build\Start-Development.ps1
 ```
+
+The development launcher builds Debug by default, starts the HTTPS relay and two
+clients, and stops its processes when both clients close or the script is interrupted.
+Pass `-Configuration Release` to exercise Release output instead.
 
 In the first client, choose **Available**. In each sender client, select it from the visible-receiver list and request access. The receiver must approve every sender and can use **Disconnect all senders** from its dedicated receiving view. A receiver accepts up to its configured sender limit (two by default), remains discoverable while below that limit, and cannot initiate its own sender connection while receiving. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and each sender target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, and right-drag draws a box.
 

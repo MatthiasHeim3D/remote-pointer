@@ -248,6 +248,13 @@ public static class ContractValidator
         var errors = new List<ValidationError>();
         AddRequired(errors, IsRequiredIdentifier(state.SessionId), nameof(state.SessionId));
         AddRange(errors, state.ExpiresAt != default, nameof(state.ExpiresAt));
+        if (state.ReceiverClientInstanceId is not null)
+        {
+            AddRequired(
+                errors,
+                IsRequiredIdentifier(state.ReceiverClientInstanceId),
+                nameof(state.ReceiverClientInstanceId));
+        }
 
         if (state.ReceiverDisplay is not null)
         {

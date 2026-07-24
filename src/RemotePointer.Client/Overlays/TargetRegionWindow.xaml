@@ -131,46 +131,36 @@
                         </Grid>
                     </Border>
 
-                    <Border Margin="0,2,0,10"
-                            Padding="10,8"
-                            Background="#2D2D2D"
-                            CornerRadius="5">
-                        <StackPanel>
-                            <TextBlock x:Name="DimensionsText"
-                                       FontSize="12"
-                                       Foreground="#F0F0F0" />
-                            <TextBlock x:Name="ExpectedAspectText"
-                                       Margin="0,3,0,0"
-                                       FontSize="11"
-                                       Foreground="#AFAFAF" />
-                            <TextBlock x:Name="AspectWarningText"
-                                       Margin="0,5,0,0"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"
-                                       Foreground="#FF9D9D"
-                                       TextWrapping="Wrap"
-                                       Visibility="Collapsed" />
-                        </StackPanel>
-                    </Border>
+                    <StackPanel x:Name="AspectWarningPanel"
+                                Margin="0,2,0,10"
+                                Orientation="Horizontal"
+                                Visibility="Collapsed">
+                        <TextBlock VerticalAlignment="Center"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="15"
+                                   Foreground="#FFB900"
+                                   Text="&#xE7BA;" />
+                        <TextBlock Margin="7,0,0,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#FFD36A"
+                                   Text="Aspect ratio mismatch" />
+                    </StackPanel>
 
                     <WrapPanel Margin="0,0,0,11">
                         <CheckBox x:Name="AspectLockCheckBox"
-                                  Margin="0,0,18,5"
+                                  Margin="0,0,10,5"
                                   Checked="OnAspectLockChanged"
                                   Unchecked="OnAspectLockChanged"
                                   Content="Lock aspect ratio" />
-                        <CheckBox x:Name="AllowOverrideCheckBox"
-                                  Margin="0,0,10,5"
-                                  Foreground="#FFB3B3"
-                                  Content="Allow mismatch"
-                                  Visibility="Collapsed" />
                     </WrapPanel>
 
                     <WrapPanel>
                         <Button Margin="0,0,8,6"
                                 Style="{StaticResource PrimaryButtonStyle}"
                                 Click="OnLockClicked"
-                                Content="Lock region" />
+                                Content="Start" />
                         <Button Margin="0,0,8,6"
                                 Style="{StaticResource SecondaryButtonStyle}"
                                 Click="OnFullscreenClicked"

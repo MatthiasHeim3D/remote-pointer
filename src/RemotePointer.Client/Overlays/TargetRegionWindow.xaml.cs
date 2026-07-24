@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -67,9 +66,6 @@ public partial class TargetRegionWindow : Window
         gestureUpdateTimer.Tick += OnGestureUpdateTimerTick;
         ApplyRectangle(rectangle);
         AspectLockCheckBox.IsChecked = lockAspectRatio;
-        ExpectedAspectText.Text = string.Create(
-            CultureInfo.InvariantCulture,
-            $"Expected receiver aspect ratio: {ExpectedAspectRatio:0.###}:1");
         Loaded += (_, _) => UpdateMetrics();
         SizeChanged += (_, _) => UpdateMetrics();
     }
@@ -173,8 +169,14 @@ public partial class TargetRegionWindow : Window
 
     private void OnAspectLockChanged(object sender, RoutedEventArgs e)
     {
-        if (!IsInitialized || isPointingMode || AspectLockCheckBox.IsChecked != true)
+        if (!IsInitialized || isPointingMode)
         {
+            return;
+        }
+
+        if (AspectLockCheckBox.IsChecked != true)
+        {
+            UpdateMetrics();
             return;
         }
 
@@ -195,18 +197,6 @@ public partial class TargetRegionWindow : Window
     {
         var width = ActualWidth > 0d ? ActualWidth : Width;
         var height = ActualHeight > 0d ? ActualHeight : Height;
-        var differs = AspectRatio.ExceedsTolerance(
-            AspectRatio.Calculate(width, height),
-            ExpectedAspectRatio);
-
-        if (differs && AllowOverrideCheckBox.IsChecked != true)
-        {
-            AspectWarningText.Text = "The target differs by more than 2%. Enable Allow mismatch to override.";
-            AspectWarningText.Visibility = Visibility.Visible;
-            AllowOverrideCheckBox.Visibility = Visibility.Visible;
-            return;
-        }
-
         CalibrationLocked?.Invoke(
             this,
             new CalibrationLockedEventArgs(new RectangleD(Left, Top, width, height)));
@@ -216,7 +206,6 @@ public partial class TargetRegionWindow : Window
     private void OnResetClicked(object sender, RoutedEventArgs e)
     {
         ApplyRectangle(resetRectangle);
-        AllowOverrideCheckBox.IsChecked = false;
         UpdateMetrics();
         e.Handled = true;
     }
@@ -225,9 +214,6 @@ public partial class TargetRegionWindow : Window
     {
         if (!TryGetCurrentMonitorBounds(out var monitorBounds))
         {
-            AspectWarningText.Text = "The current monitor bounds could not be determined.";
-            AspectWarningText.Foreground = new SolidColorBrush(Color.FromRgb(255, 157, 157));
-            AspectWarningText.Visibility = Visibility.Visible;
             e.Handled = true;
             return;
         }
@@ -236,7 +222,6 @@ public partial class TargetRegionWindow : Window
             monitorBounds,
             ExpectedAspectRatio,
             AspectLockCheckBox.IsChecked == true));
-        AllowOverrideCheckBox.IsChecked = false;
         UpdateMetrics();
         e.Handled = true;
     }
@@ -582,25 +567,11 @@ public partial class TargetRegionWindow : Window
             return;
         }
 
-        var ratio = AspectRatio.Calculate(width, height);
-        var difference = TargetRegionGeometry.DifferenceFromExpected(width, height, ExpectedAspectRatio);
-        DimensionsText.Text = string.Create(
-            CultureInfo.InvariantCulture,
-            $"{width:0} × {height:0} DIPs  •  {ratio:0.###}:1  •  difference {difference:P1}");
-
-        var differs = AspectRatio.ExceedsTolerance(ratio, ExpectedAspectRatio);
-        AspectWarningText.Text = differs
-            ? "Aspect ratio differs from the receiver by more than 2%."
-            : "Aspect ratio is within the 2% tolerance.";
-        AspectWarningText.Foreground = differs
-            ? new SolidColorBrush(Color.FromRgb(255, 157, 157))
-            : new SolidColorBrush(Color.FromRgb(143, 220, 181));
-        AspectWarningText.Visibility = Visibility.Visible;
-        AllowOverrideCheckBox.Visibility = differs ? Visibility.Visible : Visibility.Collapsed;
-        if (!differs)
-        {
-            AllowOverrideCheckBox.IsChecked = false;
-        }
+        var differs = AspectLockCheckBox.IsChecked != true
+            && AspectRatio.ExceedsTolerance(
+                AspectRatio.Calculate(width, height),
+                ExpectedAspectRatio);
+        AspectWarningPanel.Visibility = differs ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ApplyRectangle(RectangleD rectangle)

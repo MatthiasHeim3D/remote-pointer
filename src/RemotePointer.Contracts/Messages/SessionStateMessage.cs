@@ -6,4 +6,5 @@ public sealed record SessionStateMessage(
     DisplayDescriptor? ReceiverDisplay,
     DateTimeOffset ExpiresAt,
     bool ReceiverDiscoverable = false,
-    ConnectedPresenterDescriptor[]? ConnectedPresenters = null);
+    ConnectedPresenterDescriptor[]? ConnectedPresenters = null,
+    string? ReceiverClientInstanceId = null);

@@ -16,6 +16,8 @@ public sealed class ClientSettings
 
     public ReceiverSettings Receiver { get; init; } = new();
 
+    public StartupSettings Startup { get; init; } = new();
+
     public static ClientSettings Load(string? baseDirectory = null)
     {
         return Load(
@@ -62,7 +64,8 @@ public sealed class ClientSettings
         string serverAddress,
         string userName,
         string? profilePicturePath,
-        int? maximumSenderConnections = null)
+        int? maximumSenderConnections = null,
+        bool? launchAtStartup = null)
     {
         Server.BaseUrl = serverAddress.Trim();
         Profile.UserName = userName.Trim();
@@ -70,6 +73,10 @@ public sealed class ClientSettings
         if (maximumSenderConnections.HasValue)
         {
             Receiver.MaximumSenderConnections = maximumSenderConnections.Value;
+        }
+        if (launchAtStartup.HasValue)
+        {
+            Startup.LaunchAtStartup = launchAtStartup.Value;
         }
         Validate();
 
@@ -84,7 +91,8 @@ public sealed class ClientSettings
                 Server.BaseUrl,
                 Profile.UserName,
                 Profile.PicturePath,
-                Receiver.MaximumSenderConnections),
+                Receiver.MaximumSenderConnections,
+                Startup.LaunchAtStartup),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -144,6 +152,7 @@ public sealed class ClientSettings
         Receiver.MaximumSenderConnections = preferences.MaximumSenderConnections <= 0
             ? 2
             : preferences.MaximumSenderConnections;
+        Startup.LaunchAtStartup = preferences.LaunchAtStartup;
     }
 
     private static string GetDefaultUserPreferencesPath() => Path.Combine(
@@ -155,7 +164,8 @@ public sealed class ClientSettings
         string ServerAddress,
         string UserName,
         string ProfilePicturePath,
-        int MaximumSenderConnections = 2);
+        int MaximumSenderConnections = 2,
+        bool LaunchAtStartup = false);
 }
 
 public sealed class ServerSettings
@@ -189,4 +199,9 @@ public sealed class UserProfileSettings
 public sealed class ReceiverSettings
 {
     public int MaximumSenderConnections { get; set; } = 2;
+}
+
+public sealed class StartupSettings
+{
+    public bool LaunchAtStartup { get; set; }
 }

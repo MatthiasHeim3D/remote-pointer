@@ -8,7 +8,9 @@ namespace RemotePointer.Client.Services;
 
 public sealed class TargetRegionService : ITargetRegionService
 {
+    private readonly TargetRegionCalibrationStore calibrationStore;
     private RectangleD? calibratedRectangle;
+    private string? calibrationIdentity;
     private bool disposed;
     private double expectedAspectRatio = 16d / 9d;
     private TargetRegionWindow? window;
@@ -18,6 +20,20 @@ public sealed class TargetRegionService : ITargetRegionService
     public event EventHandler<PointerCapturedEventArgs>? PointerCaptured;
 
     public TargetRegionState State { get; private set; } = TargetRegionState.Inactive;
+
+    public TargetRegionService(TargetRegionCalibrationStore? calibrationStore = null)
+    {
+        this.calibrationStore = calibrationStore ?? new TargetRegionCalibrationStore();
+    }
+
+    public void SetCalibrationIdentity(string? receiverIdentity)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        calibrationIdentity = string.IsNullOrWhiteSpace(receiverIdentity) ? null : receiverIdentity;
+        calibratedRectangle = calibrationIdentity is null
+            ? null
+            : calibrationStore.Load(calibrationIdentity);
+    }
 
     public void BeginCalibration(double expectedAspectRatio)
     {
@@ -43,7 +59,7 @@ public sealed class TargetRegionService : ITargetRegionService
 
         SetState(
             TargetRegionState.Calibrating,
-            "Move and resize the target window, then lock the region.");
+            "Move and resize the target window, then start pointing.");
         window.Show();
         _ = window.Activate();
     }
@@ -71,7 +87,6 @@ public sealed class TargetRegionService : ITargetRegionService
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        calibratedRectangle = null;
         CloseWindow();
         SetState(TargetRegionState.Inactive, message);
     }
@@ -86,12 +101,13 @@ public sealed class TargetRegionService : ITargetRegionService
             return;
         }
 
+        BeginCalibration(expectedAspectRatio);
+    }
+
+    private void EnterPointingMode()
+    {
         if (calibratedRectangle is null)
         {
-            SetState(
-                TargetRegionState.Inactive,
-                "Calibrate and lock a target region before enabling pointing.",
-                isError: true);
             return;
         }
 
@@ -176,8 +192,13 @@ public sealed class TargetRegionService : ITargetRegionService
     private void OnCalibrationLocked(object? sender, CalibrationLockedEventArgs e)
     {
         calibratedRectangle = e.Rectangle;
+        if (calibrationIdentity is not null)
+        {
+            calibrationStore.Save(calibrationIdentity, e.Rectangle);
+        }
+
         CloseWindow();
-        SetState(TargetRegionState.Ready, "Target region locked. Enable pointing when ready.");
+        EnterPointingMode();
     }
 
     private void OnCalibrationCancelled(object? sender, EventArgs e)

@@ -8,6 +8,8 @@ public interface ITargetRegionService : IDisposable
 
     TargetRegionState State { get; }
 
+    void SetCalibrationIdentity(string? receiverIdentity);
+
     void BeginCalibration(double expectedAspectRatio);
 
     void UpdateExpectedAspectRatio(double expectedAspectRatio);

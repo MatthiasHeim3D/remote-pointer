@@ -179,11 +179,13 @@ public sealed class PresenterViewModelTests
                 "session-1",
                 true,
                 new DisplayDescriptor("display", "Display", 2_560, 1_440, 1d, 0),
-                DateTimeOffset.UtcNow.AddHours(8)));
+                DateTimeOffset.UtcNow.AddHours(8),
+                ReceiverClientInstanceId: "receiver-client-id"));
 
         viewModel.CalibrateCommand.Execute(null);
 
         Assert.Equal(16d / 9d, service.RequestedAspectRatio, precision: 12);
+        Assert.Equal("receiver-client-id", service.CalibrationIdentity);
     }
 
     [Fact]
@@ -218,15 +220,15 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
-    public void TogglePointingMode_RequiresLockedCalibration()
+    public void TogglePointingMode_OpensCalibrationWhenInactive()
     {
         using var service = new FakeTargetRegionService();
         using var viewModel = new PresenterViewModel(service);
 
         viewModel.TogglePointingMode();
 
-        Assert.Equal(0, service.ToggleCount);
-        Assert.True(viewModel.IsError);
+        Assert.Equal(1, service.ToggleCount);
+        Assert.False(viewModel.IsError);
     }
 
     [Fact]
@@ -300,6 +302,11 @@ public sealed class PresenterViewModelTests
         public int ToggleCount { get; private set; }
 
         public int ExitCount { get; private set; }
+
+        public string? CalibrationIdentity { get; private set; }
+
+        public void SetCalibrationIdentity(string? receiverIdentity) =>
+            CalibrationIdentity = receiverIdentity;
 
         public void BeginCalibration(double expectedAspectRatio)
         {

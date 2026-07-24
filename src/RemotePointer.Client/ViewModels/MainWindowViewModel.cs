@@ -19,6 +19,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IReceiverOverlayService overlayService;
     private readonly IRelayClient? receiverRelayClient;
     private readonly ClientSettings? clientSettings;
+    private readonly IStartupRegistrationService? startupRegistrationService;
+    private readonly RelayCommand decrementMaximumSendersCommand;
+    private readonly RelayCommand incrementMaximumSendersCommand;
     private bool disposed;
     private bool isError;
     private bool isOverlayVisible;
@@ -37,6 +40,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string serverAddress;
     private string userName;
     private int maximumSenderConnections;
+    private bool isLaunchAtStartup;
+
+    public event EventHandler? SettingsRestartRequested;
 
     public MainWindowViewModel(
         IMonitorService monitorService,
@@ -45,18 +51,23 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IRelayClient? receiverRelayClient = null,
         IRelayClient? presenterRelayClient = null,
         int pointerTtlMilliseconds = 2_000,
-        ClientSettings? clientSettings = null)
+        ClientSettings? clientSettings = null,
+        IStartupRegistrationService? startupRegistrationService = null)
     {
         this.monitorService = monitorService ?? throw new ArgumentNullException(nameof(monitorService));
         this.overlayService = overlayService ?? throw new ArgumentNullException(nameof(overlayService));
         this.receiverRelayClient = receiverRelayClient;
         this.clientSettings = clientSettings;
+        this.startupRegistrationService = startupRegistrationService;
         serverAddress = clientSettings?.Server.BaseUrl
             ?? receiverRelayClient?.ServerUrl
             ?? "https://localhost:7243";
         userName = clientSettings?.Profile.UserName ?? Environment.UserName;
         profilePicturePath = clientSettings?.Profile.PicturePath ?? string.Empty;
         maximumSenderConnections = clientSettings?.Receiver.MaximumSenderConnections ?? 2;
+        isLaunchAtStartup = startupRegistrationService?.IsEnabled
+            ?? clientSettings?.Startup.LaunchAtStartup
+            ?? false;
         this.overlayService.StateChanged += OnOverlayStateChanged;
         Presenter = new PresenterViewModel(
             targetRegionService ?? new TargetRegionService(),
@@ -112,6 +123,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             IsSettingsOpen = false;
         });
         SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
+        incrementMaximumSendersCommand = new RelayCommand(
+            _ => MaximumSenderConnections++,
+            _ => MaximumSenderConnections < 16);
+        decrementMaximumSendersCommand = new RelayCommand(
+            _ => MaximumSenderConnections--,
+            _ => MaximumSenderConnections > 1);
 
         RefreshMonitors();
     }
@@ -266,7 +283,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public int MaximumSenderConnections
     {
         get => maximumSenderConnections;
-        set => SetProperty(ref maximumSenderConnections, value);
+        set
+        {
+            if (SetProperty(ref maximumSenderConnections, Math.Clamp(value, 1, 16)))
+            {
+                incrementMaximumSendersCommand.RaiseCanExecuteChanged();
+                decrementMaximumSendersCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool IsLaunchAtStartup
+    {
+        get => isLaunchAtStartup;
+        set => SetProperty(ref isLaunchAtStartup, value);
     }
 
     public string ConnectedPresenterCountLabel =>
@@ -275,9 +305,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public string FlyoutConnectionMessage => HasConnectedPresenter
         ? ConnectedPresenterCountLabel
         : Presenter.ConnectionMessage;
-
-    public IReadOnlyList<int> MaximumSenderConnectionOptions { get; } =
-        Enumerable.Range(1, 16).ToArray();
 
     public string ProfileInitials
     {
@@ -315,6 +342,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand ToggleAvailabilityMenuCommand { get; }
 
     public ICommand SaveSettingsCommand { get; }
+
+    public ICommand IncrementMaximumSendersCommand => incrementMaximumSendersCommand;
+
+    public ICommand DecrementMaximumSendersCommand => decrementMaximumSendersCommand;
 
     public async Task SetReceiverAvailabilityAsync(ReceiverAvailability availability)
     {
@@ -736,15 +767,29 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
+            var requiresRestart = !string.Equals(
+                    clientSettings.Server.BaseUrl,
+                    ServerAddress.Trim(),
+                    StringComparison.Ordinal)
+                || !string.Equals(clientSettings.Profile.UserName, UserName.Trim(), StringComparison.Ordinal)
+                || !string.Equals(
+                    clientSettings.Profile.PicturePath,
+                    ProfilePicturePath.Trim(),
+                    StringComparison.Ordinal)
+                || clientSettings.Receiver.MaximumSenderConnections != MaximumSenderConnections;
             clientSettings.SaveUserPreferences(
                 ServerAddress,
                 UserName,
                 ProfilePicturePath,
-                MaximumSenderConnections);
-            SetStatus(
-                "Settings saved. Restart Remote Pointer to apply connection and advertised profile changes.",
-                false);
+                MaximumSenderConnections,
+                IsLaunchAtStartup);
+            startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
+            SetStatus("Settings saved.", false);
             IsSettingsOpen = false;
+            if (requiresRestart)
+            {
+                SettingsRestartRequested?.Invoke(this, EventArgs.Empty);
+            }
         }
         catch (Exception exception) when (
             exception is InvalidOperationException or IOException or UnauthorizedAccessException)

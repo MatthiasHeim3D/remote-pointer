@@ -54,13 +54,15 @@ public sealed class ClientSettingsTests
             "https://saved.example.test",
             "Ada Lovelace",
             @"C:\Pictures\ada.png",
-            maximumSenderConnections: 4);
+            maximumSenderConnections: 4,
+            launchAtStartup: true);
         var reloaded = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://saved.example.test", reloaded.Server.BaseUrl);
         Assert.Equal("Ada Lovelace", reloaded.Profile.UserName);
         Assert.Equal(@"C:\Pictures\ada.png", reloaded.Profile.PicturePath);
         Assert.Equal(4, reloaded.Receiver.MaximumSenderConnections);
+        Assert.True(reloaded.Startup.LaunchAtStartup);
     }
 
     [Fact]

@@ -927,7 +927,8 @@ public sealed class SessionManager : ISessionManager
             .Select(presenter => new ConnectedPresenterDescriptor(
                 presenter.Descriptor.DisplayName))
             .OrderBy(presenter => presenter.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToArray());
+            .ToArray(),
+        session.Receiver.ClientInstanceId);
 
     private sealed class SessionRecord(
         string id,

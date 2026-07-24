@@ -70,7 +70,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             _ => relayClient is null || IsSessionApproved);
         togglePointingCommand = new RelayCommand(
             _ => TogglePointingMode(),
-            _ => State is TargetRegionState.Ready or TargetRegionState.Pointing
+            _ => State != TargetRegionState.Calibrating
                 && (relayClient is null || IsSessionApproved));
         ExitPointingCommand = new RelayCommand(_ => targetRegionService.ExitPointingMode());
         refreshReceiversCommand = new AsyncRelayCommand(
@@ -295,12 +295,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         if (relayClient is not null && !IsSessionApproved)
         {
             SetStatus("Wait for receiver approval before enabling pointing.", isError: true);
-            return;
-        }
-
-        if (State is not (TargetRegionState.Ready or TargetRegionState.Pointing))
-        {
-            SetStatus("Calibrate and lock a target region before enabling pointing.", isError: true);
             return;
         }
 
@@ -529,6 +523,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
         IsJoinPending = false;
         IsSessionApproved = true;
+        targetRegionService.SetCalibrationIdentity(
+            e.State.ReceiverClientInstanceId ?? CurrentReceiverName);
         if (e.State.ReceiverDisplay is not null)
         {
             ApplyReceiverDisplay(e.State.ReceiverDisplay);
@@ -580,6 +576,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         IsJoinPending = false;
         IsSessionApproved = false;
+        targetRegionService.SetCalibrationIdentity(null);
         receiverDisplay = null;
         CurrentReceiverName = "Connected receiver";
         RaisePropertyChanged(nameof(ReceiverDisplayShape));
