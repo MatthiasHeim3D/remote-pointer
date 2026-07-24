@@ -808,11 +808,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var serverAddressChanged = false;
         try
         {
             var savedServerAddress = clientSettings.Server.BaseUrl;
             var requestedServerAddress = ServerAddress.Trim();
-            var serverAddressChanged = !string.Equals(
+            serverAddressChanged = !string.Equals(
                 savedServerAddress,
                 requestedServerAddress,
                 StringComparison.Ordinal);
@@ -841,31 +842,40 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 IsLaunchAtStartup,
                 SelectedMonitor?.Display.DisplayId,
                 ShowExitHint);
-            if (!serverAddressChanged)
-            {
-                await Task.WhenAll(
-                    receiverRelayClient?.ApplyClientSettingsAsync(
-                        UserName,
-                        ProfilePicturePath,
-                        MaximumSenderConnections) ?? Task.CompletedTask,
-                    Presenter.ApplyClientSettingsAsync(
-                        UserName,
-                        ProfilePicturePath,
-                        MaximumSenderConnections));
-            }
-
             Presenter.SetShowExitHint(ShowExitHint);
             startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
             SetStatus("Settings saved.", false);
             IsSettingsOpen = false;
-            if (serverAddressChanged)
-            {
-                RelayReinitializationRequested?.Invoke(this, EventArgs.Empty);
-            }
         }
         catch (Exception exception)
         {
             SetStatus($"Settings could not be saved: {exception.Message}", true);
+            return;
+        }
+
+        if (serverAddressChanged)
+        {
+            RelayReinitializationRequested?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        try
+        {
+            await Task.WhenAll(
+                receiverRelayClient?.ApplyClientSettingsAsync(
+                    UserName,
+                    ProfilePicturePath,
+                    MaximumSenderConnections) ?? Task.CompletedTask,
+                Presenter.ApplyClientSettingsAsync(
+                    UserName,
+                    ProfilePicturePath,
+                    MaximumSenderConnections));
+        }
+        catch (Exception exception)
+        {
+            SetStatus(
+                $"Settings were saved, but the active connection could not be updated: {exception.Message}",
+                true);
         }
     }
 
