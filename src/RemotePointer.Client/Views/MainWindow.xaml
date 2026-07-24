@@ -678,12 +678,6 @@
                         <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
                     </ScrollViewer.Resources>
                     <StackPanel>
-                    <TextBlock Margin="0,0,0,10"
-                               Style="{StaticResource SettingsSectionHeaderStyle}"
-                               Text="Connection" />
-                    <TextBlock Margin="0,0,0,6" Text="Server address" />
-                    <TextBox Text="{Binding ServerAddress, UpdateSourceTrigger=PropertyChanged}" />
-
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
                                Text="Profile" />
                     <TextBlock Margin="0,0,0,6" Text="Username" />
@@ -793,6 +787,11 @@
                               Style="{StaticResource ToggleSwitchStyle}"
                               IsChecked="{Binding IsLaunchAtStartup}"
                               Content="Launch at startup" />
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Connection" />
+                    <TextBlock Margin="0,0,0,6" Text="Server address" />
+                    <TextBox Text="{Binding ServerAddress, UpdateSourceTrigger=PropertyChanged}" />
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
