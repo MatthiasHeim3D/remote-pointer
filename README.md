@@ -37,3 +37,7 @@ Docker Compose runs the relay behind Caddy HTTPS. Inno Setup produces a self-con
 ```
 
 No MSI, WiX, corporate code-signing certificate, machine policy, service, driver, or inbound client firewall rule is required. See [server deployment](docs/server-deployment.md), [client deployment](docs/deployment.md), and [architecture](docs/architecture.md).
+
+## Versioning
+
+The repository uses Nerdbank.GitVersioning with the shared root [version.json](version.json). Its `1.0` base version becomes `1.0.<git-height>`, so every commit affects the client and relay together, even when only one changes. The installer build derives its version automatically; do not supply a version number manually. Pushes to `main` publish the relay image to GitHub Container Registry with the same numeric version and `latest` tag.

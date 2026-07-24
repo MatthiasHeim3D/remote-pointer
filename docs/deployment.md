@@ -6,7 +6,6 @@ The relay URL is built into the installer. If the relay's HTTPS certificate chai
 
 ```powershell
 .\build\Build-Installer.ps1 `
-  -Version 1.0.0 `
   -ServerUrl https://pointer.example.com
 ```
 
@@ -14,16 +13,15 @@ If the relay instead uses Caddy's private CA (see [server-deployment.md](server-
 
 ```powershell
 .\build\Build-Installer.ps1 `
-  -Version 1.0.0 `
   -ServerUrl https://pointer.internal.example `
   -RelayRootCertificatePath .\relay-root.crt
 ```
 
-Build prerequisites are the .NET 10 SDK and Inno Setup 6. The output is:
+Build prerequisites are the .NET 10 SDK and Inno Setup 6. Nerdbank.GitVersioning calculates the installer version from the repository's shared root `version.json`; no version argument is required. The output is:
 
 ```text
-artifacts\installer\RemotePointer.Client-1.0.0-x64-Setup.exe
-artifacts\installer\RemotePointer.Client-1.0.0-x64-Setup.exe.sha256
+artifacts\installer\RemotePointer.Client-<version>-x64-Setup.exe
+artifacts\installer\RemotePointer.Client-<version>-x64-Setup.exe.sha256
 ```
 
 No MSI, WiX, signing certificate, machine configuration, service, driver, or inbound firewall rule is involved. Because the installer is intentionally unsigned, distribute it and its SHA-256 file from a restricted internal share or another authenticated internal channel.

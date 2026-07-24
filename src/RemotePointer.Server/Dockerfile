@@ -1,16 +1,18 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /source
 
-COPY Directory.Build.props Directory.Packages.props ./
+COPY Directory.Build.props Directory.Packages.props version.json ./
 COPY src/RemotePointer.Contracts/RemotePointer.Contracts.csproj src/RemotePointer.Contracts/
 COPY src/RemotePointer.Server/RemotePointer.Server.csproj src/RemotePointer.Server/
 RUN dotnet restore src/RemotePointer.Server/RemotePointer.Server.csproj
 
 COPY src/RemotePointer.Contracts/ src/RemotePointer.Contracts/
 COPY src/RemotePointer.Server/ src/RemotePointer.Server/
+COPY .git/ .git/
 RUN dotnet publish src/RemotePointer.Server/RemotePointer.Server.csproj \
     --configuration Release \
     --no-restore \
+    -p:PublicRelease=true \
     --output /output
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

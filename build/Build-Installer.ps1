@@ -1,8 +1,5 @@
 [CmdletBinding()]
 param(
-    [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version = '1.0.0',
-
     [Parameter(Mandatory)]
     [uri]$ServerUrl,
 
@@ -71,12 +68,28 @@ $installerScript = Join-Path $repositoryRoot 'installer\RemotePointer.Client.iss
 $publishDirectory = Join-Path $repositoryRoot 'artifacts\publish\client\win-x64'
 $installerDirectory = Join-Path $repositoryRoot 'artifacts\installer'
 
+Push-Location $repositoryRoot
+try {
+    & dotnet tool restore
+    if ($LASTEXITCODE -ne 0) {
+        throw "Nerdbank.GitVersioning tool restore failed with exit code $LASTEXITCODE."
+    }
+
+    $Version = (& dotnet nbgv get-version --public-release -v NuGetPackageVersion).Trim()
+    if ($LASTEXITCODE -ne 0 -or $Version -notmatch '^\d+\.\d+\.\d+$') {
+        throw 'Could not determine the numeric build version from Nerdbank.GitVersioning.'
+    }
+}
+finally {
+    Pop-Location
+}
+
 & dotnet publish $clientProject `
     --configuration Release `
     --runtime win-x64 `
     --self-contained true `
     --output $publishDirectory `
-    "-p:Version=$Version" `
+    '-p:PublicRelease=true' `
     '-p:DebugType=None'
 if ($LASTEXITCODE -ne 0) {
     throw "Client publish failed with exit code $LASTEXITCODE."
