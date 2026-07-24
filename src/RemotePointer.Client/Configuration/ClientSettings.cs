@@ -67,7 +67,7 @@ public sealed class ClientSettings
         int? maximumSenderConnections = null,
         bool? launchAtStartup = null,
         string? selectedDisplayId = null,
-        bool? showExitHint = null)
+        bool? showUsageHints = null)
     {
         Server.BaseUrl = serverAddress.Trim();
         Profile.UserName = userName.Trim();
@@ -81,9 +81,9 @@ public sealed class ClientSettings
             Startup.LaunchAtStartup = launchAtStartup.Value;
         }
         Receiver.SelectedDisplayId = selectedDisplayId?.Trim() ?? string.Empty;
-        if (showExitHint.HasValue)
+        if (showUsageHints.HasValue)
         {
-            Pointer.ShowExitHint = showExitHint.Value;
+            Pointer.ShowUsageHints = showUsageHints.Value;
         }
         Validate();
 
@@ -101,7 +101,7 @@ public sealed class ClientSettings
                 Receiver.MaximumSenderConnections,
                 Startup.LaunchAtStartup,
                 Receiver.SelectedDisplayId,
-                Pointer.ShowExitHint),
+                ShowUsageHints: Pointer.ShowUsageHints),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -163,7 +163,7 @@ public sealed class ClientSettings
             : preferences.MaximumSenderConnections;
         Receiver.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
-        Pointer.ShowExitHint = preferences.ShowExitHint;
+        Pointer.ShowUsageHints = preferences.ShowUsageHints;
     }
 
     private static string GetDefaultUserPreferencesPath() => Path.Combine(
@@ -178,7 +178,7 @@ public sealed class ClientSettings
         int MaximumSenderConnections = 2,
         bool LaunchAtStartup = false,
         string SelectedDisplayId = "",
-        bool ShowExitHint = true);
+        bool ShowUsageHints = true);
 }
 
 public sealed class ServerSettings
@@ -196,7 +196,7 @@ public sealed class PointerSettings
 
     public string ToggleHotKey { get; init; } = "Ctrl+Alt+P";
 
-    public bool ShowExitHint { get; set; } = true;
+    public bool ShowUsageHints { get; set; } = true;
 }
 
 public sealed class PrivacySettings

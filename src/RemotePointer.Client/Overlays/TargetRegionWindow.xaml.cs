@@ -36,6 +36,7 @@ public partial class TargetRegionWindow : Window
     private bool gestureUpdatePending;
     private long lastGestureSentAt;
     private bool isPointingMode;
+    private bool isUsageHelpCollapsed;
     private bool isResizeDragActive;
     private NativePoint resizeDragStartCursor;
     private double resizeDragStartWidth;
@@ -48,7 +49,7 @@ public partial class TargetRegionWindow : Window
         RectangleD resetRectangle,
         double expectedAspectRatio,
         bool lockAspectRatio,
-        bool showExitHint = true)
+        bool showUsageHints = true)
     {
         if (!double.IsFinite(expectedAspectRatio) || expectedAspectRatio <= 0d)
         {
@@ -57,7 +58,7 @@ public partial class TargetRegionWindow : Window
 
         this.resetRectangle = resetRectangle;
         ExpectedAspectRatio = expectedAspectRatio;
-        ShowExitHint = showExitHint;
+        ShowUsageHints = showUsageHints;
 
         InitializeComponent();
         pointerVisuals = new PointerVisualRenderer(RippleCanvas);
@@ -82,13 +83,15 @@ public partial class TargetRegionWindow : Window
 
     public double ExpectedAspectRatio { get; }
 
-    public bool ShowExitHint { get; }
+    public bool ShowUsageHints { get; }
 
     public void EnterPointingMode()
     {
         isPointingMode = true;
+        isUsageHelpCollapsed = false;
         CalibrationPanel.Visibility = Visibility.Collapsed;
-        PointingExitHint.Visibility = ShowExitHint ? Visibility.Visible : Visibility.Collapsed;
+        PointingExitHint.Visibility = ShowUsageHints ? Visibility.Visible : Visibility.Collapsed;
+        UpdateUsageHelpVisibility();
         ResizeThumb.Visibility = Visibility.Collapsed;
         OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92));
         OuterBorder.BorderThickness = new Thickness(2d);
@@ -260,7 +263,22 @@ public partial class TargetRegionWindow : Window
         {
             e.Handled = true;
             PointingExitRequested?.Invoke(this, EventArgs.Empty);
+            return;
         }
+
+        if (isPointingMode && e.Key == Key.H)
+        {
+            e.Handled = true;
+            isUsageHelpCollapsed = !isUsageHelpCollapsed;
+            UpdateUsageHelpVisibility();
+        }
+    }
+
+    private void UpdateUsageHelpVisibility()
+    {
+        PointingUsageHint.Visibility = ShowUsageHints && !isUsageHelpCollapsed
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)

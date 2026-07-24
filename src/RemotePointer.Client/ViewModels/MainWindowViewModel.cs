@@ -41,7 +41,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string userName;
     private int maximumSenderConnections;
     private bool isLaunchAtStartup;
-    private bool showExitHint = true;
+    private bool showUsageHints = true;
 
     public event EventHandler<ServerAddressChangeRequestedEventArgs>? ServerAddressChangeRequested;
 
@@ -71,13 +71,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         isLaunchAtStartup = startupRegistrationService?.IsEnabled
             ?? clientSettings?.Startup.LaunchAtStartup
             ?? false;
-        showExitHint = clientSettings?.Pointer.ShowExitHint ?? true;
+        showUsageHints = clientSettings?.Pointer.ShowUsageHints ?? true;
         this.overlayService.StateChanged += OnOverlayStateChanged;
         Presenter = new PresenterViewModel(
             targetRegionService ?? new TargetRegionService(),
             presenterRelayClient,
             pointerTtlMilliseconds);
-        Presenter.SetShowExitHint(showExitHint);
+        Presenter.SetShowUsageHints(showUsageHints);
         Presenter.PropertyChanged += OnPresenterPropertyChanged;
 
         receiverConnectionMessage = receiverRelayClient is null
@@ -320,10 +320,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         set => SetProperty(ref isLaunchAtStartup, value);
     }
 
-    public bool ShowExitHint
+    public bool ShowUsageHints
     {
-        get => showExitHint;
-        set => SetProperty(ref showExitHint, value);
+        get => showUsageHints;
+        set => SetProperty(ref showUsageHints, value);
     }
 
     public string ConnectedPresenterCountLabel =>
@@ -915,8 +915,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 MaximumSenderConnections,
                 IsLaunchAtStartup,
                 SelectedMonitor?.Display.DisplayId,
-                ShowExitHint);
-            Presenter.SetShowExitHint(ShowExitHint);
+                ShowUsageHints);
+            Presenter.SetShowUsageHints(ShowUsageHints);
             startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
             SetStatus("Settings saved.", false);
             IsSettingsOpen = false;

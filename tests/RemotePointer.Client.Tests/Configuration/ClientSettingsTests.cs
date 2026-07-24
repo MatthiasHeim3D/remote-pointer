@@ -56,7 +56,8 @@ public sealed class ClientSettingsTests
             @"C:\Pictures\ada.png",
             maximumSenderConnections: 4,
             launchAtStartup: true,
-            selectedDisplayId: "display-2");
+            selectedDisplayId: "display-2",
+            showUsageHints: false);
         var reloaded = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://saved.example.test", reloaded.Server.BaseUrl);
@@ -65,6 +66,7 @@ public sealed class ClientSettingsTests
         Assert.Equal(4, reloaded.Receiver.MaximumSenderConnections);
         Assert.True(reloaded.Startup.LaunchAtStartup);
         Assert.Equal("display-2", reloaded.Receiver.SelectedDisplayId);
+        Assert.False(reloaded.Pointer.ShowUsageHints);
     }
 
     [Fact]

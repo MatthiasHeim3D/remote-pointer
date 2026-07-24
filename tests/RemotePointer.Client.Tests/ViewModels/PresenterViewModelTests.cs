@@ -284,6 +284,17 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
+    public void SetShowUsageHints_ForwardsPreferenceToInputArea()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new PresenterViewModel(service);
+
+        viewModel.SetShowUsageHints(false);
+
+        Assert.False(service.ShowUsageHints);
+    }
+
+    [Fact]
     public void StateChanges_UpdatePointingAndStatusProperties()
     {
         using var service = new FakeTargetRegionService();
@@ -332,12 +343,12 @@ public sealed class PresenterViewModelTests
 
         public string? CalibrationIdentity { get; private set; }
 
-        public bool ShowExitHint { get; private set; } = true;
+        public bool ShowUsageHints { get; private set; } = true;
 
         public void SetCalibrationIdentity(string? receiverIdentity) =>
             CalibrationIdentity = receiverIdentity;
 
-        public void SetShowExitHint(bool showExitHint) => ShowExitHint = showExitHint;
+        public void SetShowUsageHints(bool showUsageHints) => ShowUsageHints = showUsageHints;
 
         public void BeginCalibration(double expectedAspectRatio)
         {
