@@ -9,6 +9,7 @@ namespace RemotePointer.Client;
 public partial class App : System.Windows.Application
 {
     private const string ApplicationMutexName = "RemotePointer.Client.Running";
+    private const string ApplicationActivationEventName = "RemotePointer.Client.Activate";
     private IClientAuditLog? auditLog;
     private ApplicationInstanceGuard? instanceGuard;
 
@@ -16,6 +17,7 @@ public partial class App : System.Windows.Application
     {
         if (!ApplicationInstanceGuard.TryAcquire(
                 ApplicationMutexName,
+                ApplicationActivationEventName,
                 ApplicationInstancePolicy.EnforceSingleInstance,
                 out instanceGuard))
         {
@@ -36,6 +38,7 @@ public partial class App : System.Windows.Application
             MainWindow = window;
             window.Show();
             window.Hide();
+            instanceGuard?.ListenForActivation(ShowMainWindow);
         }
         catch (Exception exception)
         {
@@ -63,6 +66,22 @@ public partial class App : System.Windows.Application
         instanceGuard?.Dispose();
         instanceGuard = null;
         base.OnExit(e);
+    }
+
+    private void ShowMainWindow()
+    {
+        if (Dispatcher.HasShutdownStarted)
+        {
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(() =>
+        {
+            if (MainWindow is RemotePointer.Client.Views.MainWindow window)
+            {
+                window.ShowAndActivate();
+            }
+        });
     }
 
     private void OnDispatcherUnhandledException(

@@ -247,12 +247,17 @@ public partial class MainWindow : Window
                     return;
                 }
 
-                Show();
-                WindowState = System.Windows.WindowState.Normal;
-                PositionFlyout();
-                Activate();
-                Focus();
+                ShowAndActivate();
             });
+    }
+
+    internal void ShowAndActivate()
+    {
+        Show();
+        WindowState = System.Windows.WindowState.Normal;
+        PositionFlyout();
+        Activate();
+        Focus();
     }
 
     private void ExitFromTray()

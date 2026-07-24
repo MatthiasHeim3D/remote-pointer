@@ -8,9 +8,18 @@ public sealed class ApplicationInstanceGuardTests
     public void TryAcquire_WhenNotEnforced_AllowsMultipleInstances()
     {
         var mutexName = CreateMutexName();
+        var activationEventName = CreateActivationEventName();
 
-        Assert.True(ApplicationInstanceGuard.TryAcquire(mutexName, false, out var first));
-        Assert.True(ApplicationInstanceGuard.TryAcquire(mutexName, false, out var second));
+        Assert.True(ApplicationInstanceGuard.TryAcquire(
+            mutexName,
+            activationEventName,
+            false,
+            out var first));
+        Assert.True(ApplicationInstanceGuard.TryAcquire(
+            mutexName,
+            activationEventName,
+            false,
+            out var second));
         Assert.Null(first);
         Assert.Null(second);
     }
@@ -19,8 +28,10 @@ public sealed class ApplicationInstanceGuardTests
     public void TryAcquire_WhenEnforced_AllowsOnlyOneInstanceAtATime()
     {
         var mutexName = CreateMutexName();
+        var activationEventName = CreateActivationEventName();
         using var ownerReady = new ManualResetEventSlim();
         using var releaseOwner = new ManualResetEventSlim();
+        using var activationReceived = new ManualResetEventSlim();
         var ownerAcquired = false;
         Exception? ownerException = null;
         var ownerThread = new Thread(() =>
@@ -29,8 +40,10 @@ public sealed class ApplicationInstanceGuardTests
             {
                 ownerAcquired = ApplicationInstanceGuard.TryAcquire(
                     mutexName,
+                    activationEventName,
                     true,
                     out var ownerGuard);
+                ownerGuard?.ListenForActivation(activationReceived.Set);
                 ownerReady.Set();
                 releaseOwner.Wait();
                 ownerGuard?.Dispose();
@@ -47,8 +60,13 @@ public sealed class ApplicationInstanceGuardTests
             Assert.True(ownerReady.Wait(TimeSpan.FromSeconds(5)));
             Assert.Null(ownerException);
             Assert.True(ownerAcquired);
-            Assert.False(ApplicationInstanceGuard.TryAcquire(mutexName, true, out var second));
+            Assert.False(ApplicationInstanceGuard.TryAcquire(
+                mutexName,
+                activationEventName,
+                true,
+                out var second));
             Assert.Null(second);
+            Assert.True(activationReceived.Wait(TimeSpan.FromSeconds(5)));
         }
         finally
         {
@@ -56,7 +74,11 @@ public sealed class ApplicationInstanceGuardTests
             Assert.True(ownerThread.Join(TimeSpan.FromSeconds(5)));
         }
 
-        Assert.True(ApplicationInstanceGuard.TryAcquire(mutexName, true, out var replacement));
+        Assert.True(ApplicationInstanceGuard.TryAcquire(
+            mutexName,
+            activationEventName,
+            true,
+            out var replacement));
         replacement?.Dispose();
     }
 
@@ -72,4 +94,7 @@ public sealed class ApplicationInstanceGuardTests
 
     private static string CreateMutexName() =>
         $"RemotePointer.Client.Tests.{Guid.NewGuid():N}";
+
+    private static string CreateActivationEventName() =>
+        $"RemotePointer.Client.Tests.Activate.{Guid.NewGuid():N}";
 }

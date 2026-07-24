@@ -23,7 +23,8 @@ Start the local relay, then start two client processes:
 The development launcher always builds Debug, starts the HTTPS relay and two clients,
 and stops its processes when both clients close or the script is interrupted. Debug
 clients allow multiple instances for local testing; Release clients allow only one
-running instance.
+running instance. Starting a second Release client brings the existing client's
+window to the foreground.
 
 In the first client, choose **Available**. In each sender client, select it from the visible-receiver list and request access. The receiver must approve every sender and can use **Disconnect all senders** from its dedicated receiving view. A receiver accepts up to its configured sender limit (two by default), remains discoverable while below that limit, and cannot initiate its own sender connection while receiving. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and each sender target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, right-drag draws a box, and Shift+right-drag draws a circle centered at the initial click. The input-area help panel lists these controls, including Escape, and can always be toggled with `H`. It opens on first use and starts collapsed thereafter; disabling **Show usage hints** hides the collapsed help badge without disabling the shortcut.
 
