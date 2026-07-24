@@ -119,6 +119,8 @@ public sealed class SignalRRelayClient : IRelayClient
 
     public event EventHandler<PresenterJoinRequestedEventArgs>? PresenterJoinRequested;
 
+    public event EventHandler<PresenterJoinCancelledEventArgs>? PresenterJoinCancelled;
+
     public event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
     public event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
@@ -449,6 +451,22 @@ public sealed class SignalRRelayClient : IRelayClient
             return;
         }
 
+        if (SessionId is not null && connection.State == HubConnectionState.Connected)
+        {
+            using var shutdownCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            try
+            {
+                await EndSessionAsync(shutdownCancellation.Token).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // The server-side disconnect handler revokes peers when a graceful end
+                // cannot be confirmed (for example, after a crash, network loss, or
+                // a peer that already terminated the session).
+            }
+        }
+
+        ClearSession();
         disposed = true;
         await connection.StopAsync().ConfigureAwait(false);
         await connection.DisposeAsync().ConfigureAwait(false);
@@ -467,6 +485,12 @@ public sealed class SignalRRelayClient : IRelayClient
                 () => PresenterJoinRequested?.Invoke(
                     this,
                     new PresenterJoinRequestedEventArgs(presenter))));
+        connection.On<string>(
+            "PresenterJoinCancelled",
+            presenterConnectionId => Publish(
+                () => PresenterJoinCancelled?.Invoke(
+                    this,
+                    new PresenterJoinCancelledEventArgs(presenterConnectionId))));
         connection.On<SessionCredential>(
             "SessionCredentialIssued",
             issuedCredential => SetSession(issuedCredential.SessionId, issuedCredential));

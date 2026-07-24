@@ -737,36 +737,74 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public void Disconnect(string connectionId)
+    public ConnectionDisconnectResult? Disconnect(string connectionId)
     {
         if (string.IsNullOrWhiteSpace(connectionId))
         {
-            return;
+            return null;
         }
 
         lock (syncRoot)
         {
-            if (!connections.Remove(connectionId, out var membership)
+            if (!connections.TryGetValue(connectionId, out var membership)
                 || !sessions.TryGetValue(membership.SessionId, out var session))
             {
-                return;
+                return null;
             }
 
-            if (!membership.Approved && session.PendingPresenter?.ConnectionId == connectionId)
+            if (membership.Role == ClientRole.Receiver)
             {
+                connections.Remove(connectionId);
+                session.Receiver.ConnectionId = null;
+
+                var presenterConnectionIds = session.Presenters.Values
+                    .Select(presenter => presenter.Participant.ConnectionId)
+                    .OfType<string>()
+                    .Concat(session.PendingPresenter is null
+                        ? []
+                        : [session.PendingPresenter.ConnectionId])
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                foreach (var presenterConnectionId in presenterConnectionIds)
+                {
+                    connections.Remove(presenterConnectionId);
+                }
+
+                session.Presenters.Clear();
                 session.PendingPresenter = null;
-                return;
+                session.ClearPointerOrigins();
+                return new ConnectionDisconnectResult(
+                    session.Id,
+                    ClientRole.Receiver,
+                    presenterConnectionIds,
+                    ReceiverConnectionId: null,
+                    CreateState(session));
             }
 
-            var participant = membership.Role == ClientRole.Receiver
-                ? session.Receiver
-                : session.Presenters.TryGetValue(connectionId, out var presenter)
-                    ? presenter.Participant
-                    : null;
-            if (participant?.ConnectionId == connectionId)
+            connections.Remove(connectionId);
+            var cancelledPresenterRequestConnectionId = membership.Approved
+                ? null
+                : connectionId;
+            if (!membership.Approved)
             {
-                participant.ConnectionId = null;
+                if (session.PendingPresenter?.ConnectionId == connectionId)
+                {
+                    session.PendingPresenter = null;
+                }
             }
+            else
+            {
+                session.Presenters.Remove(connectionId);
+                session.RemovePointerOrigins(connectionId);
+            }
+
+            return new ConnectionDisconnectResult(
+                session.Id,
+                ClientRole.Presenter,
+                PresenterConnectionIdsToEnd: [],
+                session.Receiver.ConnectionId,
+                CreateState(session),
+                cancelledPresenterRequestConnectionId);
         }
     }
 

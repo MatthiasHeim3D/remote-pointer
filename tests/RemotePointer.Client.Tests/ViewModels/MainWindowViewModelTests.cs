@@ -353,6 +353,40 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void RestoredReceiverState_NotifiesThatDisconnectAllBecameEnabled()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        relay.Credential = new SessionCredential(
+            "restored-session",
+            ClientRole.Receiver,
+            "receiver-client",
+            new string('s', 32),
+            new string('r', 32),
+            DateTimeOffset.UtcNow.AddHours(1));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        var observedEnabledState = false;
+        viewModel.DisconnectAllConnectionsCommand.CanExecuteChanged +=
+            (_, _) => observedEnabledState |=
+                viewModel.DisconnectAllConnectionsCommand.CanExecute(null);
+
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "restored-session",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                ConnectedPresenters: [new ConnectedPresenterDescriptor("Sender")]));
+
+        Assert.True(observedEnabledState);
+        Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task PendingPresenter_CanBeExplicitlyRejected()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
@@ -375,6 +409,29 @@ public sealed class MainWindowViewModelTests
 
         Assert.False(viewModel.HasPendingPresenter);
         Assert.Equal("pending-connection", relay.RejectedPresenter?.ConnectionId);
+    }
+
+    [Fact]
+    public void PendingPresenterDisconnect_ClearsStaleApprovalRequest()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        relay.RaiseJoinRequest(
+            new PresenterDescriptor(
+                "pending-connection",
+                "pending-client",
+                "Pending Presenter",
+                "1.0.0"));
+
+        relay.RaiseJoinRequestCancelled("pending-connection");
+
+        Assert.False(viewModel.HasPendingPresenter);
+        Assert.Contains("withdrew", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

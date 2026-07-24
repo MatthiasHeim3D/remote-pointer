@@ -330,9 +330,9 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
-    public async Task ApprovedSession_RelaysAcknowledgesReconnectsAndTerminates()
+    public async Task ApprovedSession_RevokesPeersOnDisconnectAndRequiresFreshRequest()
     {
-        using var factory = CreateFactory();
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
         await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
         await using var presenter = CreateConnection(factory, "presenter-client", "Presenter Machine");
         var joinRequested = CompletionSource<PresenterDescriptor>();
@@ -382,35 +382,67 @@ public sealed class PointerHubIntegrationTests
             acknowledgement,
             await acknowledgementReceived.Task.WaitAsync(TestTimeout));
 
+        var presenterDisconnectedState = CompletionSource<SessionStateMessage>();
+        receiver.On<SessionStateMessage>(
+            "SessionApproved",
+            state =>
+            {
+                if (!state.Approved)
+                {
+                    presenterDisconnectedState.TrySetResult(state);
+                }
+            });
         await presenter.StopAsync();
+        Assert.Empty(
+            (await presenterDisconnectedState.Task.WaitAsync(TestTimeout)).ConnectedPresenters!);
+
         await using var resumedPresenter = CreateConnection(
             factory,
             "presenter-client",
             "Presenter Machine");
         await resumedPresenter.StartAsync();
-        var rotatedPresenterCredential = await resumedPresenter.InvokeAsync<SessionCredential>(
-            "ResumeSession",
-            new SessionResumeRequest(
-                issuedPresenterCredential.SessionId,
-                ClientRole.Presenter,
-                issuedPresenterCredential.ClientInstanceId,
-                issuedPresenterCredential.SessionToken,
-                issuedPresenterCredential.ReconnectToken));
-        Assert.NotEqual(
-            issuedPresenterCredential.ReconnectToken,
-            rotatedPresenterCredential.ReconnectToken);
+        await Assert.ThrowsAsync<HubException>(
+            () => resumedPresenter.InvokeAsync<SessionCredential>(
+                "ResumeSession",
+                new SessionResumeRequest(
+                    issuedPresenterCredential.SessionId,
+                    ClientRole.Presenter,
+                    issuedPresenterCredential.ClientInstanceId,
+                    issuedPresenterCredential.SessionToken,
+                    issuedPresenterCredential.ReconnectToken)));
 
+        var secondJoinRequested = CompletionSource<PresenterDescriptor>();
+        receiver.On<PresenterDescriptor>(
+            "PresenterJoinRequested",
+            secondJoinRequested.SetResult);
+        var freshJoin = await resumedPresenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+        var secondPresenterDescriptor = await secondJoinRequested.Task.WaitAsync(TestTimeout);
+        Assert.True(freshJoin.Accepted);
+        await receiver.InvokeAsync(
+            "ApprovePresenter",
+            created.SessionId,
+            secondPresenterDescriptor.ConnectionId);
+
+        var presenterSessionEnded = CompletionSource<string>();
+        resumedPresenter.On<string>("SessionEnded", presenterSessionEnded.SetResult);
         await receiver.StopAsync();
+        Assert.Contains(
+            "request access again",
+            await presenterSessionEnded.Task.WaitAsync(TestTimeout),
+            StringComparison.OrdinalIgnoreCase);
+
         await using var resumedReceiver = CreateConnection(
             factory,
             "receiver-client",
             "Receiver Machine");
-        var secondPointerReceived = CompletionSource<PointerEventMessage>();
+        var resumedReceiverState = CompletionSource<SessionStateMessage>();
         var receiverSessionEnded = CompletionSource<string>();
-        var presenterSessionEnded = CompletionSource<string>();
-        resumedReceiver.On<PointerEventMessage>("PointerReceived", secondPointerReceived.SetResult);
+        resumedReceiver.On<SessionStateMessage>(
+            "SessionApproved",
+            resumedReceiverState.SetResult);
         resumedReceiver.On<string>("SessionEnded", receiverSessionEnded.SetResult);
-        resumedPresenter.On<string>("SessionEnded", presenterSessionEnded.SetResult);
         await resumedReceiver.StartAsync();
         var rotatedReceiverCredential = await resumedReceiver.InvokeAsync<SessionCredential>(
             "ResumeSession",
@@ -421,25 +453,22 @@ public sealed class PointerHubIntegrationTests
                 created.Credential.SessionToken,
                 created.Credential.ReconnectToken));
         Assert.NotEqual(created.Credential.ReconnectToken, rotatedReceiverCredential.ReconnectToken);
+        Assert.False((await resumedReceiverState.Task.WaitAsync(TestTimeout)).Approved);
 
-        var secondPointer = CreatePointer(created.SessionId, sequenceNumber: 1) with
-        {
-            Kind = PointerKind.RectangleStart,
-            GestureId = Guid.NewGuid(),
-        };
-        await resumedPresenter.InvokeAsync("SendPointer", secondPointer);
-        Assert.Equal(
-            secondPointer,
-            await secondPointerReceived.Task.WaitAsync(TestTimeout));
+        var thirdJoinRequested = CompletionSource<PresenterDescriptor>();
+        resumedReceiver.On<PresenterDescriptor>(
+            "PresenterJoinRequested",
+            thirdJoinRequested.SetResult);
+        var requestAfterReceiverRestart = await resumedPresenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+        Assert.True(requestAfterReceiverRestart.Accepted);
+        _ = await thirdJoinRequested.Task.WaitAsync(TestTimeout);
 
         await resumedReceiver.InvokeAsync("EndSession", created.SessionId);
         Assert.Contains(
             "ended",
             await receiverSessionEnded.Task.WaitAsync(TestTimeout),
-            StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(
-            "ended",
-            await presenterSessionEnded.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
     }
 

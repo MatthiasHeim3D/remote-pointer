@@ -94,7 +94,7 @@ public sealed class SignalRRelayClientTests
     }
 
     [Fact]
-    public async Task ProtectedReceiverCredential_ResumesAfterClientRestartAndRotatesToken()
+    public async Task DisposingReceiver_EndsSessionAndRequiresNewPresenterRequest()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
@@ -122,6 +122,8 @@ public sealed class SignalRRelayClientTests
         receiver.PresenterJoinRequested += (_, e) => joinRequested.TrySetResult(e.Presenter);
         receiver.SessionApproved += (_, e) => receiverApproved.TrySetResult(e.State);
         presenter.SessionApproved += (_, e) => presenterApproved.TrySetResult(e.State);
+        var presenterEnded = CompletionSource<string>();
+        presenter.SessionEnded += (_, e) => presenterEnded.TrySetResult(e.Reason);
         var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
         Assert.Equal(created.Credential, store.Load(ClientRole.Receiver, "receiver-client"));
         _ = await presenter.RequestToJoinReceiverAsync(created.SessionId);
@@ -137,6 +139,12 @@ public sealed class SignalRRelayClientTests
 
         await receiver.DisposeAsync();
 
+        Assert.Contains(
+            "ended",
+            await presenterEnded.Task.WaitAsync(TestTimeout),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Null(store.Load(ClientRole.Receiver, "receiver-client"));
+
         await using var recoveredReceiver = new SignalRRelayClient(
             settings,
             new FixedClientInstanceIdProvider("receiver-client"),
@@ -144,29 +152,17 @@ public sealed class SignalRRelayClientTests
             HttpTransportType.LongPolling,
             ClientRole.Receiver,
             store);
-        var recoveredState = CompletionSource<SessionStateMessage>();
-        var pointerReceived = CompletionSource<PointerEventMessage>();
-        recoveredReceiver.SessionApproved += (_, e) => recoveredState.TrySetResult(e.State);
-        recoveredReceiver.PointerReceived += (_, e) => pointerReceived.TrySetResult(e.PointerEvent);
+        Assert.Null(recoveredReceiver.Credential);
+        Assert.False(await recoveredReceiver.TryResumeSessionAsync());
 
-        Assert.True(await recoveredReceiver.TryResumeSessionAsync());
-        Assert.True((await recoveredState.Task.WaitAsync(TestTimeout)).Approved);
-        Assert.NotEqual(originalReconnectToken, recoveredReceiver.Credential?.ReconnectToken);
-        Assert.Equal(
-            recoveredReceiver.Credential,
-            store.Load(ClientRole.Receiver, "receiver-client"));
+        var freshJoinRequested = CompletionSource<PresenterDescriptor>();
+        recoveredReceiver.PresenterJoinRequested +=
+            (_, e) => freshJoinRequested.TrySetResult(e.Presenter);
+        var newSession = await recoveredReceiver.CreateReceiverSessionAsync(CreateDisplay());
+        var freshJoin = await presenter.RequestToJoinReceiverAsync(newSession.SessionId);
 
-        var pointer = new PointerEventMessage(
-            Guid.NewGuid(),
-            created.SessionId,
-            0,
-            0.5d,
-            0.5d,
-            PointerKind.Click,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-            2_000);
-        Assert.True(await presenter.SendPointerAsync(pointer));
-        Assert.Equal(pointer, await pointerReceived.Task.WaitAsync(TestTimeout));
+        Assert.True(freshJoin.Accepted);
+        _ = await freshJoinRequested.Task.WaitAsync(TestTimeout);
         await recoveredReceiver.EndSessionAsync();
     }
 

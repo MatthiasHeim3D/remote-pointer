@@ -416,34 +416,97 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ResumeSession_ValidatesAndRotatesReconnectToken()
+    public void PresenterDisconnect_RevokesCredentialAndClearsConnectedState()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
-        context.Manager.Disconnect(approved.PresenterConnectionId);
         var credential = approved.Approval.PresenterCredential;
 
-        var resumed = context.Manager.ResumeSession(
-            "presenter-reconnected",
-            new SessionResumeRequest(
-                credential.SessionId,
-                credential.Role,
-                credential.ClientInstanceId,
-                credential.SessionToken,
-                credential.ReconnectToken));
+        var disconnected = Assert.IsType<ConnectionDisconnectResult>(
+            context.Manager.Disconnect(approved.PresenterConnectionId));
 
-        Assert.NotEqual(credential.ReconnectToken, resumed.Credential.ReconnectToken);
-        Assert.Single(resumed.State.ConnectedPresenters!);
-        context.Manager.Disconnect("presenter-reconnected");
+        Assert.Equal(ClientRole.Presenter, disconnected.DisconnectedRole);
+        Assert.Equal("receiver-connection", disconnected.ReceiverConnectionId);
+        Assert.False(disconnected.State!.Approved);
+        Assert.Empty(disconnected.State.ConnectedPresenters!);
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.ResumeSession(
-                "presenter-replay",
+                "presenter-reconnected",
                 new SessionResumeRequest(
                     credential.SessionId,
                     credential.Role,
                     credential.ClientInstanceId,
                     credential.SessionToken,
                     credential.ReconnectToken)));
+    }
+
+    [Fact]
+    public void ReceiverDisconnect_RevokesPresentersAndResumeRequiresNewRequest()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var approved = CreateApprovedSession(context);
+
+        var disconnected = Assert.IsType<ConnectionDisconnectResult>(
+            context.Manager.Disconnect("receiver-connection"));
+
+        Assert.Equal(ClientRole.Receiver, disconnected.DisconnectedRole);
+        Assert.Contains(
+            approved.PresenterConnectionId,
+            disconnected.PresenterConnectionIdsToEnd);
+        Assert.False(disconnected.State!.Approved);
+        Assert.Empty(context.Manager.GetAvailableReceivers());
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.ResumeSession(
+                "presenter-reconnected",
+                new SessionResumeRequest(
+                    approved.Approval.PresenterCredential.SessionId,
+                    approved.Approval.PresenterCredential.Role,
+                    approved.Approval.PresenterCredential.ClientInstanceId,
+                    approved.Approval.PresenterCredential.SessionToken,
+                    approved.Approval.PresenterCredential.ReconnectToken)));
+
+        var resumedReceiver = context.Manager.ResumeSession(
+            "receiver-reconnected",
+            new SessionResumeRequest(
+                approved.Created.Credential.SessionId,
+                approved.Created.Credential.Role,
+                approved.Created.Credential.ClientInstanceId,
+                approved.Created.Credential.SessionToken,
+                approved.Created.Credential.ReconnectToken));
+        var freshRequest = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(
+                approved.Created.SessionId,
+                "new-presenter-client",
+                "1.0.0"),
+            "new-presenter-connection",
+            "New Presenter");
+
+        Assert.False(resumedReceiver.State.Approved);
+        Assert.True(freshRequest.Response.Accepted);
+    }
+
+    [Fact]
+    public void PendingPresenterDisconnect_CancelsRequestAndAllowsReplacement()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        var pending = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
+            "pending-connection",
+            "Pending Presenter");
+
+        var disconnected = Assert.IsType<ConnectionDisconnectResult>(
+            context.Manager.Disconnect("pending-connection"));
+        var replacement = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "replacement-client", "1.0.0"),
+            "replacement-connection",
+            "Replacement Presenter");
+
+        Assert.True(pending.Response.Accepted);
+        Assert.Equal(
+            "pending-connection",
+            disconnected.CancelledPresenterRequestConnectionId);
+        Assert.True(replacement.Response.Accepted);
     }
 
     [Fact]

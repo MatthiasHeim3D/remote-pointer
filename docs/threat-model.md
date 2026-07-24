@@ -26,7 +26,7 @@ Trust boundaries exist at the public relay listener, SignalR hub method boundary
 2. The presenter selects the receiver's opaque directory entry and submits it with a durable random client ID. The receiver explicitly approves the displayed machine identity.
 3. The relay issues role-specific credentials and relays only validated, transient normalized coordinates.
 4. The receiver displays a non-interactive marker and acknowledges its event ID.
-5. Reconnection or client restart submits the DPAPI-recovered token set; the relay revalidates it and rotates the reconnect token.
+5. Receiver transport recovery submits the DPAPI-recovered token set; the relay revalidates it and rotates the reconnect token. All presenter memberships are revoked first and require fresh approval.
 
 No flow contains pixels, window titles, processes, keystrokes, clipboard content, files, audio, or injected input.
 
@@ -45,8 +45,8 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 | Overlay input interception | Receiver uses transparent/no-activate native styles; presenter capture is bounded to calibrated window and pointing state | WPF/Windows defects could affect focus; manual release testing remains required |
 | TLS downgrade or invalid certificate | Caddy is the only published container port; client configuration requires HTTPS; platform validation trusts the per-user Caddy root and has no bypass | Replacing or losing the Caddy data volume requires rebuilding/reinstalling the client package with the new public root |
 | Sensitive log disclosure | Stable structured audit fields omit secrets, coordinates, exception messages, and screen metadata | Session IDs and machine/client identifiers remain operational metadata |
-| Server or client crash | Server fails closed and loses in-memory sessions; client credentials are protected and can resume only while relay session survives | Relay restart requires re-pairing by design in the in-memory MVP |
-| Multiple clients under one Windows profile | Role files and durable identity are scoped to the Windows user; automatic recovery is skipped when both saved roles exist | Concurrent same-profile processes support new local sessions, but automatic crash recovery requires one saved role per profile; production assumes distinct users/endpoints |
+| Server or client crash | Server fails closed on restart; endpoint disconnect revokes presenter memberships, and an ungracefully interrupted receiver can recover only an empty session shell | Relay restart requires re-pairing by design in the in-memory MVP |
+| Multiple clients under one Windows profile | Role files and durable identity are scoped to the Windows user; automatic recovery is skipped when both saved roles exist | Concurrent same-profile processes support new local sessions, but automatic empty receiver-shell recovery requires one saved role per profile; production assumes distinct users/endpoints |
 | Malformed input or implementation fault | Strict JSON, contract validation, hidden SignalR details, production exception handler, WPF crash boundary | Unknown platform defects and denial of service remain possible |
 
 ## Abuse cases verified by tests
@@ -57,7 +57,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 - The thirty-first immediate pointer exceeds the configured burst.
 - Production plaintext requests receive an error and no redirect.
 - Corrupt, expired, wrong-user, or wrong-role protected state is discarded.
-- Crash recovery rotates the reconnect token before pointer delivery resumes.
+- Receiver recovery rotates the reconnect token, but pointer delivery cannot resume until the presenter submits a new request and is approved again.
 
 ## Operational assumptions
 

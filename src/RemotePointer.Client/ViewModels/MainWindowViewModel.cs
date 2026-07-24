@@ -108,6 +108,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             receiverRelayClient.ConnectionStatusChanged += OnReceiverConnectionStatusChanged;
             receiverRelayClient.PresenterJoinRequested += OnPresenterJoinRequested;
+            receiverRelayClient.PresenterJoinCancelled += OnPresenterJoinCancelled;
             receiverRelayClient.SessionApproved += OnReceiverSessionApproved;
             receiverRelayClient.PointerReceived += OnPointerReceived;
             receiverRelayClient.SessionEnded += OnReceiverSessionEnded;
@@ -652,6 +653,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             receiverRelayClient.ConnectionStatusChanged -= OnReceiverConnectionStatusChanged;
             receiverRelayClient.PresenterJoinRequested -= OnPresenterJoinRequested;
+            receiverRelayClient.PresenterJoinCancelled -= OnPresenterJoinCancelled;
             receiverRelayClient.SessionApproved -= OnReceiverSessionApproved;
             receiverRelayClient.PointerReceived -= OnPointerReceived;
             receiverRelayClient.SessionEnded -= OnReceiverSessionEnded;
@@ -1041,6 +1043,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    private void OnPresenterJoinCancelled(object? sender, PresenterJoinCancelledEventArgs e)
+    {
+        if (!string.Equals(
+                pendingPresenter?.ConnectionId,
+                e.PresenterConnectionId,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SetPendingPresenter(null);
+        SetStatus("The sender withdrew its connection request.", false);
+    }
+
     internal async Task CloseSettingsAsync()
     {
         if (clientSettings is null)
@@ -1376,6 +1392,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RaisePropertyChanged(nameof(CanSelectMonitor));
         RaisePropertyChanged(nameof(CanSetReceiverAvailability));
         approvePresenterCommand.RaiseCanExecuteChanged();
+        disconnectAllConnectionsCommand.RaiseCanExecuteChanged();
         setReceiverAvailabilityCommand.RaiseCanExecuteChanged();
     }
 

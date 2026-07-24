@@ -27,7 +27,36 @@ public sealed class PointerHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        sessionManager.Disconnect(Context.ConnectionId);
+        var disconnect = sessionManager.Disconnect(Context.ConnectionId);
+        if (disconnect is not null)
+        {
+            foreach (var presenterConnectionId in disconnect.PresenterConnectionIdsToEnd)
+            {
+                await Groups.RemoveFromGroupAsync(
+                        presenterConnectionId,
+                        GroupName(disconnect.SessionId))
+                    .ConfigureAwait(false);
+                await Clients.Client(presenterConnectionId)
+                    .SessionEnded("The receiver connection ended. Request access again after it reconnects.")
+                    .ConfigureAwait(false);
+            }
+
+            if (disconnect.ReceiverConnectionId is not null && disconnect.State is not null)
+            {
+                if (disconnect.CancelledPresenterRequestConnectionId is not null)
+                {
+                    await Clients.Client(disconnect.ReceiverConnectionId)
+                        .PresenterJoinCancelled(
+                            disconnect.CancelledPresenterRequestConnectionId)
+                        .ConfigureAwait(false);
+                }
+
+                await Clients.Client(disconnect.ReceiverConnectionId)
+                    .SessionApproved(disconnect.State)
+                    .ConfigureAwait(false);
+            }
+        }
+
         await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
         if (exception is null)
         {

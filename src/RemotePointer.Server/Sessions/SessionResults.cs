@@ -61,3 +61,11 @@ public sealed record SessionTerminationResult(
     string? ReceiverConnectionId = null,
     SessionStateMessage? State = null,
     IReadOnlyList<string>? PresenterConnectionIds = null);
+
+public sealed record ConnectionDisconnectResult(
+    string SessionId,
+    ClientRole DisconnectedRole,
+    IReadOnlyList<string> PresenterConnectionIdsToEnd,
+    string? ReceiverConnectionId,
+    SessionStateMessage? State,
+    string? CancelledPresenterRequestConnectionId = null);

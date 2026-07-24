@@ -23,15 +23,15 @@
 | Receiver discovery | Server capability, receiver opt-in, directory filtering, direct request, mandatory approval |
 | Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
 | Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
-| Session lifecycle | Creation, approval, active expiry, termination, presenter and receiver resume |
+| Session lifecycle | Creation, approval, active expiry, termination, disconnect revocation, empty receiver-shell resume |
 | Pointer defenses | TTL, sequence duplicate suppression, configurable token refill/burst, production defaults of 90/s and 180 |
-| In-memory SignalR | Join/approve/send/acknowledge, both-role reconnect, termination, unauthorized sender |
+| In-memory SignalR | Join/approve/send/acknowledge, peer revocation on disconnect, fresh-request enforcement, termination, unauthorized sender |
 | Relay hosting | Health endpoint, 32 KB message limit, single invocation per client |
 | Receiver networking | Session creation, approval presentation, fresh marker acknowledgement, expired marker drop |
 | Presenter networking | Approval gating, receiver dimensions, pointer construction, acknowledgement latency, reconnect drop |
 | Client SignalR transport | Real two-client create/join/approve/send/acknowledge/terminate flow through in-memory relay |
 | Production transport | Plaintext refusal by default, explicit private proxy mode, secure health response, HSTS |
-| Protected recovery | At-rest token opacity, corruption/identity rejection, restart resume, token rotation, post-recovery pointer |
+| Protected recovery | At-rest token opacity, corruption/identity rejection, graceful-shutdown deletion, empty receiver recovery, fresh approval requirement |
 | Audit privacy | Structured client record excludes exception messages, credentials, and coordinate fields |
 | Hub rate limiting | Real transport accepts burst of 30 and rejects immediate event 31 |
 | Client configuration | Packaged and environment URLs both enforce HTTPS |
@@ -84,7 +84,7 @@
 5. Click the four corners and center. Confirm equivalent receiver positions, a local ripple, and a displayed acknowledgement latency.
 6. Use **Disconnect all connections** on the receiver and confirm presenter pointing exits while the receiver returns to the available list. Request and approve access again, disconnect from the presenter, then choose **Invisible** on the receiver and confirm it no longer appears in the list.
 7. During an active session, interrupt relay connectivity and click while the UI shows Reconnecting. Confirm those clicks are reported as dropped and do not appear after reconnection.
-8. Restore connectivity within the reconnect window. Confirm both roles resume and newly captured pointers work without joining again.
+8. Restore connectivity within the reconnect window. Confirm the receiver can return, the previous sender is no longer connected, and pointing remains unavailable until that sender submits a new request and is approved again.
 9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
 10. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
 11. Disable discovery on the relay and confirm both discovery controls are disabled and the presenter cannot submit a new join request. Re-enable discovery and confirm the visible-receiver flow becomes available again.
@@ -93,8 +93,8 @@
 ## Phase 6 manual procedure
 
 1. On distinct Windows user profiles or endpoints, establish and approve a session, then terminate one client from Task Manager while leaving the relay running.
-2. Restart that client. Confirm it reports recovered/resumed state, rotates its reconnect token, and resumes receiver markers or presenter approval. Recalibrate the presenter because calibration geometry is intentionally not persisted.
-3. End the recovered session and confirm the corresponding protected role file under `%LocalAppData%\RemotePointer\Sessions` is removed.
+2. Restart that client. After an ungraceful receiver exit, confirm it recovers with zero connected senders and the former sender must request approval again. After a normal exit, confirm no previous session is recovered.
+3. Confirm the corresponding protected role file under `%LocalAppData%\RemotePointer\Sessions` is removed on normal shutdown.
 4. Inspect `%LocalAppData%\RemotePointer\Logs\audit-YYYYMMDD.jsonl`. Confirm records are valid JSON and contain no coordinates, pairing codes, session/reconnect tokens, exception messages, screen metadata, or typed data.
 5. Start the Docker deployment. Confirm HTTPS health succeeds through Caddy, relay port 8080 is not reachable from the LAN, HSTS is present, and an untrusted Caddy root causes the client connection to fail.
 6. Repeat the full Phase 5 display matrix as a standard user and confirm no administrator rights are required by the client.

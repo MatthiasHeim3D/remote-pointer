@@ -60,7 +60,7 @@ No development certificate-bypass switch will be included in production builds.
 - TLS certificate validation uses the platform default; the production constructor has no message-handler or certificate-validation override.
 - Only the random client-instance ID is persisted in plaintext under the current user's local application data.
 - Calibration geometry lasts only for the process session and is never sent to the relay.
-- Pointer sends are dropped while disconnected or reconnecting and are not replayed after resume.
+- Pointer sends are dropped while disconnected or reconnecting and are not replayed. Endpoint disconnect revokes presenter access, so pointing resumes only after a fresh request and approval.
 - The receiver repeats structural and TTL validation immediately before display and acknowledges only displayed markers.
 - Termination or failed resume removes the overlay, exits pointing, and clears the in-memory session state.
 
@@ -69,8 +69,8 @@ No development certificate-bypass switch will be included in production builds.
 - Production returns HTTP 400 for plaintext by default and never redirects secrets to another URL. Secure production responses use HSTS.
 - The Docker profile explicitly allows HTTP only on the unexposed relay container port; Caddy is the sole published service and terminates HTTPS on port 443.
 - SignalR detailed errors are disabled, unexpected operations are audited by a hub filter, and safe production exception handling avoids stack-trace disclosure.
-- Client role and reconnect credentials are encrypted with Windows DPAPI `CurrentUser`, written atomically, and never fall back to plaintext.
-- Protected recovery state is rejected when corrupt, expired, wrong-role, or bound to a different durable client ID. A successful recovery rotates and re-protects the reconnect token.
+- Client role and reconnect credentials are encrypted with Windows DPAPI `CurrentUser`, written atomically, cleared on normal shutdown, and never fall back to plaintext.
+- Protected recovery state is rejected when corrupt, expired, wrong-role, or bound to a different durable client ID. An ungracefully interrupted receiver may recover only an empty session shell; successful recovery rotates and re-protects the reconnect token.
 - Client crash handling preserves only protected credentials. Calibration rectangles, pairing codes, pointer events, and coordinates are never persisted.
 - Server and client use stable structured audit events. Client audit schema deliberately has no arbitrary message or coordinate fields and records exception type/code rather than exception text.
 - Release builds use latest installed .NET analyzers with warnings as errors. The Phase 6 NuGet advisory scan found no known vulnerable direct or transitive packages.

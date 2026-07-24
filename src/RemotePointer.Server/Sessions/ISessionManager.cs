@@ -78,5 +78,5 @@ public interface ISessionManager
 
     IReadOnlyList<SessionTerminationResult> CollectExpiredSessions();
 
-    void Disconnect(string connectionId);
+    ConnectionDisconnectResult? Disconnect(string connectionId);
 }

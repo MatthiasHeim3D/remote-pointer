@@ -16,6 +16,11 @@ public sealed class PresenterJoinRequestedEventArgs(PresenterDescriptor presente
     public PresenterDescriptor Presenter { get; } = presenter;
 }
 
+public sealed class PresenterJoinCancelledEventArgs(string presenterConnectionId) : EventArgs
+{
+    public string PresenterConnectionId { get; } = presenterConnectionId;
+}
+
 public sealed class RelaySessionStateEventArgs(SessionStateMessage state) : EventArgs
 {
     public SessionStateMessage State { get; } = state;

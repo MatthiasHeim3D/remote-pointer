@@ -6,6 +6,8 @@ public interface IPointerClient
 {
     Task PresenterJoinRequested(PresenterDescriptor presenter);
 
+    Task PresenterJoinCancelled(string presenterConnectionId);
+
     Task SessionApproved(SessionStateMessage state);
 
     Task SessionCredentialIssued(SessionCredential credential);

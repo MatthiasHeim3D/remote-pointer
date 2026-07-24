@@ -9,6 +9,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public event EventHandler<PresenterJoinRequestedEventArgs>? PresenterJoinRequested;
 
+    public event EventHandler<PresenterJoinCancelledEventArgs>? PresenterJoinCancelled;
+
     public event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
     public event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
@@ -252,6 +254,11 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public void RaiseJoinRequest(PresenterDescriptor presenter) =>
         PresenterJoinRequested?.Invoke(this, new PresenterJoinRequestedEventArgs(presenter));
+
+    public void RaiseJoinRequestCancelled(string presenterConnectionId) =>
+        PresenterJoinCancelled?.Invoke(
+            this,
+            new PresenterJoinCancelledEventArgs(presenterConnectionId));
 
     public void RaiseApproved(SessionStateMessage state)
     {

@@ -8,6 +8,8 @@ public interface IRelayClient : IAsyncDisposable
 
     event EventHandler<PresenterJoinRequestedEventArgs>? PresenterJoinRequested;
 
+    event EventHandler<PresenterJoinCancelledEventArgs>? PresenterJoinCancelled;
+
     event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
     event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
