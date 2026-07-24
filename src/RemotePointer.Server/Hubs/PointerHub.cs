@@ -358,6 +358,43 @@ public sealed class PointerHub(
         }
     }
 
+    public async Task DisconnectAllConnections(string sessionId)
+    {
+        try
+        {
+            var result = sessionManager.DisconnectPresenters(
+                sessionId,
+                Context.ConnectionId);
+            if (result.PresenterConnectionId is not null)
+            {
+                await Groups.RemoveFromGroupAsync(
+                        result.PresenterConnectionId,
+                        GroupName(sessionId))
+                    .ConfigureAwait(false);
+                await Clients.Client(result.PresenterConnectionId)
+                    .SessionEnded("Disconnected by the receiver.")
+                    .ConfigureAwait(false);
+            }
+
+            if (result.ReceiverConnectionId is not null && result.State is not null)
+            {
+                await Clients.Client(result.ReceiverConnectionId)
+                    .SessionApproved(result.State)
+                    .ConfigureAwait(false);
+            }
+
+            logger.LogInformation(
+                AuditEventIds.SessionEnded,
+                "Receiver disconnected all presenters. SessionId={SessionId} PointerCount={PointerCount}",
+                result.SessionId,
+                result.PointerCount);
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "DisconnectAllConnections");
+        }
+    }
+
     private HubException ToHubException(SessionOperationException exception, string operation)
     {
         LogValidationFailure(exception.Code, operation);

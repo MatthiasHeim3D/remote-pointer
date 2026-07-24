@@ -18,7 +18,7 @@ public sealed class PointerHubIntegrationTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
-    public async Task Discovery_DirectJoinAndPresenterDisconnect_PreserveReceiverAvailability()
+    public async Task Discovery_ReceiverDisconnectAll_PreservesReceiverAvailability()
     {
         using var factory = CreateFactory(receiverDiscoveryEnabled: true);
         await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
@@ -72,9 +72,9 @@ public sealed class PointerHubIntegrationTests
         await receiver.InvokeAsync("UpdateReceiverDisplay", created.SessionId, updatedDisplay);
         Assert.Equal(updatedDisplay, await displayChanged.Task.WaitAsync(TestTimeout));
 
-        await presenter.InvokeAsync("EndSession", created.SessionId);
+        await receiver.InvokeAsync("DisconnectAllConnections", created.SessionId);
         Assert.Contains(
-            "Disconnected",
+            "receiver",
             await presenterDisconnected.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
         Assert.True((await availableAgain.Task.WaitAsync(TestTimeout)).ReceiverDiscoverable);

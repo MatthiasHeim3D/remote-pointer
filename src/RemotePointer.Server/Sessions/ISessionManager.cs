@@ -49,6 +49,10 @@ public interface ISessionManager
 
     ResumeSessionResult ResumeSession(string connectionId, SessionResumeRequest request);
 
+    SessionTerminationResult DisconnectPresenters(
+        string sessionId,
+        string receiverConnectionId);
+
     SessionTerminationResult EndSession(string sessionId, string connectionId);
 
     IReadOnlyList<SessionTerminationResult> CollectExpiredSessions();

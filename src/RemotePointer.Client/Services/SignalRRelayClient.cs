@@ -285,6 +285,19 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
     }
 
+    public async Task DisconnectAllConnectionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var currentSessionId = SessionId
+            ?? throw new InvalidOperationException("This receiver is not available on the relay.");
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        await connection.InvokeAsync(
+                "DisconnectAllConnections",
+                currentSessionId,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<bool> SendPointerAsync(
         PointerEventMessage pointerEvent,
         CancellationToken cancellationToken = default)

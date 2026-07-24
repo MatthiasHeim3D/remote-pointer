@@ -22,7 +22,7 @@ dotnet run --project src\RemotePointer.Client
 dotnet run --project src\RemotePointer.Client
 ```
 
-In the first client, use **Receive pointers**, select a monitor, and choose **Available**. In the presenter client, select it from the visible-receiver list and request access. The receiver must approve the request. When the presenter disconnects, the receiver remains available for another request until it chooses **Invisible**. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and the presenter target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, and right-drag draws a box.
+In the first client, use **Receive pointers**, select a monitor, and choose **Available**. In the presenter client, select it from the visible-receiver list and request access. The receiver must approve the request and can use **Disconnect all connections** whenever a presenter is connected. When the presenter disconnects, the receiver remains available for another request until it chooses **Invisible**. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and the presenter target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, and right-drag draws a box.
 
 ## Small-network deployment
 

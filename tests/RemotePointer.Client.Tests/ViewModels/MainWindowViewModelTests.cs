@@ -135,6 +135,33 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ConnectedPresenter_EnablesReceiverDisconnectAllCommand()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                ReceiverDiscoverable: true));
+
+        Assert.True(viewModel.HasConnectedPresenter);
+        Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));
+        viewModel.DisconnectAllConnectionsCommand.Execute(null);
+
+        Assert.Equal(1, relay.DisconnectAllConnectionsCount);
+    }
+
+    [Fact]
     public async Task ReceiverSession_DropsExpiredPointerWithoutAcknowledging()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);

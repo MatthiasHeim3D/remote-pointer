@@ -82,7 +82,7 @@
 3. Select the receiver and request access. Confirm the receiver shows the presenter's machine name and that calibration remains disabled until approval.
 4. Approve the presenter, calibrate the shared desktop region, and enable pointing.
 5. Click the four corners and center. Confirm equivalent receiver positions, a local ripple, and a displayed acknowledgement latency.
-6. Disconnect the presenter and confirm pointing exits while the receiver returns to the available list. Request and approve access again, then choose **Invisible** on the receiver and confirm it no longer appears in the list.
+6. Use **Disconnect all connections** on the receiver and confirm presenter pointing exits while the receiver returns to the available list. Request and approve access again, disconnect from the presenter, then choose **Invisible** on the receiver and confirm it no longer appears in the list.
 7. During an active session, interrupt relay connectivity and click while the UI shows Reconnecting. Confirm those clicks are reported as dropped and do not appear after reconnection.
 8. Restore connectivity within the reconnect window. Confirm both roles resume and newly captured pointers work without joining again.
 9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.

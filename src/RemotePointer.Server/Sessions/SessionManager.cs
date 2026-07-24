@@ -497,19 +497,36 @@ public sealed class SessionManager : ISessionManager
             var session = GetActiveSession(sessionId);
             if (membership.Role == ClientRole.Presenter)
             {
-                connections.Remove(connectionId);
-                session.Presenter = null;
-                return new SessionTerminationResult(
-                    session.Id,
-                    [connectionId],
-                    session.PointerCount,
-                    ReceiverPreserved: true,
-                    PresenterConnectionId: connectionId,
-                    ReceiverConnectionId: session.Receiver.ConnectionId,
-                    State: CreateState(session));
+                return DisconnectPresentersNoLock(session);
             }
 
             return TerminateSessionNoLock(session);
+        }
+    }
+
+    public SessionTerminationResult DisconnectPresenters(
+        string sessionId,
+        string receiverConnectionId)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+
+        lock (syncRoot)
+        {
+            var session = GetActiveSession(sessionId);
+            EnsureMembership(
+                receiverConnectionId,
+                sessionId,
+                ClientRole.Receiver,
+                requireApproved: true);
+            if (session.Presenter is null)
+            {
+                throw new SessionOperationException(
+                    "presenter_not_connected",
+                    "No presenter is connected to this receiver.");
+            }
+
+            return DisconnectPresentersNoLock(session);
         }
     }
 
@@ -737,6 +754,25 @@ public sealed class SessionManager : ISessionManager
         }
 
         return new SessionTerminationResult(session.Id, connectionIds, session.PointerCount);
+    }
+
+    private SessionTerminationResult DisconnectPresentersNoLock(SessionRecord session)
+    {
+        var presenterConnectionId = session.Presenter?.ConnectionId;
+        if (presenterConnectionId is not null)
+        {
+            connections.Remove(presenterConnectionId);
+        }
+
+        session.Presenter = null;
+        return new SessionTerminationResult(
+            session.Id,
+            presenterConnectionId is null ? [] : [presenterConnectionId],
+            session.PointerCount,
+            ReceiverPreserved: true,
+            PresenterConnectionId: presenterConnectionId,
+            ReceiverConnectionId: session.Receiver.ConnectionId,
+            State: CreateState(session));
     }
 
     private static SessionStateMessage CreateState(SessionRecord session) => new(

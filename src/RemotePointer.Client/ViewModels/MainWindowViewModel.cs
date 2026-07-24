@@ -11,6 +11,7 @@ namespace RemotePointer.Client.ViewModels;
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly AsyncRelayCommand approvePresenterCommand;
+    private readonly AsyncRelayCommand disconnectAllConnectionsCommand;
     private readonly AsyncRelayCommand setReceiverAvailabilityCommand;
     private readonly IMonitorService monitorService;
     private readonly IReceiverOverlayService overlayService;
@@ -62,6 +63,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         approvePresenterCommand = new AsyncRelayCommand(
             _ => ApprovePresenterAsync(),
             _ => receiverRelayClient is not null && pendingPresenter is not null && HasReceiverSession);
+        disconnectAllConnectionsCommand = new AsyncRelayCommand(
+            _ => DisconnectAllConnectionsAsync(),
+            _ => receiverRelayClient is not null && HasConnectedPresenter && HasReceiverSession);
         setReceiverAvailabilityCommand = new AsyncRelayCommand(
             _ => UpdateReceiverAvailabilityAsync(),
             _ => receiverRelayClient is not null
@@ -121,7 +125,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool HasConnectedPresenter
     {
         get => hasConnectedPresenter;
-        private set => SetProperty(ref hasConnectedPresenter, value);
+        private set
+        {
+            if (SetProperty(ref hasConnectedPresenter, value))
+            {
+                disconnectAllConnectionsCommand.RaiseCanExecuteChanged();
+            }
+        }
     }
 
     public bool HasReceiverSession => receiverSessionId is not null;
@@ -167,6 +177,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand RefreshMonitorsCommand { get; }
 
     public ICommand ApprovePresenterCommand => approvePresenterCommand;
+
+    public ICommand DisconnectAllConnectionsCommand => disconnectAllConnectionsCommand;
 
     public async Task SetReceiverAvailabilityAsync(ReceiverAvailability availability)
     {
@@ -365,6 +377,24 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetStatus($"The presenter could not be approved: {exception.Message}", true);
+        }
+    }
+
+    private async Task DisconnectAllConnectionsAsync()
+    {
+        if (receiverRelayClient is null || !HasConnectedPresenter)
+        {
+            return;
+        }
+
+        try
+        {
+            await receiverRelayClient.DisconnectAllConnectionsAsync();
+            SetStatus("Disconnected all presenter connections.", false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Presenter connections could not be disconnected: {exception.Message}", true);
         }
     }
 

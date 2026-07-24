@@ -55,6 +55,8 @@ public interface IRelayClient : IAsyncDisposable
         string presenterConnectionId,
         CancellationToken cancellationToken = default);
 
+    Task DisconnectAllConnectionsAsync(CancellationToken cancellationToken = default);
+
     Task<bool> SendPointerAsync(
         PointerEventMessage pointerEvent,
         CancellationToken cancellationToken = default);

@@ -77,14 +77,19 @@ public sealed class SignalRRelayClientTests
             acknowledgement,
             await acknowledgementReceived.Task.WaitAsync(TestTimeout));
 
+        await receiver.DisconnectAllConnectionsAsync();
+        Assert.Contains(
+            "receiver",
+            await presenterEnded.Task.WaitAsync(TestTimeout),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(await presenter.GetAvailableReceiversAsync()).SessionId);
+
         await receiver.EndSessionAsync();
         Assert.Contains(
             "ended",
             await receiverEnded.Task.WaitAsync(TestTimeout),
-            StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(
-            "ended",
-            await presenterEnded.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
     }
 

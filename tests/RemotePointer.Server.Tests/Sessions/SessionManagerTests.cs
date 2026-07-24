@@ -384,6 +384,28 @@ public sealed class SessionManagerTests
         Assert.Equal(0, context.Manager.ActiveSessionCount);
     }
 
+    [Fact]
+    public void ReceiverDisconnectPresenters_PreservesAvailability()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var approved = CreateApprovedSession(context);
+
+        var result = context.Manager.DisconnectPresenters(
+            approved.Created.SessionId,
+            "receiver-connection");
+
+        Assert.True(result.ReceiverPreserved);
+        Assert.Contains(approved.PresenterConnectionId, result.ConnectionIds);
+        Assert.Equal(1, context.Manager.ActiveSessionCount);
+        Assert.Equal(
+            approved.Created.SessionId,
+            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.AcceptPointer(
+                approved.PresenterConnectionId,
+                CreatePointer(InitialTime, approved.Created.SessionId, 1)));
+    }
+
     private static TestContext CreateContext(bool receiverDiscoveryEnabled = false)
     {
         var timeProvider = new ManualTimeProvider(InitialTime);
