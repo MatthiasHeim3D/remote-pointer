@@ -47,7 +47,7 @@
                 <TextBlock Margin="0,8,0,0"
                            Foreground="#AEB8C8"
                            TextWrapping="Wrap"
-                           Text="Choose the monitor where incoming pointer markers should appear, then create a session and share its pairing code." />
+                           Text="Choose the monitor where incoming pointer markers should appear, create a session, and make it visible to presenters." />
             </StackPanel>
 
             <Border Grid.Row="1"
@@ -103,14 +103,6 @@
                                Foreground="#AEB8C8"
                                TextWrapping="Wrap"
                                Text="{Binding ReceiverDiscoveryMessage, Mode=OneWay}" />
-                    <TextBlock Margin="0,8,0,0" Foreground="#AEB8C8" Text="Pairing code" />
-                    <TextBlock Margin="0,2,0,0"
-                               FontFamily="Consolas"
-                               FontSize="30"
-                               FontWeight="Bold"
-                               Text="{Binding PairingCode, Mode=OneWay}" />
-                    <TextBlock Margin="0,2,0,10" Foreground="#AEB8C8"
-                               Text="{Binding PairingExpiration, Mode=OneWay}" />
                     <TextBlock FontWeight="SemiBold"
                                Text="{Binding PendingPresenterName, Mode=OneWay}" />
                     <Button Margin="0,10,8,0"
@@ -179,22 +171,7 @@
                                        Text="{Binding Presenter.ConnectionMessage, Mode=OneWay}" />
                             <TextBlock Margin="0,0,0,6"
                                        Foreground="#AEB8C8"
-                                       Text="Join with pairing code" />
-                            <DockPanel>
-                                <Button DockPanel.Dock="Right"
-                                        Margin="10,0,0,0"
-                                        Command="{Binding Presenter.JoinSessionCommand}"
-                                        Content="Request to join" />
-                                <TextBox MinHeight="38"
-                                         MaxLength="10"
-                                         CharacterCasing="Upper"
-                                         FontFamily="Consolas"
-                                         FontSize="18"
-                                         Text="{Binding Presenter.PairingCode, UpdateSourceTrigger=PropertyChanged}" />
-                            </DockPanel>
-                            <TextBlock Margin="0,14,0,6"
-                                       Foreground="#AEB8C8"
-                                       Text="Or choose a visible receiver" />
+                                       Text="Choose a visible receiver" />
                             <DockPanel IsEnabled="{Binding Presenter.ReceiverDiscoveryEnabled}">
                                 <Button DockPanel.Dock="Right"
                                         Margin="10,0,0,0"

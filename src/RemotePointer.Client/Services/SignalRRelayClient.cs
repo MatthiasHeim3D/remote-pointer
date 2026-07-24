@@ -230,33 +230,6 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
     }
 
-    public async Task<JoinResponse> RequestToJoinSessionAsync(
-        string pairingCode,
-        CancellationToken cancellationToken = default)
-    {
-        DiscardRecoveredCredential(ClientRole.Presenter);
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        var request = new JoinRequest(
-            pairingCode,
-            ClientRole.Presenter,
-            clientInstanceId,
-            GetClientVersion());
-        var response = await connection.InvokeAsync<JoinResponse>(
-                "RequestToJoinSession",
-                request,
-                cancellationToken)
-            .ConfigureAwait(false);
-        if (response.Accepted)
-        {
-            lock (stateLock)
-            {
-                sessionId = response.SessionId;
-            }
-        }
-
-        return response;
-    }
-
     public async Task<JoinResponse> RequestToJoinReceiverAsync(
         string selectedSessionId,
         CancellationToken cancellationToken = default)

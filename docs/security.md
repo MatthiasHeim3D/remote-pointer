@@ -44,7 +44,7 @@ No development certificate-bypass switch will be included in production builds.
 
 - Pairing codes, session secrets, session tokens, and reconnect tokens are cryptographically generated; only hashes are retained in server state.
 - A pairing code is one-time and does not become a durable session credential.
-- Receiver discovery is server-disabled by default and requires explicit receiver opt-in for each active session.
+- Receiver discovery can be disabled by the server operator and always requires explicit receiver opt-in for each active session.
 - Directory entries expose only a machine label and opaque session ID. Direct requests still require receiver approval before any presenter credential is issued.
 - Presenter credentials are issued only after explicit approval from the session's receiver connection.
 - Role and session membership are revalidated for every pointer, acknowledgement, resume, and termination operation.

@@ -42,10 +42,6 @@ public interface IRelayClient : IAsyncDisposable
         bool discoverable,
         CancellationToken cancellationToken = default);
 
-    Task<JoinResponse> RequestToJoinSessionAsync(
-        string pairingCode,
-        CancellationToken cancellationToken = default);
-
     Task<JoinResponse> RequestToJoinReceiverAsync(
         string sessionId,
         CancellationToken cancellationToken = default);

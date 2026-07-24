@@ -20,7 +20,7 @@
 | Presenter state | Expected-ratio validation, calibration request, ready/pointing transitions, hotkey errors |
 | Presenter capture reporting | Normalized local pointer count and coordinate presentation |
 | Pairing and secrets | Friendly cryptographic codes, hashing, one-time consumption, expiry |
-| Receiver discovery | Disabled-by-default capability, receiver opt-in, directory filtering, direct request, mandatory approval |
+| Receiver discovery | Server capability, receiver opt-in, directory filtering, direct request, mandatory approval |
 | Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
 | Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
 | Session lifecycle | Creation, approval, active expiry, termination, presenter and receiver resume |
@@ -79,15 +79,15 @@
 
 1. Trust the local ASP.NET Core development certificate and start the HTTPS relay.
 2. Start two client processes. In the receiver, select a monitor and create a session.
-3. Enter the displayed code in the presenter. Confirm the receiver shows the presenter's machine name and that calibration remains disabled until approval.
+3. Make the receiver visible, refresh the presenter's receiver list, select it, and request access. Confirm the receiver shows the presenter's machine name and that calibration remains disabled until approval.
 4. Approve the presenter, calibrate the shared desktop region, and enable pointing.
 5. Click the four corners and center. Confirm equivalent receiver positions, a local ripple, and a displayed acknowledgement latency.
 6. End the session from each role in separate runs. Confirm the receiver overlay disappears and presenter pointing exits immediately.
 7. During an active session, interrupt relay connectivity and click while the UI shows Reconnecting. Confirm those clicks are reported as dropped and do not appear after reconnection.
-8. Restore connectivity within the reconnect window. Confirm both roles resume and newly captured pointers work without re-pairing.
+8. Restore connectivity within the reconnect window. Confirm both roles resume and newly captured pointers work without joining again.
 9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
 10. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
-11. Enable relay discovery, opt the receiver into visibility, refresh the presenter list, and request the receiver directly. Confirm the same receiver approval is required. Disable discovery on the relay and confirm both discovery controls are disabled while pairing-code joins still work.
+11. Disable discovery on the relay and confirm both discovery controls are disabled and the presenter cannot submit a new join request. Re-enable discovery and confirm the visible-receiver flow becomes available again.
 12. While approved, change the receiver resolution and confirm the sender's displayed dimensions update. Change the receiver aspect ratio and confirm stale calibration is invalidated. Change the sender's local display configuration and confirm recalibration is required there as well.
 
 ## Phase 6 manual procedure

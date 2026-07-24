@@ -4,7 +4,6 @@ using System.Windows.Input;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
 using RemotePointer.Contracts.Messages;
-using RemotePointer.Contracts.Validation;
 
 namespace RemotePointer.Client.ViewModels;
 
@@ -13,7 +12,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private readonly RelayCommand calibrateCommand;
     private readonly AsyncRelayCommand endSessionCommand;
     private readonly AsyncRelayCommand joinDiscoveredReceiverCommand;
-    private readonly AsyncRelayCommand joinSessionCommand;
     private readonly AsyncRelayCommand refreshReceiversCommand;
     private readonly Dictionary<Guid, long> pendingAcknowledgements = [];
     private readonly int pointerTtlMilliseconds;
@@ -30,7 +28,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private bool isSessionApproved;
     private string lastAcknowledgement = "No remote marker acknowledgement yet.";
     private string lastPointer = "No local pointers captured yet.";
-    private string pairingCode = string.Empty;
     private long sequenceNumber = CreateSequenceBase();
     private TargetRegionState state = TargetRegionState.Inactive;
     private string statusMessage;
@@ -54,7 +51,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         this.targetRegionService.PointerCaptured += OnPointerCaptured;
         statusMessage = relayClient is null
             ? "Calibrate the target area to begin."
-            : "Enter the receiver's pairing code to begin.";
+            : "Choose a visible receiver to request access.";
         connectionMessage = relayClient is null ? "Networking is not configured." : "Disconnected.";
 
         if (relayClient is not null)
@@ -74,9 +71,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             _ => State is TargetRegionState.Ready or TargetRegionState.Pointing
                 && (relayClient is null || IsSessionApproved));
         ExitPointingCommand = new RelayCommand(_ => targetRegionService.ExitPointingMode());
-        joinSessionCommand = new AsyncRelayCommand(
-            _ => JoinSessionAsync(),
-            _ => relayClient is not null && !IsJoinPending && !IsSessionApproved);
         refreshReceiversCommand = new AsyncRelayCommand(
             _ => RefreshAvailableReceiversAsync(),
             _ => relayClient is not null && ReceiverDiscoveryEnabled && !IsSessionApproved);
@@ -131,12 +125,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         : string.Create(
             CultureInfo.InvariantCulture,
             $"{receiverDisplay.WidthPixels} × {receiverDisplay.HeightPixels} ({receiverDisplay.AspectRatio:0.###}:1)");
-
-    public string PairingCode
-    {
-        get => pairingCode;
-        set => SetProperty(ref pairingCode, value);
-    }
 
     public TargetRegionState State
     {
@@ -228,8 +216,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public ICommand ExitPointingCommand { get; }
 
-    public ICommand JoinSessionCommand => joinSessionCommand;
-
     public ICommand RefreshReceiversCommand => refreshReceiversCommand;
 
     public ICommand JoinDiscoveredReceiverCommand => joinDiscoveredReceiverCommand;
@@ -315,31 +301,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         targetRegionService.Dispose();
         disposed = true;
         GC.SuppressFinalize(this);
-    }
-
-    private async Task JoinSessionAsync()
-    {
-        if (relayClient is null)
-        {
-            return;
-        }
-
-        if (!PairingCodeValidator.IsValid(PairingCode))
-        {
-            SetStatus("Enter the six-character pairing code shown by the receiver.", true);
-            return;
-        }
-
-        try
-        {
-            var response = await relayClient.RequestToJoinSessionAsync(
-                PairingCodeValidator.Normalize(PairingCode));
-            HandleJoinResponse(response);
-        }
-        catch (Exception exception)
-        {
-            SetStatus($"The receiver session could not be joined: {exception.Message}", true);
-        }
     }
 
     private async Task RefreshAvailableReceiversAsync()
@@ -582,7 +543,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     private void RaiseNetworkCommandStates()
     {
-        joinSessionCommand.RaiseCanExecuteChanged();
         refreshReceiversCommand.RaiseCanExecuteChanged();
         joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
         endSessionCommand.RaiseCanExecuteChanged();

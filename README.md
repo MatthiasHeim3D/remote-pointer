@@ -22,7 +22,7 @@ dotnet run --project src\RemotePointer.Client
 dotnet run --project src\RemotePointer.Client
 ```
 
-In the first client, use **Receive pointers**, select a monitor, and create a session. The presenter can enter its pairing code or, when relay discovery is enabled and the receiver opts in, select it from the visible-receiver list. The receiver must approve either request. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and the presenter target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, and right-drag draws a box.
+In the first client, use **Receive pointers**, select a monitor, create a session, and make it visible on the relay. In the presenter client, select it from the visible-receiver list and request access. The receiver must approve the request. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and the presenter target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, and right-drag draws a box.
 
 ## Small-network deployment
 

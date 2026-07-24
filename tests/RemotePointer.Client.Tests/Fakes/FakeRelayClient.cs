@@ -93,16 +93,6 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.FromResult(response);
     }
 
-    public Task<JoinResponse> RequestToJoinSessionAsync(
-        string pairingCode,
-        CancellationToken cancellationToken = default)
-    {
-        _ = pairingCode;
-        _ = cancellationToken;
-        SessionId = JoinResponse.SessionId;
-        return Task.FromResult(JoinResponse);
-    }
-
     public Task<bool> SetReceiverDiscoverableAsync(
         bool discoverable,
         CancellationToken cancellationToken = default)

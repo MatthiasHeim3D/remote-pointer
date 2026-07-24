@@ -127,7 +127,6 @@ public sealed class MainWindowViewModelTests
 
         relay.RaisePointer(pointer);
 
-        Assert.Equal("AB2D4E", viewModel.PairingCode);
         Assert.Equal("connection-1", relay.ApprovedPresenter?.ConnectionId);
         Assert.Equal(new NormalizedPoint(0.25d, 0.75d), Assert.Single(overlay.Markers));
         Assert.Equal(pointer.EventId, relay.SentAcknowledgement?.EventId);

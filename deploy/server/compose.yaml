@@ -9,7 +9,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       Deployment__BehindHttpsProxy: "true"
-      Sessions__ReceiverDiscoveryEnabled: ${REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED:-false}
+      Sessions__ReceiverDiscoveryEnabled: ${REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED:-true}
 
   caddy:
     image: caddy:2-alpine

@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using System.Windows.Input;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
@@ -23,8 +22,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isOverlayVisible;
     private bool receiverDiscoveryEnabled;
     private bool receiverDiscoverable;
-    private string pairingCode = "—";
-    private string pairingExpiration = "No receiver session is active.";
     private PresenterDescriptor? pendingPresenter;
     private string receiverConnectionMessage;
     private MonitorDescriptor? selectedMonitor;
@@ -114,18 +111,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref isOverlayVisible, value);
     }
 
-    public string PairingCode
-    {
-        get => pairingCode;
-        private set => SetProperty(ref pairingCode, value);
-    }
-
-    public string PairingExpiration
-    {
-        get => pairingExpiration;
-        private set => SetProperty(ref pairingExpiration, value);
-    }
-
     public string ReceiverConnectionMessage
     {
         get => receiverConnectionMessage;
@@ -166,7 +151,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ReceiverDiscoveryEnabled && HasReceiverSession;
 
     public string ReceiverDiscoveryMessage => ReceiverDiscoveryEnabled
-        ? "Allow presenters to find this receiver without a pairing code. Approval is still required."
+        ? "Allow presenters to find this receiver. Approval is still required."
         : "Receiver discovery is disabled on this relay.";
 
     public ICommand RefreshMonitorsCommand { get; }
@@ -338,13 +323,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             overlayService.Show(SelectedMonitor);
             var response = await receiverRelayClient.CreateReceiverSessionAsync(SelectedMonitor.Display);
             receiverSessionId = response.SessionId;
-            PairingCode = response.PairingCode;
-            PairingExpiration = string.Create(
-                CultureInfo.CurrentCulture,
-                $"Pairing code expires {response.PairingCodeExpiresAt.ToLocalTime():g}.");
             SetPendingPresenter(null);
             RaiseReceiverSessionProperties();
-            SetStatus("Receiver session created. Share the pairing code with the presenter.", false);
+            SetStatus("Receiver session created. Make it visible so a presenter can request access.", false);
         }
         catch (Exception exception)
         {
@@ -446,10 +427,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 receiverSessionId = e.State.SessionId;
                 ReceiverDiscoverable = e.State.ReceiverDiscoverable;
-                PairingCode = "—";
-                PairingExpiration = string.Create(
-                    CultureInfo.CurrentCulture,
-                    $"Active session expires {e.State.ExpiresAt.ToLocalTime():g}.");
                 if (e.State.ReceiverDisplay is not null)
                 {
                     var restoredMonitor = Monitors.FirstOrDefault(
@@ -539,8 +516,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         receiverSessionId = null;
         ReceiverDiscoverable = false;
-        PairingCode = "—";
-        PairingExpiration = "No receiver session is active.";
         SetPendingPresenter(null);
         RaiseReceiverSessionProperties();
     }

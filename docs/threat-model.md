@@ -22,9 +22,8 @@ Trust boundaries exist at the public relay listener, SignalR hub method boundary
 
 ## Data flow
 
-1. The receiver creates a session over HTTPS and receives role credentials plus a one-time code.
-2. The presenter submits the code and a durable random client ID. The receiver explicitly approves the displayed machine identity.
-   When server-enabled discovery is used instead, the receiver first opts into the directory and the presenter selects its opaque entry; the same approval step still applies.
+1. The receiver creates a session over HTTPS, receives role credentials, and opts into the relay directory.
+2. The presenter selects the receiver's opaque directory entry and submits it with a durable random client ID. The receiver explicitly approves the displayed machine identity.
 3. The relay issues role-specific credentials and relays only validated, transient normalized coordinates.
 4. The receiver displays a non-interactive marker and acknowledges its event ID.
 5. Reconnection or client restart submits the DPAPI-recovered token set; the relay revalidates it and rotates the reconnect token.

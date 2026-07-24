@@ -15,10 +15,10 @@ Edit `.env`, then start the stack:
 
 ```text
 REMOTEPOINTER_HOSTNAME=pointer.internal.example
-REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=false
+REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=true
 ```
 
-Set `REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=true` to let receivers explicitly publish themselves in the relay directory. The default is `false`. Pairing-code joins continue to work in either mode, and every direct join still requires receiver approval.
+Receiver discovery is enabled by default so receivers can explicitly publish themselves in the relay directory. Set `REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=false` to disable the directory. Every direct join still requires receiver approval. Pairing-code joins remain available at the relay protocol level for compatibility but are not exposed by the desktop client.
 
 ```powershell
 docker compose up -d --build
