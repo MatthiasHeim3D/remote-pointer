@@ -7,6 +7,7 @@ public static class ContractValidator
     public const int MaximumPointerTextLength = 256;
     public const int MaximumPathPointsPerEvent = 128;
     public const int MaximumProfilePictureBytes = 20 * 1_024;
+    public const int MaximumConnectedPresenters = 64;
 
     public static ValidationResult Validate(
         PointerEventMessage? message,
@@ -251,6 +252,23 @@ public static class ContractValidator
         if (state.ReceiverDisplay is not null)
         {
             errors.AddRange(Validate(state.ReceiverDisplay).Errors);
+        }
+
+        if (state.ConnectedPresenters is not null)
+        {
+            AddRange(
+                errors,
+                state.ConnectedPresenters.Length <= MaximumConnectedPresenters,
+                nameof(state.ConnectedPresenters));
+            foreach (var presenter in state.ConnectedPresenters.Take(
+                         MaximumConnectedPresenters + 1))
+            {
+                AddRequired(
+                    errors,
+                    !string.IsNullOrWhiteSpace(presenter.DisplayName)
+                        && presenter.DisplayName.Length <= 128,
+                    nameof(presenter.DisplayName));
+            }
         }
 
         return ValidationResult.Failure(errors);

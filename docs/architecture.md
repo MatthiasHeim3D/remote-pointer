@@ -10,7 +10,7 @@ Remote Pointer has three deployable or reusable components:
 | `RemotePointer.Server` | Validate, authorize, rate-limit, and relay transient pointer events | Access either user's desktop |
 | `RemotePointer.Contracts` | Transport-neutral messages, coordinate math, JSON policy, and structural validation | Depend on WPF, SignalR, or ASP.NET Core |
 
-Both clients establish outbound HTTPS/WSS connections to the server. The server places the approved presenter and receiver in a session-specific SignalR group. Peer-to-peer connectivity is deliberately excluded.
+Clients establish outbound HTTPS/WSS connections to the server. The server places the approved presenters and receiver in a session-specific SignalR group. Peer-to-peer connectivity is deliberately excluded.
 
 ## Phase 1 design
 
@@ -42,9 +42,9 @@ The control window registers `Ctrl+Alt+P` with `RegisterHotKey`; no keyboard or 
 
 ## Phase 4 design
 
-`PointerHub` is a typed SignalR hub at `/hubs/pointer`. It contains orchestration only: every state transition and authorization decision is delegated to the singleton `SessionManager`. A SignalR group exists per approved session, while pointer and acknowledgement delivery is addressed directly to the currently validated receiver or presenter connection so no pending or unrelated client receives transient data.
+`PointerHub` is a typed SignalR hub at `/hubs/pointer`. It contains orchestration only: every state transition and authorization decision is delegated to the singleton `SessionManager`. A SignalR group exists per approved session, while pointer and acknowledgement delivery is addressed directly to the validated receiver or originating presenter connection so no pending or unrelated client receives transient data.
 
-`SessionManager` uses a single in-process synchronization boundary around its dictionaries because the MVP permits only one receiver and one presenter per session. SignalR connection IDs are current routes, not identities. Participants are identified by a client-instance ID plus role-specific session and reconnect tokens. Resume validates both hashes, replaces the route, and rotates the reconnect token without resetting sequence state.
+`SessionManager` uses a single in-process synchronization boundary around its dictionaries. A session has one receiver and a receiver-configured collection of presenters, capped by the server at 16. SignalR connection IDs are current routes, not identities. Each presenter has independent credentials and sequence tracking. Pointer event IDs retain their originating presenter route so acknowledgements return only to the sender that produced the event. Resume validates both token hashes, replaces the route, and rotates the reconnect token without resetting sequence state.
 
 Pairing codes use a six-character unambiguous cryptographic alphabet and are indexed only by SHA-256 hash. A successful join consumes the code. Session IDs, session secrets, role tokens, and reconnect tokens each use 256 bits of random input; only hashes are retained by the manager.
 
@@ -58,11 +58,11 @@ A hosted cleanup service expires unused pairing sessions and active sessions. Th
 
 `SignalRRelayClient` is the WPF-independent client transport boundary. It creates the connection lazily, uses the shared strict JSON policy, and reports explicit connection states. Receiver and presenter use separate connections while sharing one durable random client-instance ID stored under the current user's local application data. Phase 6 adds protected restart recovery without changing this live transport boundary.
 
-The receiver view model exposes an **Available**/**Invisible** selector. Choosing **Available** for the first time creates and automatically publishes the receiver; later changes update the stored visibility preference. It exposes the pending machine name for explicit approval, offers **Disconnect all connections** while a presenter is connected, and locks monitor selection while the receiver presence exists. Disconnecting presenters preserves the receiver's availability preference. Incoming events are validated against TTL again immediately before display. Acknowledgements are sent only when the overlay accepts the marker.
+The receiver view model exposes an **Available**/**Invisible** selector. Choosing **Available** for the first time creates and automatically publishes the receiver; later changes update the stored visibility preference. It exposes each pending machine name for explicit approval, lists connected senders in a dedicated receiving view, disables the local sender role while receiving, and offers a prominent **Disconnect all senders** action. The user-configured sender limit defaults to two and applies when the receiver session starts. Disconnecting presenters preserves the receiver's availability preference. Incoming events are validated against TTL again immediately before display. Acknowledgements are sent only when the overlay accepts the marker.
 
 The presenter view model exposes visible-receiver requests and cannot calibrate or point until approval supplies the receiver dimensions. Pairing-code joins remain in the relay protocol for compatibility but are not exposed by the desktop client. Receiver resolution/rotation changes are pushed through the relay; aspect changes invalidate stale calibration. Local display-configuration changes also require recalibration. Each captured event gets a new event ID and monotonic sequence number and is sent immediately; related drag events also share an ephemeral gesture ID. Events are never queued: a send during disconnection or reconnection returns a dropped status. Receiver acknowledgements are correlated in memory to show event-to-display latency.
 
-SignalR automatic reconnect invokes `ResumeSession` with the role credential and single-use reconnect token, then replaces the credential with the rotated result. Failure to resume clears the session and exits presenter pointing. A presenter disconnect detaches only that presenter; an available receiver is republished for another request. Receiver termination and expiry remove the whole server session. The notification-area icon reports invisible/available receiver, connected presenter, or active pointing state; minimizing hides the control window until the icon is opened.
+SignalR automatic reconnect invokes `ResumeSession` with the role credential and single-use reconnect token, then replaces the credential with the rotated result. Failure to resume clears the session and exits presenter pointing. A presenter disconnect detaches only that presenter; the receiver stays available while below its connection limit. Receiver termination and expiry remove the whole server session. The notification-area icon reports invisible/available receiver, connected presenters, or active pointing state; minimizing hides the control window until the icon is opened.
 
 ## Phase 6 design
 

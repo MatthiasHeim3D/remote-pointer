@@ -10,5 +10,7 @@ public sealed class SessionOptions
 
     public int SequenceWindowSize { get; set; } = 64;
 
+    public int MaximumPresentersPerReceiver { get; set; } = 16;
+
     public bool ReceiverDiscoveryEnabled { get; set; }
 }

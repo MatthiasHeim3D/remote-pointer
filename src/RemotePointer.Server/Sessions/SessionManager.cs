@@ -52,7 +52,8 @@ public sealed class SessionManager : ISessionManager
         string clientInstanceId,
         string receiverDisplayName,
         string? applicationInstanceId = null,
-        ClientProfile? profile = null)
+        ClientProfile? profile = null,
+        int maximumPresenterConnections = 2)
     {
         applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
             ? clientInstanceId
@@ -64,6 +65,13 @@ public sealed class SessionManager : ISessionManager
         EnsureIdentifier(receiverDisplayName, nameof(receiverDisplayName));
         EnsureValid(ContractValidator.Validate(display), "invalid_display");
         EnsureValid(ContractValidator.Validate(profile), "invalid_profile");
+        if (maximumPresenterConnections < 1
+            || maximumPresenterConnections > sessionOptions.MaximumPresentersPerReceiver)
+        {
+            throw new SessionOperationException(
+                "invalid_presenter_limit",
+                $"Maximum presenter connections must be between 1 and {sessionOptions.MaximumPresentersPerReceiver}.");
+        }
 
         lock (syncRoot)
         {
@@ -94,7 +102,8 @@ public sealed class SessionManager : ISessionManager
                 applicationInstanceId,
                 profile.PicturePng is null ? null : [.. profile.PicturePng],
                 receiver,
-                new SequenceNumberTracker(sessionOptions.SequenceWindowSize),
+                sessionOptions.SequenceWindowSize,
+                maximumPresenterConnections,
                 new PointerTokenBucket(
                     rateLimitOptions.EventsPerSecond,
                     rateLimitOptions.BurstSize,
@@ -140,7 +149,7 @@ public sealed class SessionManager : ISessionManager
                     && session.ExpiresAt > now
                     && session.Receiver.ConnectionId is not null
                     && session.PendingPresenter is null
-                    && session.Presenter is null
+                    && session.Presenters.Count < session.MaximumPresenterConnections
                     && !string.Equals(
                         session.ApplicationInstanceId,
                         excludedApplicationInstanceId,
@@ -306,7 +315,10 @@ public sealed class SessionManager : ISessionManager
             session.ReceiverDisplay = display;
             return new ReceiverDisplayUpdateResult(
                 session.Id,
-                session.Presenter?.ConnectionId,
+                session.Presenters.Values
+                    .Select(presenter => presenter.Participant.ConnectionId)
+                    .OfType<string>()
+                    .ToArray(),
                 display);
         }
     }
@@ -343,12 +355,18 @@ public sealed class SessionManager : ISessionManager
 
             var sessionToken = secretGenerator.GenerateSecret();
             var reconnectToken = secretGenerator.GenerateSecret();
-            session.Presenter = new Participant(
+            var participant = new Participant(
                 ClientRole.Presenter,
                 pending.ClientInstanceId,
                 presenterConnectionId,
                 secretGenerator.HashSecret(sessionToken),
                 secretGenerator.HashSecret(reconnectToken));
+            session.Presenters.Add(
+                presenterConnectionId,
+                new ConnectedPresenter(
+                    pending,
+                    participant,
+                    new SequenceNumberTracker(session.SequenceWindowSize)));
             session.PendingPresenter = null;
             connections[presenterConnectionId] = new ConnectionMembership(
                 session.Id,
@@ -398,6 +416,12 @@ public sealed class SessionManager : ISessionManager
             }
 
             var session = GetActiveSession(membership.SessionId);
+            if (!session.Presenters.TryGetValue(connectionId, out var presenter))
+            {
+                throw new SessionOperationException(
+                    "presenter_not_connected",
+                    "The presenter is no longer connected to this session.");
+            }
             if (!session.RateLimiter.TryAcquire(now))
             {
                 throw new SessionOperationException(
@@ -405,7 +429,7 @@ public sealed class SessionManager : ISessionManager
                     "The pointer event rate limit was exceeded.");
             }
 
-            if (!session.SequenceNumbers.TryAccept(pointerEvent.SequenceNumber))
+            if (!presenter.SequenceNumbers.TryAccept(pointerEvent.SequenceNumber))
             {
                 return new PointerRelayResult(
                     PointerRelayDisposition.IgnoredSequence,
@@ -414,6 +438,7 @@ public sealed class SessionManager : ISessionManager
             }
 
             session.PointerCount++;
+            session.RecordPointerOrigin(pointerEvent.EventId, connectionId);
             return new PointerRelayResult(
                 PointerRelayDisposition.Accepted,
                 session.Id,
@@ -441,7 +466,7 @@ public sealed class SessionManager : ISessionManager
             var session = GetActiveSession(membership.SessionId);
             return new AcknowledgementRelayResult(
                 session.Id,
-                session.Presenter?.ConnectionId);
+                session.TakePointerOrigin(acknowledgement.EventId));
         }
     }
 
@@ -457,12 +482,31 @@ public sealed class SessionManager : ISessionManager
         {
             EnsureConnectionIsUnbound(connectionId);
             var session = GetActiveSession(request.SessionId);
-            var participant = request.Role switch
+            ConnectedPresenter? connectedPresenter = null;
+            Participant? participant;
+            if (request.Role == ClientRole.Receiver)
             {
-                ClientRole.Receiver => session.Receiver,
-                ClientRole.Presenter => session.Presenter,
-                _ => null,
-            };
+                participant = session.Receiver;
+            }
+            else if (request.Role == ClientRole.Presenter)
+            {
+                connectedPresenter = session.Presenters.Values.FirstOrDefault(candidate =>
+                    string.Equals(
+                        candidate.Participant.ClientInstanceId,
+                        request.ClientInstanceId,
+                        StringComparison.Ordinal)
+                    && secretGenerator.SecretMatches(
+                        request.SessionToken,
+                        candidate.Participant.SessionTokenHash)
+                    && secretGenerator.SecretMatches(
+                        request.ReconnectToken,
+                        candidate.Participant.ReconnectTokenHash));
+                participant = connectedPresenter?.Participant;
+            }
+            else
+            {
+                participant = null;
+            }
 
             if (participant is null
                 || !string.Equals(
@@ -486,6 +530,23 @@ public sealed class SessionManager : ISessionManager
             var newReconnectToken = secretGenerator.GenerateSecret();
             participant.ConnectionId = connectionId;
             participant.ReconnectTokenHash = secretGenerator.HashSecret(newReconnectToken);
+            if (connectedPresenter is not null)
+            {
+                var previousPresenterKey = session.Presenters
+                    .First(pair => ReferenceEquals(pair.Value, connectedPresenter))
+                    .Key;
+                if (!string.Equals(previousPresenterKey, connectionId, StringComparison.Ordinal))
+                {
+                    session.Presenters.Remove(previousPresenterKey);
+                }
+
+                session.ReplacePointerOriginConnection(previousPresenterKey, connectionId);
+                connectedPresenter.Descriptor = connectedPresenter.Descriptor with
+                {
+                    ConnectionId = connectionId,
+                };
+                session.Presenters[connectionId] = connectedPresenter;
+            }
             if (participant.Role == ClientRole.Receiver
                 && !string.IsNullOrWhiteSpace(applicationInstanceId))
             {
@@ -529,7 +590,7 @@ public sealed class SessionManager : ISessionManager
             var session = GetActiveSession(sessionId);
             if (membership.Role == ClientRole.Presenter)
             {
-                return DisconnectPresentersNoLock(session);
+                return DisconnectPresenterNoLock(session, connectionId);
             }
 
             return TerminateSessionNoLock(session);
@@ -551,7 +612,7 @@ public sealed class SessionManager : ISessionManager
                 sessionId,
                 ClientRole.Receiver,
                 requireApproved: true);
-            if (session.Presenter is null)
+            if (session.Presenters.Count == 0 && session.PendingPresenter is null)
             {
                 throw new SessionOperationException(
                     "presenter_not_connected",
@@ -617,7 +678,9 @@ public sealed class SessionManager : ISessionManager
 
             var participant = membership.Role == ClientRole.Receiver
                 ? session.Receiver
-                : session.Presenter;
+                : session.Presenters.TryGetValue(connectionId, out var presenter)
+                    ? presenter.Participant
+                    : null;
             if (participant?.ConnectionId == connectionId)
             {
                 participant.ConnectionId = null;
@@ -633,6 +696,8 @@ public sealed class SessionManager : ISessionManager
             || sessionOptions.MaximumSessionHours <= 0
             || sessionOptions.MaximumSessionHours > 8
             || sessionOptions.SequenceWindowSize <= 0
+            || sessionOptions.MaximumPresentersPerReceiver is < 1
+                or > ContractValidator.MaximumConnectedPresenters
             || rateLimitOptions.EventsPerSecond <= 0
             || rateLimitOptions.BurstSize <= 0)
         {
@@ -680,7 +745,12 @@ public sealed class SessionManager : ISessionManager
             return RejectedJoin("A client cannot connect to itself.");
         }
 
-        if (session.Presenter is not null || session.PendingPresenter is not null)
+        if (session.Presenters.Count >= session.MaximumPresenterConnections)
+        {
+            return RejectedJoin("The receiver has reached its connection limit.");
+        }
+
+        if (session.PendingPresenter is not null)
         {
             return RejectedJoin("The session already has a presenter request.");
         }
@@ -802,29 +872,62 @@ public sealed class SessionManager : ISessionManager
 
     private SessionTerminationResult DisconnectPresentersNoLock(SessionRecord session)
     {
-        var presenterConnectionId = session.Presenter?.ConnectionId;
-        if (presenterConnectionId is not null)
+        var presenterConnectionIds = session.Presenters.Values
+            .Select(presenter => presenter.Participant.ConnectionId)
+            .OfType<string>()
+            .Concat(session.PendingPresenter is null
+                ? []
+                : [session.PendingPresenter.ConnectionId])
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        foreach (var presenterConnectionId in presenterConnectionIds)
         {
             connections.Remove(presenterConnectionId);
         }
 
-        session.Presenter = null;
+        session.Presenters.Clear();
+        session.PendingPresenter = null;
+        session.ClearPointerOrigins();
         return new SessionTerminationResult(
             session.Id,
-            presenterConnectionId is null ? [] : [presenterConnectionId],
+            presenterConnectionIds,
+            session.PointerCount,
+            ReceiverPreserved: true,
+            PresenterConnectionId: presenterConnectionIds.FirstOrDefault(),
+            ReceiverConnectionId: session.Receiver.ConnectionId,
+            State: CreateState(session),
+            PresenterConnectionIds: presenterConnectionIds);
+    }
+
+    private SessionTerminationResult DisconnectPresenterNoLock(
+        SessionRecord session,
+        string presenterConnectionId)
+    {
+        connections.Remove(presenterConnectionId);
+        session.Presenters.Remove(presenterConnectionId);
+        session.RemovePointerOrigins(presenterConnectionId);
+        return new SessionTerminationResult(
+            session.Id,
+            [presenterConnectionId],
             session.PointerCount,
             ReceiverPreserved: true,
             PresenterConnectionId: presenterConnectionId,
             ReceiverConnectionId: session.Receiver.ConnectionId,
-            State: CreateState(session));
+            State: CreateState(session),
+            PresenterConnectionIds: [presenterConnectionId]);
     }
 
     private static SessionStateMessage CreateState(SessionRecord session) => new(
         session.Id,
-        Approved: session.Presenter is not null,
+        Approved: session.Presenters.Count > 0,
         session.ReceiverDisplay,
         session.ExpiresAt,
-        session.IsDiscoverable);
+        session.IsDiscoverable,
+        session.Presenters.Values
+            .Select(presenter => new ConnectedPresenterDescriptor(
+                presenter.Descriptor.DisplayName))
+            .OrderBy(presenter => presenter.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray());
 
     private sealed class SessionRecord(
         string id,
@@ -837,7 +940,8 @@ public sealed class SessionManager : ISessionManager
         string applicationInstanceId,
         byte[]? profilePicturePng,
         Participant receiver,
-        SequenceNumberTracker sequenceNumbers,
+        int sequenceWindowSize,
+        int maximumPresenterConnections,
         PointerTokenBucket rateLimiter)
     {
         internal string Id { get; } = id;
@@ -860,7 +964,9 @@ public sealed class SessionManager : ISessionManager
 
         internal Participant Receiver { get; } = receiver;
 
-        internal SequenceNumberTracker SequenceNumbers { get; } = sequenceNumbers;
+        internal int SequenceWindowSize { get; } = sequenceWindowSize;
+
+        internal int MaximumPresenterConnections { get; } = maximumPresenterConnections;
 
         internal PointerTokenBucket RateLimiter { get; } = rateLimiter;
 
@@ -870,9 +976,79 @@ public sealed class SessionManager : ISessionManager
 
         internal PresenterDescriptor? PendingPresenter { get; set; }
 
-        internal Participant? Presenter { get; set; }
+        internal Dictionary<string, ConnectedPresenter> Presenters { get; } =
+            new(StringComparer.Ordinal);
 
         internal long PointerCount { get; set; }
+
+        private Dictionary<Guid, string> PointerOrigins { get; } = [];
+
+        private Queue<Guid> PointerOriginOrder { get; } = [];
+
+        internal void RecordPointerOrigin(Guid eventId, string presenterConnectionId)
+        {
+            PointerOrigins[eventId] = presenterConnectionId;
+            PointerOriginOrder.Enqueue(eventId);
+            while (PointerOriginOrder.Count > 4_096)
+            {
+                PointerOrigins.Remove(PointerOriginOrder.Dequeue());
+            }
+        }
+
+        internal string? TakePointerOrigin(Guid eventId)
+        {
+            return PointerOrigins.Remove(eventId, out var presenterConnectionId)
+                ? presenterConnectionId
+                : null;
+        }
+
+        internal void RemovePointerOrigins(string presenterConnectionId)
+        {
+            foreach (var eventId in PointerOrigins
+                         .Where(pair => string.Equals(
+                             pair.Value,
+                             presenterConnectionId,
+                             StringComparison.Ordinal))
+                         .Select(pair => pair.Key)
+                         .ToArray())
+            {
+                PointerOrigins.Remove(eventId);
+            }
+        }
+
+        internal void ReplacePointerOriginConnection(
+            string previousConnectionId,
+            string newConnectionId)
+        {
+            foreach (var eventId in PointerOrigins
+                         .Where(pair => string.Equals(
+                             pair.Value,
+                             previousConnectionId,
+                             StringComparison.Ordinal))
+                         .Select(pair => pair.Key)
+                         .ToArray())
+            {
+                PointerOrigins[eventId] = newConnectionId;
+            }
+        }
+
+        internal void ClearPointerOrigins()
+        {
+            PointerOrigins.Clear();
+            PointerOriginOrder.Clear();
+        }
+    }
+
+    private sealed class ConnectedPresenter(
+        PresenterDescriptor descriptor,
+        Participant participant,
+        SequenceNumberTracker sequenceNumbers)
+    {
+        internal PresenterDescriptor Descriptor { get; set; } = descriptor;
+
+        internal Participant Participant { get; } = participant;
+
+        internal SequenceNumberTracker SequenceNumbers { get; } = sequenceNumbers;
     }
 
     private sealed class Participant(

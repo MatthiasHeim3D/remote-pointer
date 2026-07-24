@@ -36,6 +36,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string profilePicturePath;
     private string serverAddress;
     private string userName;
+    private int maximumSenderConnections;
 
     public MainWindowViewModel(
         IMonitorService monitorService,
@@ -55,11 +56,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ?? "https://localhost:7243";
         userName = clientSettings?.Profile.UserName ?? Environment.UserName;
         profilePicturePath = clientSettings?.Profile.PicturePath ?? string.Empty;
+        maximumSenderConnections = clientSettings?.Receiver.MaximumSenderConnections ?? 2;
         this.overlayService.StateChanged += OnOverlayStateChanged;
         Presenter = new PresenterViewModel(
             targetRegionService ?? new TargetRegionService(),
             presenterRelayClient,
             pointerTtlMilliseconds);
+        Presenter.PropertyChanged += OnPresenterPropertyChanged;
 
         receiverConnectionMessage = receiverRelayClient is null
             ? "Networking is not configured."
@@ -77,7 +80,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RefreshMonitorsCommand = new RelayCommand(_ => RefreshMonitors());
         approvePresenterCommand = new AsyncRelayCommand(
             _ => ApprovePresenterAsync(),
-            _ => receiverRelayClient is not null && pendingPresenter is not null && HasReceiverSession);
+            _ => receiverRelayClient is not null
+                && pendingPresenter is not null
+                && HasReceiverSession
+                && !Presenter.IsSessionApproved
+                && !Presenter.IsJoinPending);
         disconnectAllConnectionsCommand = new AsyncRelayCommand(
             _ => DisconnectAllConnectionsAsync(),
             _ => receiverRelayClient is not null && HasConnectedPresenter && HasReceiverSession);
@@ -110,6 +117,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<MonitorDescriptor> Monitors { get; } = [];
+
+    public ObservableCollection<ConnectedPresenterDescriptor> ConnectedPresenters { get; } = [];
 
     public PresenterViewModel Presenter { get; }
 
@@ -164,7 +173,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (SetProperty(ref hasConnectedPresenter, value))
             {
                 disconnectAllConnectionsCommand.RaiseCanExecuteChanged();
+                Presenter.SetSenderRoleEnabled(!value);
                 RaiseAvailabilityProperties();
+                RaisePropertyChanged(nameof(FlyoutConnectionMessage));
             }
         }
     }
@@ -251,6 +262,22 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => profilePicturePath;
         set => SetProperty(ref profilePicturePath, value);
     }
+
+    public int MaximumSenderConnections
+    {
+        get => maximumSenderConnections;
+        set => SetProperty(ref maximumSenderConnections, value);
+    }
+
+    public string ConnectedPresenterCountLabel =>
+        $"{ConnectedPresenters.Count} sender{(ConnectedPresenters.Count == 1 ? string.Empty : "s")} connected";
+
+    public string FlyoutConnectionMessage => HasConnectedPresenter
+        ? ConnectedPresenterCountLabel
+        : Presenter.ConnectionMessage;
+
+    public IReadOnlyList<int> MaximumSenderConnectionOptions { get; } =
+        Enumerable.Range(1, 16).ToArray();
 
     public string ProfileInitials
     {
@@ -436,6 +463,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         overlayService.Dispose();
+        Presenter.PropertyChanged -= OnPresenterPropertyChanged;
         Presenter.Dispose();
         disposed = true;
         GC.SuppressFinalize(this);
@@ -499,6 +527,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             await receiverRelayClient.DisconnectAllConnectionsAsync();
+            SetPendingPresenter(null);
             SetStatus("Disconnected all presenter connections.", false);
         }
         catch (Exception exception)
@@ -558,6 +587,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ReceiverConnectionMessage = e.Message;
     }
 
+    private void OnPresenterPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        _ = sender;
+        if (e.PropertyName is nameof(PresenterViewModel.IsSessionApproved)
+            or nameof(PresenterViewModel.IsJoinPending))
+        {
+            approvePresenterCommand.RaiseCanExecuteChanged();
+        }
+
+        if (e.PropertyName == nameof(PresenterViewModel.ConnectionMessage))
+        {
+            RaisePropertyChanged(nameof(FlyoutConnectionMessage));
+        }
+    }
+
     private void OnPresenterJoinRequested(object? sender, PresenterJoinRequestedEventArgs e)
     {
         SetPendingPresenter(e.Presenter);
@@ -567,7 +611,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void OnReceiverSessionApproved(object? sender, RelaySessionStateEventArgs e)
     {
         var presenterDisconnected = HasConnectedPresenter && !e.State.Approved;
-        HasConnectedPresenter = e.State.Approved;
+        ConnectedPresenters.Clear();
+        foreach (var presenter in e.State.ConnectedPresenters ?? [])
+        {
+            ConnectedPresenters.Add(presenter);
+        }
+
+        if (e.State.Approved && ConnectedPresenters.Count == 0)
+        {
+            ConnectedPresenters.Add(new ConnectedPresenterDescriptor("Connected sender"));
+        }
+
+        RaisePropertyChanged(nameof(ConnectedPresenterCountLabel));
+        RaisePropertyChanged(nameof(FlyoutConnectionMessage));
+        HasConnectedPresenter = ConnectedPresenters.Count > 0;
         if (receiverRelayClient?.Credential?.Role == ClientRole.Receiver)
         {
             receiverSessionId = e.State.SessionId;
@@ -575,7 +632,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 e.State.ReceiverDiscoverable
                     ? ReceiverAvailability.Available
                     : ReceiverAvailability.Invisible);
-            SetPendingPresenter(null);
             if (e.State.ReceiverDisplay is not null)
             {
                 var restoredMonitor = Monitors.FirstOrDefault(
@@ -600,8 +656,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         SetStatus(
-            e.State.Approved
-                ? "Presenter approved. Incoming pointers are enabled."
+            HasConnectedPresenter
+                ? $"Receiving pointers from {ConnectedPresenters.Count} connected sender{(ConnectedPresenters.Count == 1 ? string.Empty : "s")}."
                 : presenterDisconnected && ReceiverAvailability == ReceiverAvailability.Available
                     ? "Presenter disconnected. This receiver remains available."
                     : presenterDisconnected
@@ -680,8 +736,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            clientSettings.SaveUserPreferences(ServerAddress, UserName, ProfilePicturePath);
-            SetStatus("Settings saved. Restart Remote Pointer to apply server or username changes.", false);
+            clientSettings.SaveUserPreferences(
+                ServerAddress,
+                UserName,
+                ProfilePicturePath,
+                MaximumSenderConnections);
+            SetStatus(
+                "Settings saved. Restart Remote Pointer to apply connection and advertised profile changes.",
+                false);
             IsSettingsOpen = false;
         }
         catch (Exception exception) when (
@@ -694,6 +756,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void ClearReceiverSession()
     {
         receiverSessionId = null;
+        ConnectedPresenters.Clear();
+        RaisePropertyChanged(nameof(ConnectedPresenterCountLabel));
+        RaisePropertyChanged(nameof(FlyoutConnectionMessage));
         HasConnectedPresenter = false;
         SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
         SetPendingPresenter(null);

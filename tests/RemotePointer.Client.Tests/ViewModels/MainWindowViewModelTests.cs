@@ -152,9 +152,19 @@ public sealed class MainWindowViewModelTests
                 true,
                 monitor.Display,
                 DateTimeOffset.UtcNow.AddHours(1),
-                ReceiverDiscoverable: true));
+                ReceiverDiscoverable: true,
+                ConnectedPresenters:
+                [
+                    new ConnectedPresenterDescriptor("Presenter One"),
+                    new ConnectedPresenterDescriptor("Presenter Two"),
+                ]));
 
         Assert.True(viewModel.HasConnectedPresenter);
+        Assert.Equal(2, viewModel.ConnectedPresenters.Count);
+        Assert.Equal("2 senders connected", viewModel.ConnectedPresenterCountLabel);
+        Assert.False(viewModel.Presenter.SenderRoleEnabled);
+        Assert.False(viewModel.Presenter.JoinDiscoveredReceiverCommand.CanExecute(
+            new AvailableReceiverDescriptor("other-session", "Other receiver")));
         Assert.Equal("Available and connected", viewModel.AvailabilityLabel);
         Assert.Equal("#63C5DA", viewModel.AvailabilityColor);
         Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));

@@ -28,6 +28,7 @@ public sealed class ClientSettingsTests
         var settings = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://pointer.example.test", settings.Server.BaseUrl);
+        Assert.Equal(2, settings.Receiver.MaximumSenderConnections);
     }
 
     [Fact]
@@ -52,12 +53,14 @@ public sealed class ClientSettingsTests
         settings.SaveUserPreferences(
             "https://saved.example.test",
             "Ada Lovelace",
-            @"C:\Pictures\ada.png");
+            @"C:\Pictures\ada.png",
+            maximumSenderConnections: 4);
         var reloaded = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://saved.example.test", reloaded.Server.BaseUrl);
         Assert.Equal("Ada Lovelace", reloaded.Profile.UserName);
         Assert.Equal(@"C:\Pictures\ada.png", reloaded.Profile.PicturePath);
+        Assert.Equal(4, reloaded.Receiver.MaximumSenderConnections);
     }
 
     [Fact]

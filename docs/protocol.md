@@ -36,7 +36,7 @@ The presenter sends each captured pointer event immediately as a `PointerEventMe
 - `ClientProfile`: optional PNG profile thumbnail capped to fit within the relay message limit.
 - `AvailableReceiverDescriptor`: opaque session identity, receiver-selected label, process-scoped application identity, and an optional bounded PNG profile thumbnail; no pairing code, display metadata, or credential.
 - `RelayCapabilities`: server-controlled receiver-discovery availability.
-- `SessionStateMessage`: session identity, approval state, current receiver display, expiry, and discovery state.
+- `SessionStateMessage`: session identity, approval state, current receiver display, expiry, discovery state, and receiver-visible connected-presenter names.
 - `SessionCredential`: role-restricted session token, rotating reconnect token, durable client identity, and expiry.
 - `CreateSessionResponse`: pairing information, receiver-only session secret, and receiver credential.
 - `JoinResponse`: acceptance result with no session data on rejection.
@@ -53,7 +53,7 @@ The default pointer TTL is 2,000 ms at the client. Structural validation current
 
 Pairing codes normalize case, whitespace, and hyphens. The accepted six-character alphabet excludes `0`, `O`, `1`, and `I` to reduce transcription errors. Codes are generated cryptographically, stored only by hash, expire after ten minutes when unused, and are consumed by the first accepted join request.
 
-When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explicitly publish its machine label and opaque session ID. A presenter may submit a direct join request for that entry, but receives no credential and cannot send pointers until the receiver approves. Disabled, hidden, disconnected, pending, and already paired receivers are omitted. A discoverable receiver can remain available after its pairing code expires, until the receiver hides/ends it or the session expires.
+When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explicitly publish its machine label and opaque session ID. A presenter may submit a direct join request for that entry, but receives no credential and cannot send pointers until the receiver approves. Disabled, hidden, disconnected, pending, and full-capacity receivers are omitted. A receiver chooses a maximum presenter count when creating the session; the client default is two and the server maximum is sixteen. A discoverable receiver can remain available after its pairing code expires, until the receiver reaches capacity, hides/ends it, or the session expires.
 
 ## SignalR surface
 
@@ -61,6 +61,7 @@ Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a proce
 
 - `CreateReceiverSession(DisplayDescriptor)`
 - `CreateReceiverSessionWithProfile(DisplayDescriptor, ClientProfile)`
+- `CreateReceiverSessionWithSettings(DisplayDescriptor, ClientProfile, maximumPresenterConnections)`
 - `GetRelayCapabilities()`
 - `GetAvailableReceivers()`
 - `SetReceiverDiscoverable(sessionId, discoverable)`

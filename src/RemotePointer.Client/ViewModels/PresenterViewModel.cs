@@ -26,6 +26,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private bool isError;
     private bool isJoinPending;
     private bool isSessionApproved;
+    private bool senderRoleEnabled = true;
     private string lastAcknowledgement = "No remote marker acknowledgement yet.";
     private string lastPointer = "No local pointers captured yet.";
     private long sequenceNumber = CreateSequenceBase();
@@ -74,10 +75,14 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         ExitPointingCommand = new RelayCommand(_ => targetRegionService.ExitPointingMode());
         refreshReceiversCommand = new AsyncRelayCommand(
             _ => RefreshAvailableReceiversAsync(),
-            _ => relayClient is not null && ReceiverDiscoveryEnabled && !IsSessionApproved);
+            _ => relayClient is not null
+                && SenderRoleEnabled
+                && ReceiverDiscoveryEnabled
+                && !IsSessionApproved);
         joinDiscoveredReceiverCommand = new AsyncRelayCommand(
             receiver => JoinDiscoveredReceiverAsync(receiver as AvailableReceiverDescriptor),
             receiver => relayClient is not null
+                && SenderRoleEnabled
                 && ReceiverDiscoveryEnabled
                 && (receiver is AvailableReceiverDescriptor || SelectedReceiver is not null)
                 && !IsJoinPending
@@ -111,6 +116,18 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
                 RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
                 refreshReceiversCommand.RaiseCanExecuteChanged();
                 joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public bool SenderRoleEnabled
+    {
+        get => senderRoleEnabled;
+        private set
+        {
+            if (SetProperty(ref senderRoleEnabled, value))
+            {
+                RaiseNetworkCommandStates();
             }
         }
     }
@@ -243,7 +260,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         {
             var capabilities = await relayClient.GetRelayCapabilitiesAsync();
             ReceiverDiscoveryEnabled = capabilities.ReceiverDiscoveryEnabled;
-            if (ReceiverDiscoveryEnabled)
+            if (ReceiverDiscoveryEnabled && SenderRoleEnabled)
             {
                 await RefreshAvailableReceiversAsync();
             }
@@ -251,6 +268,17 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetStatus($"Relay capabilities could not be loaded: {exception.Message}", true);
+        }
+    }
+
+    public void SetSenderRoleEnabled(bool enabled)
+    {
+        SenderRoleEnabled = enabled;
+        if (!enabled)
+        {
+            AvailableReceivers.Clear();
+            SelectedReceiver = null;
+            RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
         }
     }
 
@@ -315,7 +343,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     private async Task RefreshAvailableReceiversAsync()
     {
-        if (relayClient is null || !ReceiverDiscoveryEnabled)
+        if (relayClient is null || !ReceiverDiscoveryEnabled || !SenderRoleEnabled)
         {
             return;
         }

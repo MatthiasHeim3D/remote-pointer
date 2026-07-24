@@ -362,6 +362,7 @@ public sealed class SessionManagerTests
                 credential.ReconnectToken));
 
         Assert.NotEqual(credential.ReconnectToken, resumed.Credential.ReconnectToken);
+        Assert.Single(resumed.State.ConnectedPresenters!);
         context.Manager.Disconnect("presenter-reconnected");
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.ResumeSession(
@@ -405,7 +406,9 @@ public sealed class SessionManagerTests
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
-        var acknowledgement = new PointerAcknowledgement(Guid.NewGuid(), 1000);
+        var pointer = CreatePointer(InitialTime, approved.Created.SessionId, 1);
+        _ = context.Manager.AcceptPointer(approved.PresenterConnectionId, pointer);
+        var acknowledgement = new PointerAcknowledgement(pointer.EventId, 1000);
 
         var result = context.Manager.AcceptAcknowledgement(
             "receiver-connection",
@@ -416,6 +419,75 @@ public sealed class SessionManagerTests
             () => context.Manager.AcceptAcknowledgement(
                 approved.PresenterConnectionId,
                 acknowledgement));
+    }
+
+    [Fact]
+    public void MultiplePresenters_HonorLimitAndRouteSequencesAndAcknowledgementsIndependently()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = context.Manager.CreateReceiverSession(
+            CreateDisplay(),
+            "receiver-connection",
+            "receiver-client",
+            "Receiver",
+            maximumPresenterConnections: 2);
+        var firstJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"),
+            "presenter-one-connection",
+            "Presenter One");
+        _ = context.Manager.ApprovePresenter(
+            created.SessionId,
+            firstJoin.Presenter!.ConnectionId,
+            "receiver-connection");
+
+        Assert.Single(context.Manager.GetAvailableReceivers());
+        var secondJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"),
+            "presenter-two-connection",
+            "Presenter Two");
+        var secondApproval = context.Manager.ApprovePresenter(
+            created.SessionId,
+            secondJoin.Presenter!.ConnectionId,
+            "receiver-connection");
+
+        Assert.Equal(2, secondApproval.State.ConnectedPresenters?.Length);
+        Assert.Empty(context.Manager.GetAvailableReceivers());
+        var rejectedThird = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-three", "1.0.0"),
+            "presenter-three-connection",
+            "Presenter Three");
+        Assert.False(rejectedThird.Response.Accepted);
+        Assert.Contains("limit", rejectedThird.Response.Reason, StringComparison.OrdinalIgnoreCase);
+
+        var firstPointer = CreatePointer(InitialTime, created.SessionId, 7);
+        var secondPointer = CreatePointer(InitialTime, created.SessionId, 7);
+        Assert.Equal(
+            PointerRelayDisposition.Accepted,
+            context.Manager.AcceptPointer("presenter-one-connection", firstPointer).Disposition);
+        Assert.Equal(
+            PointerRelayDisposition.Accepted,
+            context.Manager.AcceptPointer("presenter-two-connection", secondPointer).Disposition);
+        Assert.Equal(
+            "presenter-one-connection",
+            context.Manager.AcceptAcknowledgement(
+                "receiver-connection",
+                new PointerAcknowledgement(firstPointer.EventId, 1000)).PresenterConnectionId);
+        Assert.Equal(
+            "presenter-two-connection",
+            context.Manager.AcceptAcknowledgement(
+                "receiver-connection",
+                new PointerAcknowledgement(secondPointer.EventId, 1001)).PresenterConnectionId);
+
+        var firstEnded = context.Manager.EndSession(
+            created.SessionId,
+            "presenter-one-connection");
+        Assert.True(firstEnded.ReceiverPreserved);
+        Assert.Equal(
+            ["Presenter Two"],
+            firstEnded.State!.ConnectedPresenters!
+                .Select(presenter => presenter.DisplayName)
+                .ToArray());
+        Assert.Single(context.Manager.GetAvailableReceivers());
     }
 
     [Fact]

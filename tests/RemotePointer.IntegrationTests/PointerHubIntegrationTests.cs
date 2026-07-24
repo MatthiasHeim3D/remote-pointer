@@ -18,6 +18,82 @@ public sealed class PointerHubIntegrationTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
+    public async Task Receiver_AcceptsMultiplePresentersUpToConfiguredLimit()
+    {
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        await using var receiver = CreateConnection(factory, "receiver-multi", "Receiver");
+        await using var firstPresenter = CreateConnection(factory, "presenter-one", "Presenter One");
+        await using var secondPresenter = CreateConnection(factory, "presenter-two", "Presenter Two");
+        await using var thirdPresenter = CreateConnection(factory, "presenter-three", "Presenter Three");
+        var firstPending = CompletionSource<PresenterDescriptor>();
+        var secondPending = CompletionSource<PresenterDescriptor>();
+        var connectedState = CompletionSource<SessionStateMessage>();
+        var firstEnded = CompletionSource<string>();
+        var secondEnded = CompletionSource<string>();
+        var requestCount = 0;
+        receiver.On<PresenterDescriptor>(
+            "PresenterJoinRequested",
+            presenter =>
+            {
+                if (Interlocked.Increment(ref requestCount) == 1)
+                {
+                    firstPending.TrySetResult(presenter);
+                }
+                else
+                {
+                    secondPending.TrySetResult(presenter);
+                }
+            });
+        receiver.On<SessionStateMessage>(
+            "SessionApproved",
+            state =>
+            {
+                if (state.ConnectedPresenters?.Length == 2)
+                {
+                    connectedState.TrySetResult(state);
+                }
+            });
+        firstPresenter.On<string>("SessionEnded", firstEnded.SetResult);
+        secondPresenter.On<string>("SessionEnded", secondEnded.SetResult);
+        await receiver.StartAsync();
+        await firstPresenter.StartAsync();
+        await secondPresenter.StartAsync();
+        await thirdPresenter.StartAsync();
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSessionWithSettings",
+            CreateDisplay(),
+            new ClientProfile(),
+            2);
+
+        Assert.True((await firstPresenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"))).Accepted);
+        var first = await firstPending.Task.WaitAsync(TestTimeout);
+        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, first.ConnectionId);
+
+        Assert.True((await secondPresenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"))).Accepted);
+        var second = await secondPending.Task.WaitAsync(TestTimeout);
+        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, second.ConnectionId);
+        var state = await connectedState.Task.WaitAsync(TestTimeout);
+
+        Assert.Equal(
+            ["Presenter One", "Presenter Two"],
+            state.ConnectedPresenters!.Select(presenter => presenter.DisplayName).ToArray());
+        Assert.Empty(await thirdPresenter.InvokeAsync<AvailableReceiverDescriptor[]>(
+            "GetAvailableReceivers"));
+        var thirdJoin = await thirdPresenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-three", "1.0.0"));
+        Assert.False(thirdJoin.Accepted);
+
+        await receiver.InvokeAsync("DisconnectAllConnections", created.SessionId);
+        Assert.Contains("receiver", await firstEnded.Task.WaitAsync(TestTimeout));
+        Assert.Contains("receiver", await secondEnded.Task.WaitAsync(TestTimeout));
+    }
+
+    [Fact]
     public async Task Discovery_HidesAndRejectsSelfButAllowsSameMachinePeerWithProfile()
     {
         using var factory = CreateFactory(receiverDiscoveryEnabled: true);
@@ -42,9 +118,10 @@ public sealed class PointerHubIntegrationTests
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSessionWithProfile",
+            "CreateReceiverSessionWithSettings",
             CreateDisplay(),
-            new ClientProfile(picture));
+            new ClientProfile(picture),
+            2);
 
         Assert.Empty(
             await selfProbe.InvokeAsync<AvailableReceiverDescriptor[]>(

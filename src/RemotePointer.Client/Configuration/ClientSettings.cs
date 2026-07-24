@@ -14,6 +14,8 @@ public sealed class ClientSettings
 
     public UserProfileSettings Profile { get; init; } = new();
 
+    public ReceiverSettings Receiver { get; init; } = new();
+
     public static ClientSettings Load(string? baseDirectory = null)
     {
         return Load(
@@ -59,11 +61,16 @@ public sealed class ClientSettings
     public void SaveUserPreferences(
         string serverAddress,
         string userName,
-        string? profilePicturePath)
+        string? profilePicturePath,
+        int? maximumSenderConnections = null)
     {
         Server.BaseUrl = serverAddress.Trim();
         Profile.UserName = userName.Trim();
         Profile.PicturePath = profilePicturePath?.Trim() ?? string.Empty;
+        if (maximumSenderConnections.HasValue)
+        {
+            Receiver.MaximumSenderConnections = maximumSenderConnections.Value;
+        }
         Validate();
 
         var parentDirectory = Path.GetDirectoryName(userPreferencesPath);
@@ -73,7 +80,11 @@ public sealed class ClientSettings
         }
 
         var json = JsonSerializer.Serialize(
-            new UserPreferences(Server.BaseUrl, Profile.UserName, Profile.PicturePath),
+            new UserPreferences(
+                Server.BaseUrl,
+                Profile.UserName,
+                Profile.PicturePath,
+                Receiver.MaximumSenderConnections),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -100,6 +111,12 @@ public sealed class ClientSettings
         {
             throw new InvalidOperationException("Username is required and must be 128 characters or fewer.");
         }
+
+        if (Receiver.MaximumSenderConnections is < 1 or > 16)
+        {
+            throw new InvalidOperationException(
+                "Maximum connected senders must be between 1 and 16.");
+        }
     }
 
     private void ApplyUserPreferences(string path)
@@ -124,6 +141,9 @@ public sealed class ClientSettings
 
         Profile.UserName = preferences.UserName ?? string.Empty;
         Profile.PicturePath = preferences.ProfilePicturePath ?? string.Empty;
+        Receiver.MaximumSenderConnections = preferences.MaximumSenderConnections <= 0
+            ? 2
+            : preferences.MaximumSenderConnections;
     }
 
     private static string GetDefaultUserPreferencesPath() => Path.Combine(
@@ -134,7 +154,8 @@ public sealed class ClientSettings
     private sealed record UserPreferences(
         string ServerAddress,
         string UserName,
-        string ProfilePicturePath);
+        string ProfilePicturePath,
+        int MaximumSenderConnections = 2);
 }
 
 public sealed class ServerSettings
@@ -163,4 +184,9 @@ public sealed class UserProfileSettings
     public string UserName { get; set; } = Environment.UserName;
 
     public string PicturePath { get; set; } = string.Empty;
+}
+
+public sealed class ReceiverSettings
+{
+    public int MaximumSenderConnections { get; set; } = 2;
 }

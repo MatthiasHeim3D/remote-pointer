@@ -31,8 +31,11 @@ public sealed record AcknowledgementRelayResult(
 
 public sealed record ReceiverDisplayUpdateResult(
     string SessionId,
-    string? PresenterConnectionId,
-    DisplayDescriptor Display);
+    IReadOnlyList<string> PresenterConnectionIds,
+    DisplayDescriptor Display)
+{
+    public string? PresenterConnectionId => PresenterConnectionIds.FirstOrDefault();
+}
 
 public sealed record ResumeSessionResult(
     SessionCredential Credential,
@@ -46,4 +49,5 @@ public sealed record SessionTerminationResult(
     bool ReceiverPreserved = false,
     string? PresenterConnectionId = null,
     string? ReceiverConnectionId = null,
-    SessionStateMessage? State = null);
+    SessionStateMessage? State = null,
+    IReadOnlyList<string>? PresenterConnectionIds = null);

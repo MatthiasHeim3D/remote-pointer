@@ -5,4 +5,5 @@ public sealed record SessionStateMessage(
     bool Approved,
     DisplayDescriptor? ReceiverDisplay,
     DateTimeOffset ExpiresAt,
-    bool ReceiverDiscoverable = false);
+    bool ReceiverDiscoverable = false,
+    ConnectedPresenterDescriptor[]? ConnectedPresenters = null);

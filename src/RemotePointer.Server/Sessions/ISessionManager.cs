@@ -14,7 +14,8 @@ public interface ISessionManager
         string clientInstanceId,
         string receiverDisplayName,
         string? applicationInstanceId = null,
-        ClientProfile? profile = null);
+        ClientProfile? profile = null,
+        int maximumPresenterConnections = 2);
 
     IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers(
         string? excludedApplicationInstanceId = null);

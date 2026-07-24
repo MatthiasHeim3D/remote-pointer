@@ -19,6 +19,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private readonly HubConnection connection;
     private readonly string clientInstanceId;
     private readonly ClientProfile clientProfile;
+    private readonly int maximumPresenterConnections;
     private readonly ClientRole? expectedRole;
     private readonly IProtectedSessionStore? sessionStore;
     private readonly SynchronizationContext? synchronizationContext;
@@ -61,6 +62,7 @@ public sealed class SignalRRelayClient : IRelayClient
         clientInstanceId = clientInstanceIdProvider.GetClientInstanceId();
         var applicationInstanceId = clientInstanceIdProvider.GetApplicationInstanceId();
         clientProfile = CreateClientProfile(settings.Profile.PicturePath);
+        maximumPresenterConnections = settings.Receiver.MaximumSenderConnections;
         this.expectedRole = expectedRole;
         this.sessionStore = sessionStore;
         this.auditLog = auditLog;
@@ -213,9 +215,10 @@ public sealed class SignalRRelayClient : IRelayClient
         DiscardRecoveredCredential(ClientRole.Receiver);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var response = await connection.InvokeAsync<CreateSessionResponse>(
-                "CreateReceiverSessionWithProfile",
+                "CreateReceiverSessionWithSettings",
                 display,
                 clientProfile,
+                maximumPresenterConnections,
                 cancellationToken)
             .ConfigureAwait(false);
         SetSession(response.SessionId, response.Credential);

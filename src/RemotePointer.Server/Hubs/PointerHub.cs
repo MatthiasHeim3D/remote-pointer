@@ -48,16 +48,27 @@ public sealed class PointerHub(
     }
 
     public async Task<CreateSessionResponse> CreateReceiverSession(DisplayDescriptor display)
-        => await CreateReceiverSessionCore(display, new ClientProfile()).ConfigureAwait(false);
+        => await CreateReceiverSessionCore(display, new ClientProfile(), 2).ConfigureAwait(false);
 
     public async Task<CreateSessionResponse> CreateReceiverSessionWithProfile(
         DisplayDescriptor display,
         ClientProfile profile)
-        => await CreateReceiverSessionCore(display, profile).ConfigureAwait(false);
+        => await CreateReceiverSessionCore(display, profile, 2).ConfigureAwait(false);
+
+    public async Task<CreateSessionResponse> CreateReceiverSessionWithSettings(
+        DisplayDescriptor display,
+        ClientProfile profile,
+        int maximumPresenterConnections)
+        => await CreateReceiverSessionCore(
+                display,
+                profile,
+                maximumPresenterConnections)
+            .ConfigureAwait(false);
 
     private async Task<CreateSessionResponse> CreateReceiverSessionCore(
         DisplayDescriptor display,
-        ClientProfile profile)
+        ClientProfile profile,
+        int maximumPresenterConnections)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         try
@@ -68,7 +79,8 @@ public sealed class PointerHub(
                 clientInstanceId,
                 GetDisplayName(clientInstanceId),
                 GetApplicationInstanceId(),
-                profile);
+                profile,
+                maximumPresenterConnections);
             await Groups.AddToGroupAsync(
                     Context.ConnectionId,
                     GroupName(response.SessionId))
@@ -206,9 +218,9 @@ public sealed class PointerHub(
                 sessionId,
                 Context.ConnectionId,
                 display);
-            if (result.PresenterConnectionId is not null)
+            foreach (var presenterConnectionId in result.PresenterConnectionIds)
             {
-                await Clients.Client(result.PresenterConnectionId)
+                await Clients.Client(presenterConnectionId)
                     .ReceiverDisplayChanged(result.Display)
                     .ConfigureAwait(false);
             }
@@ -338,17 +350,19 @@ public sealed class PointerHub(
         try
         {
             var result = sessionManager.EndSession(sessionId, Context.ConnectionId);
-            if (result.ReceiverPreserved
-                && result.PresenterConnectionId is not null
-                && result.State is not null)
+            if (result.ReceiverPreserved && result.State is not null)
             {
-                await Groups.RemoveFromGroupAsync(
-                        result.PresenterConnectionId,
-                        GroupName(sessionId))
-                    .ConfigureAwait(false);
-                await Clients.Client(result.PresenterConnectionId)
-                    .SessionEnded("Disconnected from the receiver.")
-                    .ConfigureAwait(false);
+                foreach (var presenterConnectionId in GetPresenterConnectionIds(result))
+                {
+                    await Groups.RemoveFromGroupAsync(
+                            presenterConnectionId,
+                            GroupName(sessionId))
+                        .ConfigureAwait(false);
+                    await Clients.Client(presenterConnectionId)
+                        .SessionEnded("Disconnected from the receiver.")
+                        .ConfigureAwait(false);
+                }
+
                 if (result.ReceiverConnectionId is not null)
                 {
                     await Clients.Client(result.ReceiverConnectionId)
@@ -382,13 +396,13 @@ public sealed class PointerHub(
             var result = sessionManager.DisconnectPresenters(
                 sessionId,
                 Context.ConnectionId);
-            if (result.PresenterConnectionId is not null)
+            foreach (var presenterConnectionId in GetPresenterConnectionIds(result))
             {
                 await Groups.RemoveFromGroupAsync(
-                        result.PresenterConnectionId,
+                        presenterConnectionId,
                         GroupName(sessionId))
                     .ConfigureAwait(false);
-                await Clients.Client(result.PresenterConnectionId)
+                await Clients.Client(presenterConnectionId)
                     .SessionEnded("Disconnected by the receiver.")
                     .ConfigureAwait(false);
             }
@@ -417,6 +431,11 @@ public sealed class PointerHub(
         LogValidationFailure(exception.Code, operation);
         return new HubException(exception.Message);
     }
+
+    private static IReadOnlyList<string> GetPresenterConnectionIds(
+        SessionTerminationResult result) =>
+        result.PresenterConnectionIds
+        ?? (result.PresenterConnectionId is null ? [] : [result.PresenterConnectionId]);
 
     private void LogValidationFailure(string code, string operation) =>
         logger.LogWarning(

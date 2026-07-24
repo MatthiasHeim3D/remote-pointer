@@ -147,7 +147,7 @@
                                Text="Remote Pointer" />
                     <TextBlock FontSize="11"
                                Foreground="#AFAFAF"
-                               Text="{Binding Presenter.ConnectionMessage}" />
+                               Text="{Binding FlyoutConnectionMessage}" />
                 </StackPanel>
                 <Button Grid.Column="2"
                         Style="{StaticResource IconButtonStyle}"
@@ -176,6 +176,9 @@
                             <Setter Property="Visibility" Value="Visible" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HasConnectedPresenter}" Value="True">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -313,6 +316,9 @@
                                 <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding HasConnectedPresenter}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Grid.Style>
@@ -383,6 +389,113 @@
                             Content="Disconnect"
                             Cursor="Hand" />
                 </Grid>
+
+                <!-- Receiver-connected state takes precedence over sender discovery. -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasConnectedPresenter}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="42"
+                                Height="42"
+                                Background="#173B2A"
+                                CornerRadius="7">
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="20"
+                                       Foreground="#6CCB7F"
+                                       Text="&#xE8B7;" />
+                        </Border>
+                        <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
+                            <TextBlock FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Text="Receiving pointers" />
+                            <TextBlock FontSize="11"
+                                       Foreground="#6CCB7F"
+                                       Text="{Binding ConnectedPresenterCountLabel}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Grid.Row="1"
+                               Margin="0,18,0,8"
+                               Foreground="#AFAFAF"
+                               Text="Connected senders" />
+                    <ListBox Grid.Row="2"
+                             ItemsSource="{Binding ConnectedPresenters}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="IsHitTestVisible" Value="False" />
+                                <Setter Property="Margin" Value="0,0,0,6" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Height="48"
+                                        Padding="11,0"
+                                        Background="#2D2D2D"
+                                        CornerRadius="6">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="28"
+                                                Height="28"
+                                                Background="#3A3A3A"
+                                                CornerRadius="14">
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="Segoe MDL2 Assets"
+                                                       Foreground="#60CDFF"
+                                                       Text="&#xE77B;" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1"
+                                                   Margin="9,0"
+                                                   VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Text="{Binding DisplayName}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Column="2"
+                                                    VerticalAlignment="Center"
+                                                    Orientation="Horizontal">
+                                            <Ellipse Width="8" Height="8" Fill="#6CCB7F" />
+                                            <TextBlock Margin="6,0,0,0"
+                                                       FontSize="10"
+                                                       Foreground="#AFAFAF"
+                                                       Text="Receiving" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button Grid.Row="3"
+                            Height="42"
+                            Margin="0,14,0,0"
+                            Style="{StaticResource PrimaryButtonStyle}"
+                            Background="#C42B1C"
+                            Foreground="White"
+                            Command="{Binding DisconnectAllConnectionsCommand}"
+                            Content="Disconnect all senders" />
+                </Grid>
             </Grid>
 
             <!-- Settings view -->
@@ -438,6 +551,16 @@
                                 Click="OnBrowseProfilePicture"
                                 Content="Browse" />
                     </Grid>
+
+                    <TextBlock Margin="0,16,0,6" Text="Maximum connected senders" />
+                    <ComboBox Height="36"
+                              Padding="8,5"
+                              ItemsSource="{Binding MaximumSenderConnectionOptions}"
+                              SelectedItem="{Binding MaximumSenderConnections}" />
+                    <TextBlock Margin="0,5,0,0"
+                               FontSize="10"
+                               Foreground="#858585"
+                               Text="Default: 2. This limit applies when a receiver session starts." />
 
                     <TextBlock Margin="0,16,0,14"
                                FontSize="11"
