@@ -25,6 +25,7 @@ OutputBaseFilename=RemotePointer.Client-{#MyAppVersion}-x64-Setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+WizardSmallImageFile=..\icons\exe_icon.png
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
