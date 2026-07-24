@@ -180,6 +180,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public PresenterViewModel Presenter { get; }
 
+    public string ApplicationVersion { get; } =
+        global::ThisAssembly.AssemblyInformationalVersion.Split('+', 2)[0];
+
     public MonitorDescriptor? SelectedMonitor
     {
         get => selectedMonitor;

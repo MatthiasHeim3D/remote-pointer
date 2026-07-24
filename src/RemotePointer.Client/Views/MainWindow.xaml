@@ -843,6 +843,42 @@
                                Foreground="#FF8A80"
                                TextWrapping="Wrap"
                                Text="{Binding ServerConnectionTestMessage}" />
+                    <Border Margin="0,24,0,2"
+                            Padding="0,12,0,0"
+                            BorderBrush="#303030"
+                            BorderThickness="0,1,0,0">
+                        <StackPanel HorizontalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Opacity="0.55">
+                            <TextBlock VerticalAlignment="Center"
+                                       FontSize="10"
+                                       Foreground="#B8B8B8"
+                                       Text="{Binding ApplicationVersion, StringFormat=Version {0}}" />
+                            <Button Margin="8,0,0,0"
+                                    Padding="2"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    ToolTip="View source on GitHub"
+                                    Click="OnOpenRepository">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Opacity" Value="0.75" />
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Opacity" Value="1" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <Viewbox Width="13" Height="13">
+                                    <Path Fill="#D0D0D0"
+                                          Data="M12,0.7 C5.7,0.7 0.7,5.8 0.7,12.1 C0.7,17.1 3.9,21.4 8.4,22.9 C9,23 9.2,22.6 9.2,22.3 C9.2,22 9.2,21.3 9.2,20.3 C5.8,21 5.1,18.7 5.1,18.7 C4.5,17.3 3.7,16.9 3.7,16.9 C2.6,16.1 3.8,16.1 3.8,16.1 C5,16.2 5.7,17.4 5.7,17.4 C6.8,19.2 8.5,18.7 9.2,18.4 C9.3,17.6 9.6,17 10,16.7 C7.3,16.4 4.4,15.3 4.4,10.7 C4.4,9.4 4.9,8.3 5.7,7.4 C5.6,7.1 5.1,5.8 5.8,4.2 C5.8,4.2 6.9,3.9 9.3,5.5 C10.3,5.2 11.4,5.1 12.5,5.1 C13.6,5.1 14.7,5.2 15.7,5.5 C18.1,3.9 19.2,4.2 19.2,4.2 C19.9,5.8 19.4,7.1 19.3,7.4 C20.1,8.3 20.6,9.4 20.6,10.7 C20.6,15.3 17.7,16.4 15,16.7 C15.4,17.1 15.8,17.8 15.8,18.9 C15.8,20.5 15.8,21.7 15.8,22.1 C15.8,22.4 16,22.8 16.6,22.7 C21.1,21.2 24.3,17 24.3,12 C24.3,5.8 19.2,0.7 12.9,0.7 Z" />
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
+                    </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

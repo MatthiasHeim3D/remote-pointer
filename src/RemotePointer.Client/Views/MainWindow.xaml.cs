@@ -3,6 +3,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.Win32;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Native;
@@ -13,6 +14,7 @@ namespace RemotePointer.Client.Views;
 
 public partial class MainWindow : Window
 {
+    private const string RepositoryUrl = "https://github.com/MatthiasHeim3D/remote-pointer";
     private const double ExpandedHeight = 520d;
     private const double SenderSessionHeight = 200d;
     private const double AvailableClientsBaseHeight = 244d;
@@ -357,6 +359,14 @@ public partial class MainWindow : Window
             suppressAutoHide = false;
             Activate();
         }
+    }
+
+    private void OnOpenRepository(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        using var repositoryProcess = Process.Start(
+            new ProcessStartInfo(RepositoryUrl) { UseShellExecute = true });
     }
 
     private async void OnReceivingScreenSelectionChanged(
