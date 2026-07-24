@@ -12,6 +12,7 @@ namespace RemotePointer.Client.ViewModels;
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly AsyncRelayCommand approvePresenterCommand;
+    private readonly SemaphoreSlim availabilityUpdateGate = new(1, 1);
     private readonly AsyncRelayCommand disconnectAllConnectionsCommand;
     private readonly AsyncRelayCommand setReceiverAvailabilityCommand;
     private readonly IMonitorService monitorService;
@@ -21,6 +22,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IStartupRegistrationService? startupRegistrationService;
     private readonly RelayCommand decrementMaximumSendersCommand;
     private readonly RelayCommand incrementMaximumSendersCommand;
+    private CancellationTokenSource? availabilityRetryCancellation;
     private bool disposed;
     private bool isError;
     private bool isOverlayVisible;
@@ -110,9 +112,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                     await SetReceiverAvailabilityAsync(requestedAvailability);
                 }
             },
-            _ => receiverRelayClient is not null
-                && ReceiverDiscoveryEnabled
-                && (HasReceiverSession || SelectedMonitor is not null));
+            _ => receiverRelayClient is not null);
         ToggleSettingsCommand = new RelayCommand(_ =>
         {
             IsAvailabilityMenuOpen = false;
@@ -244,16 +244,24 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public string AvailabilityLabel => ReceiverAvailability == ReceiverAvailability.Invisible
-        ? "Invisible"
-        : HasConnectedPresenter
-            ? "Available and connected"
-            : "Available";
+        ? IsServerAvailable ? "Invisible" : "Server unavailable"
+        : !IsServerAvailable
+            ? "Server unavailable"
+            : HasConnectedPresenter
+                ? "Available and connected"
+                : "Available";
 
-    public string AvailabilityColor => ReceiverAvailability == ReceiverAvailability.Invisible
+    public string AvailabilityColor => !IsServerAvailable
         ? "#8B8B8B"
-        : HasConnectedPresenter
-            ? "#63C5DA"
-            : "#6CCB7F";
+        : ReceiverAvailability == ReceiverAvailability.Invisible
+            ? "#8B8B8B"
+            : HasConnectedPresenter
+                ? "#63C5DA"
+                : "#6CCB7F";
+
+    public bool IsServerAvailable =>
+        receiverRelayClient?.Status is RelayConnectionStatus.Connected
+            or RelayConnectionStatus.SessionExpired;
 
     public bool IsAvailabilityMenuOpen
     {
@@ -339,8 +347,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool CanSetReceiverAvailability =>
-        ReceiverDiscoveryEnabled && (HasReceiverSession || SelectedMonitor is not null);
+    public bool CanSetReceiverAvailability => receiverRelayClient is not null;
 
     public string ReceiverDiscoveryMessage => ReceiverDiscoveryEnabled
         ? "Available receivers can receive access requests. Approval is still required."
@@ -365,6 +372,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public async Task SetReceiverAvailabilityAsync(ReceiverAvailability availability)
     {
         var previousAvailability = ReceiverAvailability;
+        if (previousAvailability != availability)
+        {
+            CancelAvailabilityRetry();
+        }
+
         SetReceiverAvailabilitySilently(availability);
         await UpdateReceiverAvailabilityAsync(availability, previousAvailability);
     }
@@ -519,6 +531,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        disposed = true;
+        CancelAvailabilityRetry();
         overlayService.StateChanged -= OnOverlayStateChanged;
         if (receiverRelayClient is not null)
         {
@@ -533,7 +547,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         overlayService.Dispose();
         Presenter.PropertyChanged -= OnPresenterPropertyChanged;
         Presenter.Dispose();
-        disposed = true;
         GC.SuppressFinalize(this);
     }
 
@@ -541,7 +554,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (SelectedMonitor is null || receiverRelayClient is null)
         {
-            SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
             SetStatus("Select a connected monitor before becoming available.", isError: true);
             return;
         }
@@ -559,7 +571,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             overlayService.Hide();
-            ClearReceiverSession();
+            ClearReceiverSession(preserveAvailability: true);
             SetStatus($"The receiver could not become available: {exception.Message}", true);
         }
     }
@@ -630,8 +642,25 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ReceiverAvailability requestedAvailability,
         ReceiverAvailability previousAvailability)
     {
+        await availabilityUpdateGate.WaitAsync();
+        try
+        {
+            await UpdateReceiverAvailabilityCoreAsync(
+                requestedAvailability,
+                previousAvailability);
+        }
+        finally
+        {
+            availabilityUpdateGate.Release();
+        }
+    }
+
+    private async Task UpdateReceiverAvailabilityCoreAsync(
+        ReceiverAvailability requestedAvailability,
+        ReceiverAvailability previousAvailability)
+    {
         IsAvailabilityMenuOpen = false;
-        if (receiverRelayClient is null || !CanSetReceiverAvailability)
+        if (receiverRelayClient is null)
         {
             SetReceiverAvailabilitySilently(previousAvailability);
             return;
@@ -643,6 +672,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 && !HasReceiverSession)
             {
                 SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
+                CancelAvailabilityRetry();
                 SetStatus("This receiver is invisible to presenters.", false);
                 return;
             }
@@ -651,6 +681,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 && !HasReceiverSession)
             {
                 await CreateReceiverSessionAsync();
+                if (!HasReceiverSession)
+                {
+                    SetReceiverAvailabilitySilently(ReceiverAvailability.Available);
+                    ScheduleAvailabilityRetry();
+                }
+                else
+                {
+                    CancelAvailabilityRetry();
+                }
                 return;
             }
 
@@ -658,6 +697,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 requestedAvailability == ReceiverAvailability.Available);
             SetReceiverAvailabilitySilently(
                 isAvailable ? ReceiverAvailability.Available : ReceiverAvailability.Invisible);
+            CancelAvailabilityRetry();
             SetStatus(
                 isAvailable
                     ? "This receiver is available for access requests."
@@ -666,7 +706,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            SetReceiverAvailabilitySilently(previousAvailability);
+            SetReceiverAvailabilitySilently(requestedAvailability);
+            ScheduleAvailabilityRetry();
             SetStatus($"Receiver availability could not be changed: {exception.Message}", true);
         }
     }
@@ -682,6 +723,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RelayConnectionStatusChangedEventArgs e)
     {
         ReceiverConnectionMessage = e.Message;
+        RaisePropertyChanged(nameof(IsServerAvailable));
+        RaiseAvailabilityProperties();
     }
 
     private void OnPresenterPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -810,8 +853,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OnReceiverSessionEnded(object? sender, RelaySessionEndedEventArgs e)
     {
+        var retryAvailability = ReceiverAvailability == ReceiverAvailability.Available;
         overlayService.Hide();
-        ClearReceiverSession();
+        ClearReceiverSession(preserveAvailability: retryAvailability);
+        if (retryAvailability)
+        {
+            ScheduleAvailabilityRetry();
+        }
         SetStatus(e.Reason, e.Expired);
     }
 
@@ -902,14 +950,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void ClearReceiverSession()
+    private void ClearReceiverSession(bool preserveAvailability = false)
     {
         receiverSessionId = null;
         ConnectedPresenters.Clear();
         RaisePropertyChanged(nameof(ConnectedPresenterCountLabel));
         RaisePropertyChanged(nameof(FlyoutConnectionMessage));
         HasConnectedPresenter = false;
-        SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
+        if (!preserveAvailability)
+        {
+            SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
+        }
         SetPendingPresenter(null);
         RaiseReceiverSessionProperties();
     }
@@ -917,6 +968,68 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void SetReceiverAvailabilitySilently(ReceiverAvailability availability)
     {
         ReceiverAvailability = availability;
+    }
+
+    private void ScheduleAvailabilityRetry()
+    {
+        var selectedAvailability = ReceiverAvailability;
+        var updateNeeded = selectedAvailability == ReceiverAvailability.Available
+            ? !HasReceiverSession
+            : HasReceiverSession;
+        if (disposed
+            || !updateNeeded
+            || availabilityRetryCancellation is not null)
+        {
+            return;
+        }
+
+        var cancellation = new CancellationTokenSource();
+        availabilityRetryCancellation = cancellation;
+        _ = RetryAvailabilityAsync(cancellation, selectedAvailability);
+    }
+
+    private async Task RetryAvailabilityAsync(
+        CancellationTokenSource cancellation,
+        ReceiverAvailability availability)
+    {
+        var cancellationToken = cancellation.Token;
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested
+                   && ReceiverAvailability == availability)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                if (cancellationToken.IsCancellationRequested
+                    || ReceiverAvailability != availability)
+                {
+                    return;
+                }
+
+                await UpdateReceiverAvailabilityAsync(
+                    availability,
+                    availability);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The user selected Invisible or the view model was disposed.
+        }
+        finally
+        {
+            if (ReferenceEquals(availabilityRetryCancellation, cancellation))
+            {
+                availabilityRetryCancellation = null;
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
+    private void CancelAvailabilityRetry()
+    {
+        var cancellation = availabilityRetryCancellation;
+        availabilityRetryCancellation = null;
+        cancellation?.Cancel();
     }
 
     private void RaiseAvailabilityProperties()

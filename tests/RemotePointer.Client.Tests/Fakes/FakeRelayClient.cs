@@ -31,6 +31,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public CreateSessionResponse? CreateResponse { get; set; }
 
+    public Exception? CreateException { get; set; }
+
     public JoinResponse JoinResponse { get; set; } = new(true, "session-1", null);
 
     public RelayCapabilities Capabilities { get; set; } = new(false);
@@ -97,10 +99,20 @@ internal sealed class FakeRelayClient : IRelayClient
         _ = display;
         _ = cancellationToken;
         CreateCount++;
+        if (CreateException is not null)
+        {
+            return Task.FromException<CreateSessionResponse>(CreateException);
+        }
+
         var response = CreateResponse ?? throw new InvalidOperationException("No create response configured.");
         SessionId = response.SessionId;
         Credential = response.Credential;
         IsDiscoverable = Capabilities.ReceiverDiscoveryEnabled;
+        if (Status != RelayConnectionStatus.Connected)
+        {
+            RaiseConnectionStatus(RelayConnectionStatus.Connected, "Connected to relay.");
+        }
+
         return Task.FromResult(response);
     }
 

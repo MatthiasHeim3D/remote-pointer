@@ -133,6 +133,37 @@
             <Setter Property="Foreground" Value="#F5F5F5" />
         </Style>
 
+        <Style x:Key="AvailabilityOptionButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#3A3A3A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#484848" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
             <Setter Property="Foreground" Value="#F5F5F5" />
             <Setter Property="Cursor" Value="Hand" />
@@ -845,9 +876,8 @@
                                Text="Set availability" />
                     <Button Height="42"
                             Padding="10,0"
+                            Style="{StaticResource AvailabilityOptionButtonStyle}"
                             HorizontalContentAlignment="Stretch"
-                            Background="Transparent"
-                            BorderThickness="0"
                             Command="{Binding SetReceiverAvailabilityCommand}"
                             CommandParameter="{x:Static viewModels:ReceiverAvailability.Available}"
                             Cursor="Hand">
@@ -883,9 +913,8 @@
                     </Button>
                     <Button Height="42"
                             Padding="10,0"
+                            Style="{StaticResource AvailabilityOptionButtonStyle}"
                             HorizontalContentAlignment="Stretch"
-                            Background="Transparent"
-                            BorderThickness="0"
                             Command="{Binding SetReceiverAvailabilityCommand}"
                             CommandParameter="{x:Static viewModels:ReceiverAvailability.Invisible}"
                             Cursor="Hand">

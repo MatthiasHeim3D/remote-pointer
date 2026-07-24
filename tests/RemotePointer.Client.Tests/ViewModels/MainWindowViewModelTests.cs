@@ -292,7 +292,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ReceiverAvailability_UpdateFailureKeepsPreviousState()
+    public async Task ReceiverAvailability_UpdateFailureKeepsRequestedStateAndRetries()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
         using var overlay = new FakeOverlayService();
@@ -308,9 +308,18 @@ public sealed class MainWindowViewModelTests
         await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Invisible);
 
         Assert.True(viewModel.HasReceiverSession);
-        Assert.Equal(ReceiverAvailability.Available, viewModel.ReceiverAvailability);
+        Assert.Equal(ReceiverAvailability.Invisible, viewModel.ReceiverAvailability);
         Assert.True(viewModel.IsError);
         Assert.Contains("availability", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+
+        relay.DiscoverabilityException = null;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(4);
+        while (relay.IsDiscoverable && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.False(relay.IsDiscoverable);
     }
 
     [Fact]
@@ -331,6 +340,41 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(ReceiverAvailability.Invisible, viewModel.ReceiverAvailability);
         Assert.False(relay.IsDiscoverable);
         Assert.Equal(0, relay.DiscoverabilityUpdateCount);
+    }
+
+    [Fact]
+    public async Task SelectingAvailableWhileServerIsOffline_KeepsChoiceAndQueuesRetry()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        relay.CreateException = new InvalidOperationException("Server unavailable.");
+        relay.RaiseConnectionStatus(RelayConnectionStatus.Disconnected, "Server unavailable.");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        await viewModel.InitializeAsync();
+
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
+
+        Assert.True(viewModel.SetReceiverAvailabilityCommand.CanExecute(
+            ReceiverAvailability.Invisible));
+        Assert.False(viewModel.HasReceiverSession);
+        Assert.Equal(ReceiverAvailability.Available, viewModel.ReceiverAvailability);
+        Assert.Equal("Server unavailable", viewModel.AvailabilityLabel);
+        Assert.True(viewModel.IsError);
+
+        relay.CreateException = null;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(4);
+        while (!viewModel.HasReceiverSession && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.True(viewModel.HasReceiverSession);
+        Assert.Equal("Available", viewModel.AvailabilityLabel);
+        Assert.True(relay.IsDiscoverable);
     }
 
     [Fact]
