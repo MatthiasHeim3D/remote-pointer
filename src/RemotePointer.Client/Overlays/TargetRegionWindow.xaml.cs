@@ -279,12 +279,27 @@ public partial class TargetRegionWindow : Window
         PointingUsageHint.Visibility = ShowUsageHints && !isUsageHelpCollapsed
             ? Visibility.Visible
             : Visibility.Collapsed;
+        PointingUsageCollapsedHint.Visibility = ShowUsageHints && isUsageHelpCollapsed
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!isPointingMode || activeTextEditor is not null || activePointerButton is not null)
+        if (!isPointingMode || activePointerButton is not null)
         {
+            return;
+        }
+
+        if (activeTextEditor is not null)
+        {
+            if (activeTextEditor.IsMouseOver)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            RemoveTextEditor();
             return;
         }
 
@@ -538,6 +553,7 @@ public partial class TargetRegionWindow : Window
             CaretBrush = Brushes.White,
             AcceptsReturn = false,
         };
+        activeTextEditor.LostKeyboardFocus += OnActiveTextEditorLostKeyboardFocus;
         Canvas.SetLeft(activeTextEditor, position.X + 14d);
         Canvas.SetTop(activeTextEditor, position.Y - 8d);
         EditorCanvas.Children.Add(activeTextEditor);
@@ -577,11 +593,21 @@ public partial class TargetRegionWindow : Window
     {
         if (activeTextEditor is not null)
         {
+            activeTextEditor.LostKeyboardFocus -= OnActiveTextEditorLostKeyboardFocus;
             EditorCanvas.Children.Remove(activeTextEditor);
             activeTextEditor = null;
         }
 
         Cursor = Cursors.Cross;
+    }
+
+    private void OnActiveTextEditorLostKeyboardFocus(
+        object sender,
+        KeyboardFocusChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        RemoveTextEditor();
     }
 
     protected override void OnClosed(EventArgs e)

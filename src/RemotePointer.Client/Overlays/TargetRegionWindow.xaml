@@ -196,26 +196,27 @@
             <Border x:Name="PointingUsageHint"
                     Width="260"
                     Margin="12,0,0,12"
-                    Padding="11,9"
+                    Padding="9,7"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Bottom"
-                    Background="#CC111720"
-                    BorderBrush="#665F6875"
-                    BorderThickness="1"
-                    CornerRadius="5"
+                    Background="#99000000"
+                    CornerRadius="4"
                     IsHitTestVisible="False"
-                    Opacity="0.82"
+                    Opacity="0.5"
                     Visibility="Collapsed">
                 <StackPanel>
-                    <DockPanel Margin="0,0,0,7">
-                        <TextBlock FontSize="12"
-                                   FontWeight="SemiBold"
-                                   Foreground="#F5F5F5"
+                    <StackPanel.Resources>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="FontFamily" Value="Segoe UI" />
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Foreground" Value="#DDF5F5F5" />
+                        </Style>
+                    </StackPanel.Resources>
+                    <DockPanel Margin="0,0,0,6">
+                        <TextBlock FontWeight="SemiBold"
                                    Text="Input controls" />
                         <TextBlock DockPanel.Dock="Right"
                                    HorizontalAlignment="Right"
-                                   FontSize="10"
-                                   Foreground="#B8C0CA"
                                    Text="H to hide" />
                     </DockPanel>
                     <Grid>
@@ -231,20 +232,35 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <TextBlock FontSize="10" Foreground="#E2E6EA" Text="Left click" />
-                        <TextBlock Grid.Column="1" FontSize="10" Foreground="#B8C0CA" Text="Highlight" />
-                        <TextBlock Grid.Row="1" FontSize="10" Foreground="#E2E6EA" Text="Left drag" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" FontSize="10" Foreground="#B8C0CA" Text="Freehand path" />
-                        <TextBlock Grid.Row="2" FontSize="10" Foreground="#E2E6EA" Text="Shift + left click" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" FontSize="10" Foreground="#B8C0CA" Text="Text" />
-                        <TextBlock Grid.Row="3" FontSize="10" Foreground="#E2E6EA" Text="Shift + left drag" />
-                        <TextBlock Grid.Row="3" Grid.Column="1" FontSize="10" Foreground="#B8C0CA" Text="Straight line" />
-                        <TextBlock Grid.Row="4" FontSize="10" Foreground="#E2E6EA" Text="Right drag" />
-                        <TextBlock Grid.Row="4" Grid.Column="1" FontSize="10" Foreground="#B8C0CA" Text="Rectangle" />
-                        <TextBlock Grid.Row="5" FontSize="10" Foreground="#E2E6EA" Text="Shift + right drag" />
-                        <TextBlock Grid.Row="5" Grid.Column="1" FontSize="10" Foreground="#B8C0CA" Text="Circle" />
+                        <TextBlock Text="Left click" />
+                        <TextBlock Grid.Column="1" Text="Highlight" />
+                        <TextBlock Grid.Row="1" Text="Left drag" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Freehand path" />
+                        <TextBlock Grid.Row="2" Text="Shift + left click" />
+                        <TextBlock Grid.Row="2" Grid.Column="1" Text="Text" />
+                        <TextBlock Grid.Row="3" Text="Shift + left drag" />
+                        <TextBlock Grid.Row="3" Grid.Column="1" Text="Straight line" />
+                        <TextBlock Grid.Row="4" Text="Right drag" />
+                        <TextBlock Grid.Row="4" Grid.Column="1" Text="Rectangle" />
+                        <TextBlock Grid.Row="5" Text="Shift + right drag" />
+                        <TextBlock Grid.Row="5" Grid.Column="1" Text="Circle" />
                     </Grid>
                 </StackPanel>
+            </Border>
+
+            <Border x:Name="PointingUsageCollapsedHint"
+                    Margin="12,0,0,12"
+                    Padding="9,5"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Background="#99000000"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Opacity="0.5"
+                    Visibility="Collapsed">
+                <TextBlock FontSize="11" Foreground="#DDF5F5F5">
+                    <Run FontWeight="Bold" Text="H" /><Run Text=" for Help" />
+                </TextBlock>
             </Border>
 
             <primitives:Thumb x:Name="ResizeThumb"
