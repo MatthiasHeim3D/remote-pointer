@@ -914,23 +914,6 @@
                             </StackPanel>
                         </StackPanel>
                     </Button>
-                    <TextBlock MaxWidth="260"
-                               VerticalAlignment="Center"
-                               Foreground="#C8C8C8"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Text="{Binding ServerConnectionGuidance}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsServerAvailable}" Value="True">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
                     <Button Grid.Column="1"
                             Style="{StaticResource IconButtonStyle}"
                             Command="{Binding ToggleSettingsCommand}"

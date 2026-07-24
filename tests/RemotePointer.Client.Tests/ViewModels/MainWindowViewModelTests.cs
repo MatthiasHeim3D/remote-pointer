@@ -11,7 +11,7 @@ namespace RemotePointer.Client.Tests.ViewModels;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
-    public void MissingServer_OpensSettingsAndShowsSetupGuidance()
+    public void MissingServer_ShowsMainScreenWithSetupGuidance()
     {
         using var overlay = new FakeOverlayService();
         using var viewModel = new MainWindowViewModel(
@@ -20,7 +20,7 @@ public sealed class MainWindowViewModelTests
             clientSettings: new ClientSettings());
 
         Assert.True(viewModel.IsServerConfigurationMissing);
-        Assert.True(viewModel.IsSettingsOpen);
+        Assert.False(viewModel.IsSettingsOpen);
         Assert.Equal("Set the server address in Settings.", viewModel.ServerConnectionGuidance);
         Assert.Equal(viewModel.ServerConnectionGuidance, viewModel.EmptyClientListMessage);
     }
@@ -73,6 +73,7 @@ public sealed class MainWindowViewModelTests
             overlay,
             clientSettings: testSettings.Settings,
             serverConnectionTester: tester);
+        viewModel.ToggleSettingsCommand.Execute(null);
         viewModel.ServerAddressInput = "relay.example.test";
 
         Assert.True(viewModel.ShowTestServerConnectionButton);

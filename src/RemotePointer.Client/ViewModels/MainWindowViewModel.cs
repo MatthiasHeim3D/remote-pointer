@@ -172,10 +172,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _ => MaximumSenderConnections > 1);
 
         RefreshMonitors();
-        if (IsServerConfigurationMissing)
-        {
-            IsSettingsOpen = true;
-        }
     }
 
     public ObservableCollection<MonitorDescriptor> Monitors { get; } = [];
