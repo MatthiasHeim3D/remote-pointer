@@ -167,6 +167,14 @@ public sealed class MainWindowViewModelTests
             new AvailableReceiverDescriptor("other-session", "Other receiver")));
         Assert.Equal("Available and connected", viewModel.AvailabilityLabel);
         Assert.Equal("#63C5DA", viewModel.AvailabilityColor);
+        Assert.True(viewModel.CanSetReceiverAvailability);
+
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Invisible);
+
+        Assert.True(viewModel.HasConnectedPresenter);
+        Assert.False(relay.IsDiscoverable);
+        Assert.Equal("Invisible", viewModel.AvailabilityLabel);
+        Assert.Equal("#8B8B8B", viewModel.AvailabilityColor);
         Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));
         viewModel.DisconnectAllConnectionsCommand.Execute(null);
 

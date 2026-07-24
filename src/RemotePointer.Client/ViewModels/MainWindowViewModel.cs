@@ -232,17 +232,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string AvailabilityLabel => HasConnectedPresenter
-        ? "Available and connected"
-        : ReceiverAvailability == ReceiverAvailability.Available
-            ? "Available"
-            : "Invisible";
+    public string AvailabilityLabel => ReceiverAvailability == ReceiverAvailability.Invisible
+        ? "Invisible"
+        : HasConnectedPresenter
+            ? "Available and connected"
+            : "Available";
 
-    public string AvailabilityColor => HasConnectedPresenter
-        ? "#63C5DA"
-        : ReceiverAvailability == ReceiverAvailability.Available
-            ? "#6CCB7F"
-            : "#8B8B8B";
+    public string AvailabilityColor => ReceiverAvailability == ReceiverAvailability.Invisible
+        ? "#8B8B8B"
+        : HasConnectedPresenter
+            ? "#63C5DA"
+            : "#6CCB7F";
 
     public bool IsAvailabilityMenuOpen
     {

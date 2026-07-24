@@ -192,43 +192,12 @@
 
         <Grid ClipToBounds="True">
             <Grid.RowDefinitions>
-                <RowDefinition Height="64" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="58" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="20,0,12,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Border Width="28"
-                        Height="28"
-                        VerticalAlignment="Center"
-                        Background="#60CDFF"
-                        CornerRadius="6">
-                    <TextBlock HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontFamily="Segoe MDL2 Assets"
-                               FontSize="15"
-                               Foreground="#17242A"
-                               Text="&#xE7C9;" />
-                </Border>
-                <StackPanel Grid.Column="1"
-                            Margin="10,0,0,0"
-                            VerticalAlignment="Center">
-                    <TextBlock FontSize="15"
-                               FontWeight="SemiBold"
-                               Text="Remote Pointer" />
-                    <TextBlock FontSize="11"
-                               Foreground="#AFAFAF"
-                               Text="{Binding FlyoutConnectionMessage}" />
-                </StackPanel>
-            </Grid>
-
             <!-- Main sender view -->
-            <Grid Grid.Row="1" Margin="20,2,20,14">
+            <Grid Grid.Row="0" Margin="20,18,20,14">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Visible" />
@@ -571,8 +540,8 @@
             </Grid>
 
             <!-- Settings view -->
-            <ScrollViewer Grid.Row="1"
-                          Margin="20,0,20,14"
+            <ScrollViewer Grid.Row="0"
+                          Margin="20,18,20,14"
                           Padding="0,0,8,0"
                           VerticalScrollBarVisibility="Auto"
                           Visibility="{Binding IsSettingsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -688,7 +657,7 @@
             </ScrollViewer>
 
             <!-- Bottom profile and settings bar -->
-            <Border Grid.Row="2"
+            <Border Grid.Row="1"
                     Background="#202020"
                     BorderBrush="#343434"
                     BorderThickness="0,1,0,0"
@@ -750,7 +719,7 @@
             <!-- Availability chooser stays inside the flyout so it does not deactivate the window. -->
             <Border x:Name="AvailabilityPanel"
                     Grid.Row="0"
-                    Grid.RowSpan="3"
+                    Grid.RowSpan="2"
                     Panel.ZIndex="20"
                     Width="244"
                     Margin="16,0,0,66"
@@ -774,12 +743,35 @@
                             Command="{Binding SetReceiverAvailabilityCommand}"
                             CommandParameter="{x:Static viewModels:ReceiverAvailability.Available}"
                             Cursor="Hand">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="10" Height="10" Fill="#6CCB7F" />
-                            <TextBlock Margin="10,0,0,0"
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="10" Height="10" Fill="#6CCB7F" />
+                                <TextBlock Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Text="Available" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
                                        VerticalAlignment="Center"
-                                       Text="Available" />
-                        </StackPanel>
+                                       FontFamily="Segoe MDL2 Assets"
+                                       Foreground="#60CDFF"
+                                       Text="&#xE73E;">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ReceiverAvailability}"
+                                                         Value="{x:Static viewModels:ReceiverAvailability.Available}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
                     </Button>
                     <Button Height="42"
                             Padding="10,0"
@@ -789,18 +781,36 @@
                             Command="{Binding SetReceiverAvailabilityCommand}"
                             CommandParameter="{x:Static viewModels:ReceiverAvailability.Invisible}"
                             Cursor="Hand">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="10" Height="10" Fill="#8B8B8B" />
-                            <TextBlock Margin="10,0,0,0"
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="10" Height="10" Fill="#8B8B8B" />
+                                <TextBlock Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Text="Invisible" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
                                        VerticalAlignment="Center"
-                                       Text="Invisible" />
-                        </StackPanel>
+                                       FontFamily="Segoe MDL2 Assets"
+                                       Foreground="#60CDFF"
+                                       Text="&#xE73E;">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ReceiverAvailability}"
+                                                         Value="{x:Static viewModels:ReceiverAvailability.Invisible}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
                     </Button>
-                    <TextBlock Margin="10,8,10,6"
-                               FontSize="10"
-                               Foreground="#AFAFAF"
-                               Text="Connected is shown automatically while another user is linked."
-                               TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
         </Grid>
