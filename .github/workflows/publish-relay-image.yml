@@ -2,8 +2,8 @@ name: Publish relay image
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: read
@@ -31,6 +31,16 @@ jobs:
         id: version
         shell: bash
         run: |
+          expected_tag="$(dotnet nbgv tag HEAD --what-if)"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Tag '$GITHUB_REF_NAME' does not match the Nerdbank.GitVersioning tag '$expected_tag'." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tagged commit '$GITHUB_SHA' is not on the main branch." >&2
+            exit 1
+          fi
+
           echo "value=$(dotnet nbgv get-version --public-release -v NuGetPackageVersion)" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/remote-pointer-relay" >> "$GITHUB_OUTPUT"
 

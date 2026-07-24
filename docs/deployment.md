@@ -28,6 +28,22 @@ artifacts\installer\RemotePointer.Client-<version>-x64-Setup.exe.sha256
 
 No MSI, WiX, signing certificate, machine configuration, service, driver, or inbound firewall rule is involved. Because the installer is intentionally unsigned, distribute it and its SHA-256 file from a restricted internal share or another authenticated internal channel.
 
+## Publish a relay image
+
+Normal branch pushes do not run the relay-image workflow. To publish a release, start from a clean `main` branch whose current commit is already the tip of `origin/main`, then run:
+
+```powershell
+.\build\Publish-Release.ps1
+```
+
+The script restores the repository-pinned Nerdbank.GitVersioning tool, uses `nbgv tag` to calculate and create the current commit's version tag (for example, `v1.0.14`), and pushes only that tag. The tag push starts the GitHub Actions workflow, which verifies the tag against NB.GV before publishing the versioned relay image and `latest`.
+
+Preview the release without creating or pushing a tag with:
+
+```powershell
+.\build\Publish-Release.ps1 -WhatIf
+```
+
 ## Install
 
 Run the setup executable as the user who will use Remote Pointer. If the installer was built with `-RelayRootCertificatePath`, leave the HTTPS certificate task selected — it adds only Caddy's **public** root certificate to `Cert:\CurrentUser\Root`; the CA private key never leaves the Docker server. Installers built without that flag (public-CA relay hostnames) have no certificate task at all, since Windows already trusts the relay's certificate chain.
