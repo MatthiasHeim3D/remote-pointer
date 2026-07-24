@@ -14,6 +14,7 @@ AppName=Remote Pointer
 AppVersion={#MyAppVersion}
 AppPublisher=Remote Pointer
 AppVerName=Remote Pointer {#MyAppVersion}
+AppMutex=RemotePointer.Client.Running
 DefaultDirName={localappdata}\Programs\Remote Pointer
 DefaultGroupName=Remote Pointer
 DisableProgramGroupPage=yes

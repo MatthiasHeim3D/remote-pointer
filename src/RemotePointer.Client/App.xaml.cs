@@ -8,10 +8,13 @@ namespace RemotePointer.Client;
 
 public partial class App : System.Windows.Application
 {
+    private const string InstallerMutexName = "RemotePointer.Client.Running";
     private IClientAuditLog? auditLog;
+    private Mutex? installerMutex;
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        installerMutex = new Mutex(initiallyOwned: false, InstallerMutexName);
         base.OnStartup(e);
         auditLog = new JsonFileClientAuditLog();
         auditLog.Write(ClientAuditEvent.ApplicationStarted);
@@ -49,6 +52,8 @@ public partial class App : System.Windows.Application
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
+        installerMutex?.Dispose();
+        installerMutex = null;
         base.OnExit(e);
     }
 
