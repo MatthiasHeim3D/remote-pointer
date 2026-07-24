@@ -45,19 +45,92 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void InvalidServerAddress_DoesNotPreventClosingSettings()
+    public async Task InvalidServerAddress_DoesNotPreventClosingSettings()
     {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
         using var overlay = new FakeOverlayService();
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
             overlay,
-            clientSettings: new ClientSettings());
+            clientSettings: testSettings.Settings);
         viewModel.ServerAddressInput = "http://relay.example.test";
 
-        viewModel.CloseSettingsCommand.Execute(null);
+        await viewModel.CloseSettingsAsync();
 
         Assert.False(viewModel.IsSettingsOpen);
         Assert.Empty(viewModel.ServerAddressInput);
+    }
+
+    [Fact]
+    public async Task TestServerConnection_SuccessSavesAddressAndShowsCheckmark()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful."));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ServerAddressInput = "relay.example.test";
+
+        Assert.True(viewModel.ShowTestServerConnectionButton);
+        await viewModel.TestServerConnectionAsync();
+
+        Assert.Equal(["https://relay.example.test"], tester.TestedAddresses);
+        Assert.Equal("https://relay.example.test", testSettings.Settings.Server.BaseUrl);
+        Assert.False(viewModel.ShowTestServerConnectionButton);
+        Assert.True(viewModel.IsServerAddressVerified);
+        Assert.True(viewModel.IsSettingsOpen);
+    }
+
+    [Fact]
+    public async Task ClosingSettings_UntestedReachableAddressTestsAndSavesIt()
+    {
+        using var testSettings = new TemporaryClientSettings("https://old.example.test");
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful."));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        var relayReinitializationRequested = false;
+        viewModel.RelayReinitializationRequested += (_, _) =>
+            relayReinitializationRequested = true;
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "new.example.test";
+
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(["https://new.example.test"], tester.TestedAddresses);
+        Assert.Equal("https://new.example.test", testSettings.Settings.Server.BaseUrl);
+        Assert.False(viewModel.IsSettingsOpen);
+        Assert.True(relayReinitializationRequested);
+    }
+
+    [Fact]
+    public async Task ClosingSettings_UnreachableAddressRestoresConfiguredAddress()
+    {
+        using var testSettings = new TemporaryClientSettings("https://old.example.test");
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(false, "The server could not be reached."));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ServerAddressInput = "unreachable.example.test";
+
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(["https://unreachable.example.test"], tester.TestedAddresses);
+        Assert.Equal("https://old.example.test", testSettings.Settings.Server.BaseUrl);
+        Assert.Equal("old.example.test", viewModel.ServerAddressInput);
+        Assert.False(viewModel.IsSettingsOpen);
     }
 
     [Fact]
@@ -591,6 +664,53 @@ public sealed class MainWindowViewModelTests
                     monitor.Display.DisplayId,
                     displayId,
                     StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class FakeServerConnectionTester(ServerConnectionTestResult result)
+        : IServerConnectionTester
+    {
+        public List<string> TestedAddresses { get; } = [];
+
+        public Task<ServerConnectionTestResult> TestAsync(
+            string serverAddress,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            TestedAddresses.Add(serverAddress);
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class TemporaryClientSettings : IDisposable
+    {
+        private readonly string directory;
+
+        public TemporaryClientSettings(string serverAddress)
+        {
+            directory = Path.Combine(
+                Path.GetTempPath(),
+                $"RemotePointer.ViewModelTests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            var json = System.Text.Json.JsonSerializer.Serialize(
+                new
+                {
+                    Server = new
+                    {
+                        BaseUrl = serverAddress,
+                        ReconnectDelaysSeconds = new[] { 0, 2 },
+                    },
+                    Pointer = new
+                    {
+                        DefaultTtlMilliseconds = 2_000,
+                    },
+                });
+            File.WriteAllText(Path.Combine(directory, "appsettings.json"), json);
+            Settings = ClientSettings.Load(directory, null);
+        }
+
+        public ClientSettings Settings { get; }
+
+        public void Dispose() => Directory.Delete(directory, recursive: true);
     }
 
     private sealed class FakeOverlayService : IReceiverOverlayService

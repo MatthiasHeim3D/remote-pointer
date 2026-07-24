@@ -15,11 +15,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SemaphoreSlim availabilityUpdateGate = new(1, 1);
     private readonly AsyncRelayCommand disconnectAllConnectionsCommand;
     private readonly AsyncRelayCommand setReceiverAvailabilityCommand;
+    private readonly AsyncRelayCommand testServerConnectionCommand;
     private readonly IMonitorService monitorService;
     private readonly IReceiverOverlayService overlayService;
     private readonly IRelayClient? receiverRelayClient;
     private readonly ClientSettings? clientSettings;
     private readonly IStartupRegistrationService? startupRegistrationService;
+    private readonly IServerConnectionTester serverConnectionTester;
     private readonly ITargetRegionService targetRegionService;
     private readonly RelayCommand decrementMaximumSendersCommand;
     private readonly RelayCommand incrementMaximumSendersCommand;
@@ -44,6 +46,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isLaunchAtStartup;
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
+    private bool isServerAddressVerified;
+    private bool pendingRelayReinitialization;
+    private string? lastTestedServerAddress;
+    private bool lastServerConnectionTestSucceeded;
+    private string serverConnectionTestMessage = string.Empty;
+    private readonly string activeServerAddress;
 
     public event EventHandler<ServerAddressChangeRequestedEventArgs>? ServerAddressChangeRequested;
 
@@ -57,16 +65,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IRelayClient? presenterRelayClient = null,
         int pointerTtlMilliseconds = 2_000,
         ClientSettings? clientSettings = null,
-        IStartupRegistrationService? startupRegistrationService = null)
+        IStartupRegistrationService? startupRegistrationService = null,
+        IServerConnectionTester? serverConnectionTester = null)
     {
         this.monitorService = monitorService ?? throw new ArgumentNullException(nameof(monitorService));
         this.overlayService = overlayService ?? throw new ArgumentNullException(nameof(overlayService));
         this.receiverRelayClient = receiverRelayClient;
         this.clientSettings = clientSettings;
         this.startupRegistrationService = startupRegistrationService;
+        this.serverConnectionTester = serverConnectionTester ?? new ServerConnectionTester();
         var configuredServerAddress = clientSettings?.Server.BaseUrl
             ?? receiverRelayClient?.ServerUrl
             ?? string.Empty;
+        activeServerAddress = configuredServerAddress;
         serverAddressInput = RemoveHttpsPrefix(configuredServerAddress);
         userName = clientSettings?.Profile.UserName ?? Environment.UserName;
         profilePicturePath = clientSettings?.Profile.PicturePath ?? string.Empty;
@@ -122,25 +133,33 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 }
             },
             _ => receiverRelayClient is not null);
-        ToggleSettingsCommand = new RelayCommand(_ =>
+        ToggleSettingsCommand = new AsyncRelayCommand(async _ =>
         {
             IsAvailabilityMenuOpen = false;
             if (IsSettingsOpen)
             {
-                CancelSettings();
+                await CloseSettingsAsync();
             }
             else
             {
                 OpenSettings();
             }
         });
-        SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
-        CloseSettingsCommand = new RelayCommand(_ => CancelSettings());
-        ToggleAvailabilityMenuCommand = new RelayCommand(_ =>
+        CloseSettingsCommand = new AsyncRelayCommand(_ => CloseSettingsAsync());
+        testServerConnectionCommand = new AsyncRelayCommand(
+            _ => TestServerConnectionAsync(),
+            _ => ShowTestServerConnectionButton
+                && string.IsNullOrEmpty(ServerAddressValidationMessage)
+                && !string.IsNullOrWhiteSpace(ServerAddress));
+        ToggleAvailabilityMenuCommand = new AsyncRelayCommand(async _ =>
         {
             if (IsSettingsOpen)
             {
-                CancelSettings();
+                await CloseSettingsAsync();
+                if (IsSettingsOpen)
+                {
+                    return;
+                }
             }
 
             IsAvailabilityMenuOpen = !IsAvailabilityMenuOpen;
@@ -311,8 +330,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var address = RemoveHttpsPrefix(value ?? string.Empty);
             if (SetProperty(ref serverAddressInput, address))
             {
+                lastTestedServerAddress = null;
+                lastServerConnectionTestSucceeded = false;
+                IsServerAddressVerified = false;
+                ServerConnectionTestMessage = string.Empty;
                 RaisePropertyChanged(nameof(ServerAddress));
                 RaisePropertyChanged(nameof(ServerAddressValidationMessage));
+                RaiseServerAddressStateProperties();
             }
         }
     }
@@ -322,6 +346,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get
         {
             var input = ServerAddressInput.Trim();
+            if (input.Length == 0
+                && !string.IsNullOrWhiteSpace(clientSettings?.Server.BaseUrl))
+            {
+                return "Enter a server address.";
+            }
+
             if (input.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
             {
                 return "HTTPS is required. Remove http://; https:// is added automatically.";
@@ -339,6 +369,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 ? string.Empty
                 : validationMessage;
         }
+    }
+
+    public bool ShowTestServerConnectionButton => HasServerAddressChanged;
+
+    public bool IsServerAddressVerified
+    {
+        get => isServerAddressVerified;
+        private set => SetProperty(ref isServerAddressVerified, value);
+    }
+
+    public string ServerConnectionTestMessage
+    {
+        get => serverConnectionTestMessage;
+        private set => SetProperty(ref serverConnectionTestMessage, value);
     }
 
     public string UserName
@@ -423,9 +467,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public ICommand ToggleSettingsCommand { get; }
 
-    public ICommand SaveSettingsCommand { get; }
-
     public ICommand CloseSettingsCommand { get; }
+
+    public ICommand TestServerConnectionCommand => testServerConnectionCommand;
 
     public ICommand ToggleAvailabilityMenuCommand { get; }
 
@@ -946,7 +990,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         approvePresenterCommand.RaiseCanExecuteChanged();
     }
 
-    private async void SaveSettings()
+    internal async Task TestServerConnectionAsync()
     {
         if (clientSettings is null)
         {
@@ -954,55 +998,92 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var serverAddressChanged = false;
+        if (!TryGetRequestedServerAddress(out var requestedServerAddress))
+        {
+            ServerConnectionTestMessage = string.IsNullOrEmpty(ServerAddressValidationMessage)
+                ? "Enter a server address to test the connection."
+                : ServerAddressValidationMessage;
+            return;
+        }
+
+        ServerConnectionTestMessage = "Testing connection...";
+        var result = await serverConnectionTester.TestAsync(requestedServerAddress);
+        lastTestedServerAddress = requestedServerAddress;
+        lastServerConnectionTestSucceeded = result.IsSuccessful;
+        if (!result.IsSuccessful)
+        {
+            IsServerAddressVerified = false;
+            ServerConnectionTestMessage = result.Message;
+            return;
+        }
+
         try
         {
-            if (!string.IsNullOrEmpty(ServerAddressValidationMessage))
+            if (!TryApproveServerAddressChange(requestedServerAddress))
             {
-                SetStatus(ServerAddressValidationMessage, true);
+                ResetServerAddressDraft();
                 return;
             }
 
-            _ = ClientSettings.TryNormalizeServerAddress(
-                ServerAddress,
-                out var requestedServerAddress,
-                out _);
-            var savedServerAddress = clientSettings.Server.BaseUrl;
-            serverAddressChanged = !string.Equals(
-                savedServerAddress,
+            PersistSettings(requestedServerAddress);
+            pendingRelayReinitialization = !string.Equals(
+                activeServerAddress,
                 requestedServerAddress,
                 StringComparison.Ordinal);
-            var hasActiveConnections = HasConnectedPresenter
-                || HasPendingPresenter
-                || Presenter.IsSessionApproved
-                || Presenter.IsJoinPending;
-            if (serverAddressChanged && hasActiveConnections)
+            ServerConnectionTestMessage = string.Empty;
+            IsServerAddressVerified = true;
+            RaiseServerAddressStateProperties();
+            SetStatus("Server connection verified and address saved.", false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Settings could not be saved: {exception.Message}", true);
+            ServerConnectionTestMessage = $"The address could not be saved: {exception.Message}";
+        }
+    }
+
+    internal async Task CloseSettingsAsync()
+    {
+        if (clientSettings is null)
+        {
+            IsSettingsOpen = false;
+            return;
+        }
+
+        try
+        {
+            if (HasServerAddressChanged)
             {
-                var changeRequest = new ServerAddressChangeRequestedEventArgs(
-                    savedServerAddress,
-                    requestedServerAddress);
-                ServerAddressChangeRequested?.Invoke(this, changeRequest);
-                if (!changeRequest.Approved)
+                if (!TryGetRequestedServerAddress(out var requestedServerAddress))
                 {
-                    ServerAddressInput = RemoveHttpsPrefix(savedServerAddress);
-                    requestedServerAddress = savedServerAddress;
-                    serverAddressChanged = false;
+                    ResetServerAddressDraft();
+                }
+                else
+                {
+                    var currentAddressWasTested = string.Equals(
+                        lastTestedServerAddress,
+                        requestedServerAddress,
+                        StringComparison.Ordinal);
+                    if (!currentAddressWasTested)
+                    {
+                        await TestServerConnectionAsync();
+                    }
+
+                    if (HasServerAddressChanged
+                        && (!string.Equals(
+                                lastTestedServerAddress,
+                                requestedServerAddress,
+                                StringComparison.Ordinal)
+                            || !lastServerConnectionTestSucceeded))
+                    {
+                        ResetServerAddressDraft();
+                    }
                 }
             }
 
-            clientSettings.SaveUserPreferences(
-                requestedServerAddress,
-                UserName,
-                ProfilePicturePath,
-                MaximumSenderConnections,
-                IsLaunchAtStartup,
-                SelectedMonitor?.Display.DisplayId,
-                ShowUsageHints,
-                ReceiverAvailability == ReceiverAvailability.Available);
-            Presenter.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
-            startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
-            SetStatus("Settings saved.", false);
+            PersistSettings(clientSettings.Server.BaseUrl);
             IsSettingsOpen = false;
+            SetStatus("Settings saved.", false);
         }
         catch (Exception exception)
         {
@@ -1010,7 +1091,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (serverAddressChanged)
+        if (pendingRelayReinitialization)
         {
             RelayReinitializationRequested?.Invoke(this, EventArgs.Empty);
             return;
@@ -1018,15 +1099,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            await Task.WhenAll(
-                receiverRelayClient?.ApplyClientSettingsAsync(
-                    UserName,
-                    ProfilePicturePath,
-                    MaximumSenderConnections) ?? Task.CompletedTask,
-                Presenter.ApplyClientSettingsAsync(
-                    UserName,
-                    ProfilePicturePath,
-                    MaximumSenderConnections));
+            await ApplyActiveClientSettingsAsync();
         }
         catch (Exception exception)
         {
@@ -1039,13 +1112,106 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void OpenSettings()
     {
         ResetSettingsDraft();
+        IsServerAddressVerified = false;
+        ServerConnectionTestMessage = string.Empty;
         IsSettingsOpen = true;
     }
 
-    private void CancelSettings()
+    private bool HasServerAddressChanged
     {
-        ResetSettingsDraft();
-        IsSettingsOpen = false;
+        get
+        {
+            if (!ClientSettings.TryNormalizeServerAddress(
+                    ServerAddress,
+                    out var requestedServerAddress,
+                    out _))
+            {
+                return true;
+            }
+
+            return !string.Equals(
+                clientSettings?.Server.BaseUrl ?? activeServerAddress,
+                requestedServerAddress,
+                StringComparison.Ordinal);
+        }
+    }
+
+    private bool TryGetRequestedServerAddress(out string requestedServerAddress)
+    {
+        if (!string.IsNullOrEmpty(ServerAddressValidationMessage)
+            || !ClientSettings.TryNormalizeServerAddress(
+                ServerAddress,
+                out requestedServerAddress,
+                out _)
+            || string.IsNullOrWhiteSpace(requestedServerAddress))
+        {
+            requestedServerAddress = string.Empty;
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryApproveServerAddressChange(string requestedServerAddress)
+    {
+        var savedServerAddress = clientSettings?.Server.BaseUrl ?? string.Empty;
+        if (string.Equals(savedServerAddress, requestedServerAddress, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var hasActiveConnections = HasConnectedPresenter
+            || HasPendingPresenter
+            || Presenter.IsSessionApproved
+            || Presenter.IsJoinPending;
+        if (!hasActiveConnections)
+        {
+            return true;
+        }
+
+        var changeRequest = new ServerAddressChangeRequestedEventArgs(
+            savedServerAddress,
+            requestedServerAddress);
+        ServerAddressChangeRequested?.Invoke(this, changeRequest);
+        return changeRequest.Approved;
+    }
+
+    private void PersistSettings(string serverAddress)
+    {
+        clientSettings!.SaveUserPreferences(
+            serverAddress,
+            UserName,
+            ProfilePicturePath,
+            MaximumSenderConnections,
+            IsLaunchAtStartup,
+            SelectedMonitor?.Display.DisplayId,
+            ShowUsageHints,
+            ReceiverAvailability == ReceiverAvailability.Available);
+        Presenter.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
+        startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
+        RaiseServerAddressStateProperties();
+    }
+
+    private Task ApplyActiveClientSettingsAsync() => Task.WhenAll(
+        receiverRelayClient?.ApplyClientSettingsAsync(
+            UserName,
+            ProfilePicturePath,
+            MaximumSenderConnections) ?? Task.CompletedTask,
+        Presenter.ApplyClientSettingsAsync(
+            UserName,
+            ProfilePicturePath,
+            MaximumSenderConnections));
+
+    private void ResetServerAddressDraft()
+    {
+        ServerAddressInput = RemoveHttpsPrefix(clientSettings?.Server.BaseUrl ?? string.Empty);
+        ServerConnectionTestMessage = string.Empty;
+    }
+
+    private void RaiseServerAddressStateProperties()
+    {
+        RaisePropertyChanged(nameof(ShowTestServerConnectionButton));
+        testServerConnectionCommand.RaiseCanExecuteChanged();
     }
 
     private void ResetSettingsDraft()
