@@ -44,6 +44,45 @@ public sealed class ClientSettingsTests
     }
 
     [Fact]
+    public void Load_UsesWindowsAccountDefaultsForUnsetProfile()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var picture = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lXfJYQAAAABJRU5ErkJggg==");
+
+        var settings = ClientSettings.Load(
+            directory.Path,
+            null,
+            new FixedProfileDefaultsProvider("Heim, Matthias", picture));
+
+        Assert.Equal("Heim, Matthias", settings.Profile.UserName);
+        Assert.StartsWith(directory.Path, settings.Profile.PicturePath, StringComparison.Ordinal);
+        Assert.EndsWith(".png", settings.Profile.PicturePath, StringComparison.Ordinal);
+        Assert.NotEmpty(File.ReadAllBytes(settings.Profile.PicturePath));
+    }
+
+    [Fact]
+    public void Load_PreservesConfiguredProfileInsteadOfWindowsAccountDefaults()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+        settings.SaveUserPreferences(
+            "https://packaged.example.test",
+            "Configured Name",
+            @"C:\Pictures\configured.png");
+
+        var reloaded = ClientSettings.Load(
+            directory.Path,
+            null,
+            new FixedProfileDefaultsProvider("Windows Name", [1, 2, 3]));
+
+        Assert.Equal("Configured Name", reloaded.Profile.UserName);
+        Assert.Equal(@"C:\Pictures\configured.png", reloaded.Profile.PicturePath);
+    }
+
+    [Fact]
     public void UserPreferences_RoundTripServerAndProfile()
     {
         using var directory = new TemporaryDirectory();
@@ -157,5 +196,11 @@ public sealed class ClientSettingsTests
         public string Path { get; }
 
         public void Dispose() => Directory.Delete(Path, recursive: true);
+    }
+
+    private sealed class FixedProfileDefaultsProvider(string userName, byte[]? picture)
+        : IUserProfileDefaultsProvider
+    {
+        public UserProfileDefaults GetCurrentProfile() => new(userName, picture);
     }
 }

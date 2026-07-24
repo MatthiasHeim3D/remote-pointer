@@ -1,5 +1,7 @@
 using System.IO;
+using System.Security;
 using System.Text.Json;
+using System.Windows.Media.Imaging;
 namespace RemotePointer.Client.Configuration;
 
 public sealed class ClientSettings
@@ -22,12 +24,18 @@ public sealed class ClientSettings
     {
         return Load(
             baseDirectory,
-            Environment.GetEnvironmentVariable("REMOTEPOINTER_SERVER_BASEURL"));
+            Environment.GetEnvironmentVariable("REMOTEPOINTER_SERVER_BASEURL"),
+            baseDirectory is null ? new WindowsAccountProfileDefaultsProvider() : null);
     }
 
     internal static ClientSettings Load(
         string? baseDirectory,
-        string? environmentUrl)
+        string? environmentUrl) => Load(baseDirectory, environmentUrl, null);
+
+    internal static ClientSettings Load(
+        string? baseDirectory,
+        string? environmentUrl,
+        IUserProfileDefaultsProvider? profileDefaultsProvider)
     {
         var directory = baseDirectory ?? AppContext.BaseDirectory;
         var path = Path.Combine(directory, "appsettings.json");
@@ -50,6 +58,7 @@ public sealed class ClientSettings
 
         settings.userPreferencesPath = userPreferencesPath;
         settings.ApplyUserPreferences(userPreferencesPath);
+        settings.ApplyMissingProfileDefaults(profileDefaultsProvider);
 
         if (!string.IsNullOrWhiteSpace(environmentUrl))
         {
@@ -192,6 +201,73 @@ public sealed class ClientSettings
         Pointer.HasShownUsageHints = preferences.HasShownUsageHints;
     }
 
+    private void ApplyMissingProfileDefaults(IUserProfileDefaultsProvider? provider)
+    {
+        if (!string.IsNullOrWhiteSpace(Profile.UserName)
+            && !string.IsNullOrWhiteSpace(Profile.PicturePath))
+        {
+            return;
+        }
+
+        var defaults = provider?.GetCurrentProfile()
+            ?? new UserProfileDefaults(Environment.UserName, null);
+        if (string.IsNullOrWhiteSpace(Profile.UserName))
+        {
+            Profile.UserName = string.IsNullOrWhiteSpace(defaults.UserName)
+                ? Environment.UserName
+                : defaults.UserName.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(Profile.PicturePath)
+            && defaults.Picture is { Length: > 0 })
+        {
+            Profile.PicturePath = TryCacheDefaultProfilePicture(defaults.Picture) ?? string.Empty;
+        }
+    }
+
+    private string? TryCacheDefaultProfilePicture(byte[] picture)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(userPreferencesPath);
+            if (string.IsNullOrEmpty(directory))
+            {
+                return null;
+            }
+
+            Directory.CreateDirectory(directory);
+            using var sourceStream = new MemoryStream(picture, writable: false);
+            var decoder = BitmapDecoder.Create(
+                sourceStream,
+                BitmapCreateOptions.PreservePixelFormat,
+                BitmapCacheOption.OnLoad);
+            if (decoder.Frames.Count == 0)
+            {
+                return null;
+            }
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(decoder.Frames[0]));
+            using var cachedPicture = new MemoryStream();
+            encoder.Save(cachedPicture);
+
+            var path = Path.Combine(directory, "windows-account-picture.png");
+            File.WriteAllBytes(path, cachedPicture.ToArray());
+            return path;
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or ArgumentException
+                or FormatException
+                or InvalidOperationException
+                or UnauthorizedAccessException
+                or SecurityException
+                or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
     private static string GetDefaultUserPreferencesPath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RemotePointer",
@@ -236,7 +312,7 @@ public sealed class PrivacySettings
 
 public sealed class UserProfileSettings
 {
-    public string UserName { get; set; } = Environment.UserName;
+    public string UserName { get; set; } = string.Empty;
 
     public string PicturePath { get; set; } = string.Empty;
 }

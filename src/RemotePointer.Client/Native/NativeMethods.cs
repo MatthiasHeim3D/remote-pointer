@@ -97,6 +97,17 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool UnregisterHotKey(nint window, int hotKeyId);
+
+    [LibraryImport("secur32.dll", EntryPoint = "GetUserNameExW", SetLastError = true)]
+    internal static unsafe partial byte GetUserNameEx(
+        ExtendedNameFormat nameFormat,
+        char* nameBuffer,
+        ref uint bufferCharacterCount);
+}
+
+internal enum ExtendedNameFormat
+{
+    Display = 3,
 }
 
 internal enum MonitorDpiType
