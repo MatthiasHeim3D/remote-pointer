@@ -314,6 +314,26 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task SelectingInvisibleBeforeReceiverSession_RemainsInvisibleWithoutRelayUpdate()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        await viewModel.InitializeAsync();
+
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Invisible);
+
+        Assert.False(viewModel.HasReceiverSession);
+        Assert.Equal(ReceiverAvailability.Invisible, viewModel.ReceiverAvailability);
+        Assert.False(relay.IsDiscoverable);
+        Assert.Equal(0, relay.DiscoverabilityUpdateCount);
+    }
+
+    [Fact]
     public void Constructor_LoadsAndSelectsFirstMonitor()
     {
         var primary = CreateMonitor("DISPLAY1", isPrimary: true);

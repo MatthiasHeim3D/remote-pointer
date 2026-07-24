@@ -26,7 +26,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isOverlayVisible;
     private bool hasConnectedPresenter;
     private bool receiverDiscoveryEnabled;
-    private bool suppressAvailabilityUpdate;
     private ReceiverAvailability receiverAvailability = ReceiverAvailability.Invisible;
     private PresenterDescriptor? pendingPresenter;
     private string receiverConnectionMessage;
@@ -108,10 +107,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 if (availability is ReceiverAvailability requestedAvailability)
                 {
-                    SetReceiverAvailabilitySilently(requestedAvailability);
+                    await SetReceiverAvailabilityAsync(requestedAvailability);
                 }
-
-                await UpdateReceiverAvailabilityAsync();
             },
             _ => receiverRelayClient is not null
                 && ReceiverDiscoveryEnabled
@@ -241,11 +238,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => receiverAvailability;
         set
         {
-            if (SetProperty(ref receiverAvailability, value) && !suppressAvailabilityUpdate)
-            {
-                setReceiverAvailabilityCommand.Execute(null);
-            }
-
+            SetProperty(ref receiverAvailability, value);
             RaiseAvailabilityProperties();
         }
     }
@@ -371,8 +364,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public async Task SetReceiverAvailabilityAsync(ReceiverAvailability availability)
     {
+        var previousAvailability = ReceiverAvailability;
         SetReceiverAvailabilitySilently(availability);
-        await UpdateReceiverAvailabilityAsync();
+        await UpdateReceiverAvailabilityAsync(availability, previousAvailability);
     }
 
     public async Task InitializeAsync()
@@ -632,17 +626,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task UpdateReceiverAvailabilityAsync()
+    private async Task UpdateReceiverAvailabilityAsync(
+        ReceiverAvailability requestedAvailability,
+        ReceiverAvailability previousAvailability)
     {
         IsAvailabilityMenuOpen = false;
         if (receiverRelayClient is null || !CanSetReceiverAvailability)
         {
+            SetReceiverAvailabilitySilently(previousAvailability);
             return;
         }
 
-        var requestedAvailability = ReceiverAvailability;
         try
         {
+            if (requestedAvailability == ReceiverAvailability.Invisible
+                && !HasReceiverSession)
+            {
+                SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
+                SetStatus("This receiver is invisible to presenters.", false);
+                return;
+            }
+
             if (requestedAvailability == ReceiverAvailability.Available
                 && !HasReceiverSession)
             {
@@ -662,10 +666,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception)
         {
-            SetReceiverAvailabilitySilently(
-                requestedAvailability == ReceiverAvailability.Available
-                    ? ReceiverAvailability.Invisible
-                    : ReceiverAvailability.Available);
+            SetReceiverAvailabilitySilently(previousAvailability);
             SetStatus($"Receiver availability could not be changed: {exception.Message}", true);
         }
     }
@@ -915,9 +916,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SetReceiverAvailabilitySilently(ReceiverAvailability availability)
     {
-        suppressAvailabilityUpdate = true;
         ReceiverAvailability = availability;
-        suppressAvailabilityUpdate = false;
     }
 
     private void RaiseAvailabilityProperties()

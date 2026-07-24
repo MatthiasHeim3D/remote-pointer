@@ -39,6 +39,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public bool IsDiscoverable { get; private set; }
 
+    public int DiscoverabilityUpdateCount { get; private set; }
+
     public Exception? DiscoverabilityException { get; set; }
 
     public DisplayDescriptor? UpdatedReceiverDisplay { get; private set; }
@@ -107,6 +109,7 @@ internal sealed class FakeRelayClient : IRelayClient
         CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
+        DiscoverabilityUpdateCount++;
         if (DiscoverabilityException is not null)
         {
             return Task.FromException<bool>(DiscoverabilityException);
