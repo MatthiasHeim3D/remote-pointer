@@ -52,6 +52,12 @@ public interface IRelayClient : IAsyncDisposable
         DisplayDescriptor display,
         CancellationToken cancellationToken = default);
 
+    Task ApplyClientSettingsAsync(
+        string displayName,
+        string? profilePicturePath,
+        int maximumPresenterConnections,
+        CancellationToken cancellationToken = default);
+
     Task ApprovePresenterAsync(
         string sessionId,
         string presenterConnectionId,

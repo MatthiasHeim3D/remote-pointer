@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.ComponentModel;
-using System.Diagnostics;
 using Microsoft.Win32;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Native;
@@ -19,12 +18,14 @@ public partial class MainWindow : Window
     private HwndSource? source;
     private readonly SystemTrayIcon trayIcon;
     private readonly MainWindowViewModel viewModel;
+    private readonly IClientAuditLog? auditLog;
     private ConnectionApprovalWindow? approvalWindow;
     private bool suppressAutoHide;
 
     public MainWindow(IClientAuditLog? auditLog = null)
     {
         InitializeComponent();
+        this.auditLog = auditLog;
 
         var monitorService = new MonitorService();
         var coordinateMapper = new DisplayCoordinateMapper();
@@ -61,7 +62,8 @@ public partial class MainWindow : Window
         trayIcon = new SystemTrayIcon(ShowFromTray, ExitFromTray);
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged += OnViewModelPropertyChanged;
-        viewModel.SettingsRestartRequested += OnSettingsRestartRequested;
+        viewModel.ServerAddressChangeRequested += OnServerAddressChangeRequested;
+        viewModel.RelayReinitializationRequested += OnRelayReinitializationRequested;
         StateChanged += OnWindowStateChanged;
         Loaded += OnLoaded;
 
@@ -120,7 +122,8 @@ public partial class MainWindow : Window
         StateChanged -= OnWindowStateChanged;
         viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged -= OnViewModelPropertyChanged;
-        viewModel.SettingsRestartRequested -= OnSettingsRestartRequested;
+        viewModel.ServerAddressChangeRequested -= OnServerAddressChangeRequested;
+        viewModel.RelayReinitializationRequested -= OnRelayReinitializationRequested;
         source?.RemoveHook(WindowMessageHook);
         source = null;
         hotKeyRegistration?.Dispose();
@@ -168,7 +171,8 @@ public partial class MainWindow : Window
                 && e.PropertyName is nameof(MainWindowViewModel.IsSettingsOpen)
                     or nameof(MainWindowViewModel.HasConnectedPresenter))
             || (ReferenceEquals(sender, viewModel.Presenter)
-                && e.PropertyName == nameof(PresenterViewModel.IsSessionApproved)))
+                && e.PropertyName is nameof(PresenterViewModel.IsSessionApproved)
+                    or nameof(PresenterViewModel.IsJoinPending)))
         {
             UpdateFlyoutHeight();
         }
@@ -189,7 +193,7 @@ public partial class MainWindow : Window
 
     private void UpdateFlyoutHeight()
     {
-        var compact = viewModel.Presenter.IsSessionApproved
+        var compact = (viewModel.Presenter.IsSessionApproved || viewModel.Presenter.IsJoinPending)
             && !viewModel.HasConnectedPresenter
             && !viewModel.IsSettingsOpen;
         Height = compact ? ConnectedSenderHeight : ExpandedHeight;
@@ -246,36 +250,42 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnSettingsRestartRequested(object? sender, EventArgs e)
+    private void OnServerAddressChangeRequested(
+        object? sender,
+        ServerAddressChangeRequestedEventArgs e)
     {
+        _ = sender;
         suppressAutoHide = true;
         try
         {
             var result = MessageBox.Show(
                 this,
-                "Some changes require Remote Pointer to restart. Restart now?",
-                "Restart Remote Pointer",
+                "Changing the server disconnects the active session. Continue?",
+                "Change Remote Pointer server",
                 MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-            if (result != MessageBoxResult.Yes)
-            {
-                return;
-            }
-
-            var executablePath = Environment.ProcessPath;
-            if (!string.IsNullOrWhiteSpace(executablePath))
-            {
-                _ = Process.Start(new ProcessStartInfo(executablePath)
-                {
-                    UseShellExecute = true,
-                });
-                Application.Current.Shutdown();
-            }
+                MessageBoxImage.Warning);
+            e.Approved = result == MessageBoxResult.Yes;
         }
         finally
         {
             suppressAutoHide = false;
         }
+    }
+
+    private void OnRelayReinitializationRequested(object? sender, EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        _ = Dispatcher.BeginInvoke(
+            () =>
+            {
+                var replacement = new MainWindow(auditLog);
+                Application.Current.MainWindow = replacement;
+                replacement.Show();
+                replacement.Activate();
+                Close();
+            },
+            DispatcherPriority.Background);
     }
 
     private void OnBrowseProfilePicture(object sender, RoutedEventArgs e)
@@ -302,6 +312,15 @@ public partial class MainWindow : Window
             suppressAutoHide = false;
             Activate();
         }
+    }
+
+    private async void OnReceivingScreenSelectionChanged(
+        object sender,
+        System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        await viewModel.ApplySelectedMonitorAsync();
     }
 
     private void ShowConnectionApprovalPrompt()

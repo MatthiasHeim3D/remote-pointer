@@ -323,6 +323,48 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
+    public ReceiverClientSettingsUpdateResult UpdateReceiverClientSettings(
+        string sessionId,
+        string receiverConnectionId,
+        string receiverDisplayName,
+        ClientProfile profile,
+        int maximumPresenterConnections)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        EnsureIdentifier(receiverDisplayName, nameof(receiverDisplayName));
+        EnsureValid(ContractValidator.Validate(profile), "invalid_profile");
+        if (maximumPresenterConnections < 1
+            || maximumPresenterConnections > sessionOptions.MaximumPresentersPerReceiver)
+        {
+            throw new SessionOperationException(
+                "invalid_presenter_limit",
+                $"Maximum presenter connections must be between 1 and {sessionOptions.MaximumPresentersPerReceiver}.");
+        }
+
+        lock (syncRoot)
+        {
+            var session = GetActiveSession(sessionId);
+            EnsureMembership(
+                receiverConnectionId,
+                sessionId,
+                ClientRole.Receiver,
+                requireApproved: true);
+            session.ReceiverDisplayName = receiverDisplayName;
+            session.ProfilePicturePng = profile.PicturePng is null
+                ? null
+                : [.. profile.PicturePng];
+            session.MaximumPresenterConnections = maximumPresenterConnections;
+            return new ReceiverClientSettingsUpdateResult(
+                receiverConnectionId,
+                session.Presenters.Values
+                    .Select(presenter => presenter.Participant.ConnectionId)
+                    .OfType<string>()
+                    .ToArray(),
+                CreateState(session));
+        }
+    }
+
     public ApprovePresenterResult ApprovePresenter(
         string sessionId,
         string presenterConnectionId,
@@ -929,7 +971,8 @@ public sealed class SessionManager : ISessionManager
             .OrderBy(presenter => presenter.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray(),
         session.Receiver.ClientInstanceId,
-        session.ProfilePicturePng is null ? null : [.. session.ProfilePicturePng]);
+        session.ProfilePicturePng is null ? null : [.. session.ProfilePicturePng],
+        session.ReceiverDisplayName);
 
     private sealed class SessionRecord(
         string id,
@@ -958,17 +1001,17 @@ public sealed class SessionManager : ISessionManager
 
         internal DisplayDescriptor ReceiverDisplay { get; set; } = receiverDisplay;
 
-        internal string ReceiverDisplayName { get; } = receiverDisplayName;
+        internal string ReceiverDisplayName { get; set; } = receiverDisplayName;
 
         internal string ApplicationInstanceId { get; set; } = applicationInstanceId;
 
-        internal byte[]? ProfilePicturePng { get; } = profilePicturePng;
+        internal byte[]? ProfilePicturePng { get; set; } = profilePicturePng;
 
         internal Participant Receiver { get; } = receiver;
 
         internal int SequenceWindowSize { get; } = sequenceWindowSize;
 
-        internal int MaximumPresenterConnections { get; } = maximumPresenterConnections;
+        internal int MaximumPresenterConnections { get; set; } = maximumPresenterConnections;
 
         internal PointerTokenBucket RateLimiter { get; } = rateLimiter;
 

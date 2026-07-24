@@ -47,7 +47,8 @@ public partial class TargetRegionWindow : Window
         RectangleD rectangle,
         RectangleD resetRectangle,
         double expectedAspectRatio,
-        bool lockAspectRatio)
+        bool lockAspectRatio,
+        bool showExitHint = true)
     {
         if (!double.IsFinite(expectedAspectRatio) || expectedAspectRatio <= 0d)
         {
@@ -56,6 +57,7 @@ public partial class TargetRegionWindow : Window
 
         this.resetRectangle = resetRectangle;
         ExpectedAspectRatio = expectedAspectRatio;
+        ShowExitHint = showExitHint;
 
         InitializeComponent();
         pointerVisuals = new PointerVisualRenderer(RippleCanvas);
@@ -80,11 +82,13 @@ public partial class TargetRegionWindow : Window
 
     public double ExpectedAspectRatio { get; }
 
+    public bool ShowExitHint { get; }
+
     public void EnterPointingMode()
     {
         isPointingMode = true;
         CalibrationPanel.Visibility = Visibility.Collapsed;
-        PointingExitHint.Visibility = Visibility.Visible;
+        PointingExitHint.Visibility = ShowExitHint ? Visibility.Visible : Visibility.Collapsed;
         ResizeThumb.Visibility = Visibility.Collapsed;
         OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92));
         OuterBorder.BorderThickness = new Thickness(2d);

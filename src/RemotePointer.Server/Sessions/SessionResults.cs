@@ -37,6 +37,11 @@ public sealed record ReceiverDisplayUpdateResult(
     public string? PresenterConnectionId => PresenterConnectionIds.FirstOrDefault();
 }
 
+public sealed record ReceiverClientSettingsUpdateResult(
+    string ReceiverConnectionId,
+    IReadOnlyList<string> PresenterConnectionIds,
+    SessionStateMessage State);
+
 public sealed record ResumeSessionResult(
     SessionCredential Credential,
     SessionStateMessage State,

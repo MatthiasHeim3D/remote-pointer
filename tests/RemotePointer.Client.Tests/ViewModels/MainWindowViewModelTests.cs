@@ -131,7 +131,7 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("connection-1", relay.ApprovedPresenter?.ConnectionId);
         Assert.Equal(new NormalizedPoint(0.25d, 0.75d), Assert.Single(overlay.Markers));
         Assert.Equal(pointer.EventId, relay.SentAcknowledgement?.EventId);
-        Assert.False(viewModel.CanSelectMonitor);
+        Assert.True(viewModel.CanSelectMonitor);
     }
 
     [Fact]

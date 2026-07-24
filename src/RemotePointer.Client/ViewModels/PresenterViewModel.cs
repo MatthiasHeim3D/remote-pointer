@@ -91,7 +91,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
                 && !IsSessionApproved);
         endSessionCommand = new AsyncRelayCommand(
             _ => EndSessionAsync(),
-            _ => relayClient is not null && IsSessionApproved);
+            _ => relayClient is not null && (IsSessionApproved || IsJoinPending));
     }
 
     public ObservableCollection<AvailableReceiverDescriptor> AvailableReceivers { get; } = [];
@@ -168,6 +168,10 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public string PointingActionIcon => IsPointing ? "\uE71A" : "\uE768";
 
+    public string SenderConnectionStatusLabel => IsSessionApproved
+        ? "Connected"
+        : "Approval pending";
+
     public string StateLabel => State.ToString();
 
     public string StatusMessage
@@ -200,6 +204,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             if (SetProperty(ref isJoinPending, value))
             {
                 RaiseNetworkCommandStates();
+                RaisePropertyChanged(nameof(SenderConnectionStatusLabel));
             }
         }
     }
@@ -214,6 +219,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
                 RaiseNetworkCommandStates();
                 calibrateCommand.RaiseCanExecuteChanged();
                 togglePointingCommand.RaiseCanExecuteChanged();
+                RaisePropertyChanged(nameof(SenderConnectionStatusLabel));
             }
         }
     }
@@ -292,6 +298,19 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
         }
     }
+
+    public void SetShowExitHint(bool showExitHint) =>
+        targetRegionService.SetShowExitHint(showExitHint);
+
+    public Task ApplyClientSettingsAsync(
+        string displayName,
+        string? profilePicturePath,
+        int maximumPresenterConnections) =>
+        relayClient?.ApplyClientSettingsAsync(
+            displayName,
+            profilePicturePath,
+            maximumPresenterConnections)
+        ?? Task.CompletedTask;
 
     public async Task RestoreSessionAsync()
     {
@@ -553,8 +572,9 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
         IsJoinPending = false;
         IsSessionApproved = true;
+        CurrentReceiverName = e.State.ReceiverDisplayName ?? CurrentReceiverName;
         CurrentReceiverProfilePicturePng = e.State.ReceiverProfilePicturePng
-            ?? CurrentReceiverProfilePicturePng;
+            is null ? null : [.. e.State.ReceiverProfilePicturePng];
         targetRegionService.SetCalibrationIdentity(
             e.State.ReceiverClientInstanceId ?? CurrentReceiverName);
         if (e.State.ReceiverDisplay is not null)

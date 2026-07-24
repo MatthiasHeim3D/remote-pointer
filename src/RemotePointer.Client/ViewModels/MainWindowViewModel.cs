@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
 using System.Windows.Input;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
@@ -41,8 +40,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string userName;
     private int maximumSenderConnections;
     private bool isLaunchAtStartup;
+    private bool showExitHint = true;
 
-    public event EventHandler? SettingsRestartRequested;
+    public event EventHandler<ServerAddressChangeRequestedEventArgs>? ServerAddressChangeRequested;
+
+    public event EventHandler? RelayReinitializationRequested;
 
     public MainWindowViewModel(
         IMonitorService monitorService,
@@ -68,11 +70,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         isLaunchAtStartup = startupRegistrationService?.IsEnabled
             ?? clientSettings?.Startup.LaunchAtStartup
             ?? false;
+        showExitHint = clientSettings?.Pointer.ShowExitHint ?? true;
         this.overlayService.StateChanged += OnOverlayStateChanged;
         Presenter = new PresenterViewModel(
             targetRegionService ?? new TargetRegionService(),
             presenterRelayClient,
             pointerTtlMilliseconds);
+        Presenter.SetShowExitHint(showExitHint);
         Presenter.PropertyChanged += OnPresenterPropertyChanged;
 
         receiverConnectionMessage = receiverRelayClient is null
@@ -213,7 +217,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool HasReceiverSession => receiverSessionId is not null;
 
-    public bool CanSelectMonitor => !HasReceiverSession;
+    public bool CanSelectMonitor => Monitors.Count > 0;
 
     public bool ReceiverDiscoveryEnabled
     {
@@ -311,6 +315,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         get => isLaunchAtStartup;
         set => SetProperty(ref isLaunchAtStartup, value);
+    }
+
+    public bool ShowExitHint
+    {
+        get => showExitHint;
+        set => SetProperty(ref showExitHint, value);
     }
 
     public string ConnectedPresenterCountLabel =>
@@ -430,6 +440,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             Monitors.Add(monitor);
         }
+        RaisePropertyChanged(nameof(CanSelectMonitor));
 
         SelectedMonitor = previousDisplayId is null
             ? Monitors.FirstOrDefault()
@@ -485,6 +496,25 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetStatus($"Receiver display information could not be updated: {exception.Message}", true);
+        }
+    }
+
+    public async Task ApplySelectedMonitorAsync()
+    {
+        if (receiverSessionId is null || receiverRelayClient is null || SelectedMonitor is null)
+        {
+            return;
+        }
+
+        try
+        {
+            overlayService.Show(SelectedMonitor);
+            await receiverRelayClient.UpdateReceiverDisplayAsync(SelectedMonitor.Display);
+            SetStatus("Receiving screen updated.", false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"The receiving screen could not be updated: {exception.Message}", true);
         }
     }
 
@@ -770,7 +800,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         approvePresenterCommand.RaiseCanExecuteChanged();
     }
 
-    private void SaveSettings()
+    private async void SaveSettings()
     {
         if (clientSettings is null)
         {
@@ -780,33 +810,60 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            var requiresRestart = !string.Equals(
-                    clientSettings.Server.BaseUrl,
-                    ServerAddress.Trim(),
-                    StringComparison.Ordinal)
-                || !string.Equals(clientSettings.Profile.UserName, UserName.Trim(), StringComparison.Ordinal)
-                || !string.Equals(
-                    clientSettings.Profile.PicturePath,
-                    ProfilePicturePath.Trim(),
-                    StringComparison.Ordinal)
-                || clientSettings.Receiver.MaximumSenderConnections != MaximumSenderConnections;
+            var savedServerAddress = clientSettings.Server.BaseUrl;
+            var requestedServerAddress = ServerAddress.Trim();
+            var serverAddressChanged = !string.Equals(
+                savedServerAddress,
+                requestedServerAddress,
+                StringComparison.Ordinal);
+            var hasActiveConnections = HasConnectedPresenter
+                || HasPendingPresenter
+                || Presenter.IsSessionApproved
+                || Presenter.IsJoinPending;
+            if (serverAddressChanged && hasActiveConnections)
+            {
+                var changeRequest = new ServerAddressChangeRequestedEventArgs(
+                    savedServerAddress,
+                    requestedServerAddress);
+                ServerAddressChangeRequested?.Invoke(this, changeRequest);
+                if (!changeRequest.Approved)
+                {
+                    ServerAddress = savedServerAddress;
+                    serverAddressChanged = false;
+                }
+            }
+
             clientSettings.SaveUserPreferences(
                 ServerAddress,
                 UserName,
                 ProfilePicturePath,
                 MaximumSenderConnections,
                 IsLaunchAtStartup,
-                SelectedMonitor?.Display.DisplayId);
+                SelectedMonitor?.Display.DisplayId,
+                ShowExitHint);
+            if (!serverAddressChanged)
+            {
+                await Task.WhenAll(
+                    receiverRelayClient?.ApplyClientSettingsAsync(
+                        UserName,
+                        ProfilePicturePath,
+                        MaximumSenderConnections) ?? Task.CompletedTask,
+                    Presenter.ApplyClientSettingsAsync(
+                        UserName,
+                        ProfilePicturePath,
+                        MaximumSenderConnections));
+            }
+
+            Presenter.SetShowExitHint(ShowExitHint);
             startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
             SetStatus("Settings saved.", false);
             IsSettingsOpen = false;
-            if (requiresRestart)
+            if (serverAddressChanged)
             {
-                SettingsRestartRequested?.Invoke(this, EventArgs.Empty);
+                RelayReinitializationRequested?.Invoke(this, EventArgs.Empty);
             }
         }
-        catch (Exception exception) when (
-            exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception exception)
         {
             SetStatus($"Settings could not be saved: {exception.Message}", true);
         }
@@ -857,4 +914,15 @@ public enum ReceiverAvailability
 {
     Available,
     Invisible,
+}
+
+public sealed class ServerAddressChangeRequestedEventArgs(
+    string currentServerAddress,
+    string requestedServerAddress) : EventArgs
+{
+    public string CurrentServerAddress { get; } = currentServerAddress;
+
+    public string RequestedServerAddress { get; } = requestedServerAddress;
+
+    public bool Approved { get; set; }
 }

@@ -120,6 +120,28 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void ReceiverClientSettingsUpdate_ChangesActiveSessionAndDirectoryImmediately()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var approved = CreateApprovedSession(context);
+        byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+        var result = context.Manager.UpdateReceiverClientSettings(
+            approved.Created.SessionId,
+            "receiver-connection",
+            "Updated Receiver",
+            new ClientProfile(picture),
+            2);
+
+        Assert.Equal("Updated Receiver", result.State.ReceiverDisplayName);
+        Assert.Equal(picture, result.State.ReceiverProfilePicturePng);
+        Assert.Contains(approved.PresenterConnectionId, result.PresenterConnectionIds);
+        var available = Assert.Single(context.Manager.GetAvailableReceivers());
+        Assert.Equal("Updated Receiver", available.DisplayName);
+        Assert.Equal(picture, available.ProfilePicturePng);
+    }
+
+    [Fact]
     public void DiscoverableReceiver_RemainsAvailableAfterPairingCodeExpires()
     {
         var context = CreateContext(receiverDiscoveryEnabled: true);

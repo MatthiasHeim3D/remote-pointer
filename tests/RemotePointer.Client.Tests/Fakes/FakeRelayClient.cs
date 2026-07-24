@@ -133,6 +133,19 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.CompletedTask;
     }
 
+    public Task ApplyClientSettingsAsync(
+        string displayName,
+        string? profilePicturePath,
+        int maximumPresenterConnections,
+        CancellationToken cancellationToken = default)
+    {
+        _ = displayName;
+        _ = profilePicturePath;
+        _ = maximumPresenterConnections;
+        _ = cancellationToken;
+        return Task.CompletedTask;
+    }
+
     public Task ApprovePresenterAsync(
         string sessionId,
         string presenterConnectionId,

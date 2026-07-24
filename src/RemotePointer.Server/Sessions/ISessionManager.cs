@@ -42,6 +42,13 @@ public interface ISessionManager
         string receiverConnectionId,
         DisplayDescriptor display);
 
+    ReceiverClientSettingsUpdateResult UpdateReceiverClientSettings(
+        string sessionId,
+        string receiverConnectionId,
+        string receiverDisplayName,
+        ClientProfile profile,
+        int maximumPresenterConnections);
+
     ApprovePresenterResult ApprovePresenter(
         string sessionId,
         string presenterConnectionId,

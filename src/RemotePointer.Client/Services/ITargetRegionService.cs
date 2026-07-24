@@ -10,6 +10,8 @@ public interface ITargetRegionService : IDisposable
 
     void SetCalibrationIdentity(string? receiverIdentity);
 
+    void SetShowExitHint(bool showExitHint);
+
     void BeginCalibration(double expectedAspectRatio);
 
     void UpdateExpectedAspectRatio(double expectedAspectRatio);

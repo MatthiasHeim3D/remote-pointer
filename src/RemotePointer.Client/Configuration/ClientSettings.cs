@@ -66,7 +66,8 @@ public sealed class ClientSettings
         string? profilePicturePath,
         int? maximumSenderConnections = null,
         bool? launchAtStartup = null,
-        string? selectedDisplayId = null)
+        string? selectedDisplayId = null,
+        bool? showExitHint = null)
     {
         Server.BaseUrl = serverAddress.Trim();
         Profile.UserName = userName.Trim();
@@ -80,6 +81,10 @@ public sealed class ClientSettings
             Startup.LaunchAtStartup = launchAtStartup.Value;
         }
         Receiver.SelectedDisplayId = selectedDisplayId?.Trim() ?? string.Empty;
+        if (showExitHint.HasValue)
+        {
+            Pointer.ShowExitHint = showExitHint.Value;
+        }
         Validate();
 
         var parentDirectory = Path.GetDirectoryName(userPreferencesPath);
@@ -95,7 +100,8 @@ public sealed class ClientSettings
                 Profile.PicturePath,
                 Receiver.MaximumSenderConnections,
                 Startup.LaunchAtStartup,
-                Receiver.SelectedDisplayId),
+                Receiver.SelectedDisplayId,
+                Pointer.ShowExitHint),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -157,6 +163,7 @@ public sealed class ClientSettings
             : preferences.MaximumSenderConnections;
         Receiver.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
+        Pointer.ShowExitHint = preferences.ShowExitHint;
     }
 
     private static string GetDefaultUserPreferencesPath() => Path.Combine(
@@ -170,7 +177,8 @@ public sealed class ClientSettings
         string ProfilePicturePath,
         int MaximumSenderConnections = 2,
         bool LaunchAtStartup = false,
-        string SelectedDisplayId = "");
+        string SelectedDisplayId = "",
+        bool ShowExitHint = true);
 }
 
 public sealed class ServerSettings
@@ -187,6 +195,8 @@ public sealed class PointerSettings
     public int AnimationMilliseconds { get; init; } = 900;
 
     public string ToggleHotKey { get; init; } = "Ctrl+Alt+P";
+
+    public bool ShowExitHint { get; set; } = true;
 }
 
 public sealed class PrivacySettings

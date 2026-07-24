@@ -63,13 +63,27 @@ public sealed class PointerHub(
         => await CreateReceiverSessionCore(
                 display,
                 profile,
-                maximumPresenterConnections)
+                maximumPresenterConnections,
+                null)
+            .ConfigureAwait(false);
+
+    public async Task<CreateSessionResponse> CreateReceiverSessionWithClientSettings(
+        DisplayDescriptor display,
+        ClientProfile profile,
+        int maximumPresenterConnections,
+        string displayName)
+        => await CreateReceiverSessionCore(
+                display,
+                profile,
+                maximumPresenterConnections,
+                displayName)
             .ConfigureAwait(false);
 
     private async Task<CreateSessionResponse> CreateReceiverSessionCore(
         DisplayDescriptor display,
         ClientProfile profile,
-        int maximumPresenterConnections)
+        int maximumPresenterConnections,
+        string? displayName = null)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         try
@@ -78,7 +92,9 @@ public sealed class PointerHub(
                 display,
                 Context.ConnectionId,
                 clientInstanceId,
-                GetDisplayName(clientInstanceId),
+                string.IsNullOrWhiteSpace(displayName)
+                    ? GetDisplayName(clientInstanceId)
+                    : displayName.Trim(),
                 GetApplicationInstanceId(),
                 profile,
                 maximumPresenterConnections);
@@ -169,6 +185,16 @@ public sealed class PointerHub(
     }
 
     public async Task<JoinResponse> RequestToJoinReceiver(DirectJoinRequest request)
+        => await RequestToJoinReceiverCore(request, null).ConfigureAwait(false);
+
+    public async Task<JoinResponse> RequestToJoinReceiverWithDisplayName(
+        DirectJoinRequest request,
+        string displayName)
+        => await RequestToJoinReceiverCore(request, displayName).ConfigureAwait(false);
+
+    private async Task<JoinResponse> RequestToJoinReceiverCore(
+        DirectJoinRequest request,
+        string? displayName)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         if (!string.Equals(request.ClientInstanceId, clientInstanceId, StringComparison.Ordinal))
@@ -182,7 +208,9 @@ public sealed class PointerHub(
             var result = sessionManager.RequestToJoinReceiver(
                 request,
                 Context.ConnectionId,
-                GetDisplayName(clientInstanceId),
+                string.IsNullOrWhiteSpace(displayName)
+                    ? GetDisplayName(clientInstanceId)
+                    : displayName.Trim(),
                 GetApplicationInstanceId());
             if (result.Response.Accepted
                 && result.ReceiverConnectionId is not null
@@ -233,6 +261,38 @@ public sealed class PointerHub(
         catch (SessionOperationException exception)
         {
             throw ToHubException(exception, "UpdateReceiverDisplay");
+        }
+    }
+
+    public async Task UpdateReceiverClientSettings(
+        string sessionId,
+        string displayName,
+        ClientProfile profile,
+        int maximumPresenterConnections)
+    {
+        try
+        {
+            var result = sessionManager.UpdateReceiverClientSettings(
+                sessionId,
+                Context.ConnectionId,
+                displayName,
+                profile,
+                maximumPresenterConnections);
+            await Clients.Client(result.ReceiverConnectionId)
+                .SessionApproved(result.State)
+                .ConfigureAwait(false);
+            foreach (var presenterConnectionId in result.PresenterConnectionIds)
+            {
+                await Clients.Client(presenterConnectionId)
+                    .SessionApproved(result.State)
+                    .ConfigureAwait(false);
+            }
+
+            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "UpdateReceiverClientSettings");
         }
     }
 

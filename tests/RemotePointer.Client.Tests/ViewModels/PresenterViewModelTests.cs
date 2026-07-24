@@ -329,8 +329,12 @@ public sealed class PresenterViewModelTests
 
         public string? CalibrationIdentity { get; private set; }
 
+        public bool ShowExitHint { get; private set; } = true;
+
         public void SetCalibrationIdentity(string? receiverIdentity) =>
             CalibrationIdentity = receiverIdentity;
+
+        public void SetShowExitHint(bool showExitHint) => ShowExitHint = showExitHint;
 
         public void BeginCalibration(double expectedAspectRatio)
         {

@@ -217,6 +217,9 @@
                         <Style TargetType="Grid">
                             <Setter Property="Visibility" Value="Visible" />
                             <Style.Triggers>
+                                <DataTrigger Binding="{Binding Presenter.IsJoinPending}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
@@ -273,7 +276,7 @@
                                             <Border Width="32"
                                                     Height="32"
                                                     Background="#3A3A3A"
-                                                    CornerRadius="4">
+                                                    CornerRadius="16">
                                                 <Grid>
                                                     <TextBlock HorizontalAlignment="Center"
                                                                VerticalAlignment="Center"
@@ -282,8 +285,12 @@
                                                                Foreground="#60CDFF"
                                                                Visibility="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                                                Text="&#xE77B;" />
-                                                    <Image Source="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
-                                                           Stretch="UniformToFill" />
+                                                    <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                                        <Ellipse.Fill>
+                                                            <ImageBrush ImageSource="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                                                        Stretch="UniformToFill" />
+                                                        </Ellipse.Fill>
+                                                    </Ellipse>
                                                 </Grid>
                                             </Border>
                                             <TextBlock Grid.Column="1"
@@ -385,27 +392,94 @@
                                            Foreground="#60CDFF"
                                            Visibility="{Binding Presenter.CurrentReceiverProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                            Text="&#xE77B;" />
-                                <Image Source="{Binding Presenter.CurrentReceiverProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
-                                       Stretch="UniformToFill" />
+                                <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding Presenter.CurrentReceiverProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                                    Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
                             </Grid>
                         </Border>
-                        <TextBlock Grid.Column="1"
-                                   Margin="10,0,8,0"
-                                   VerticalAlignment="Center"
-                                   FontSize="16"
-                                   FontWeight="SemiBold"
-                                   Text="{Binding Presenter.CurrentReceiverName}"
-                                   TextTrimming="CharacterEllipsis" />
+                        <StackPanel Grid.Column="1"
+                                    Margin="10,0,8,0"
+                                    VerticalAlignment="Center">
+                            <TextBlock FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding Presenter.CurrentReceiverName}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontSize="10"
+                                       Text="{Binding Presenter.SenderConnectionStatusLabel}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#AFAFAF" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
+                                                <Setter Property="Foreground" Value="#6CCB7F" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                        <Grid Grid.Column="2"
+                              Width="38"
+                              Height="38"
+                              Margin="0,0,7,0"
+                              ToolTip="Waiting for receiver approval">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Presenter.IsJoinPending}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Ellipse Width="22"
+                                     Height="22"
+                                     Stroke="#60CDFF"
+                                     StrokeThickness="3"
+                                     StrokeDashArray="1,2"
+                                     RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform />
+                                </Ellipse.RenderTransform>
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                 From="0"
+                                                                 To="360"
+                                                                 Duration="0:0:1"
+                                                                 RepeatBehavior="Forever" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                        </Grid>
                         <Button Grid.Column="2"
                                 Width="38"
                                 Height="38"
                                 Margin="0,0,7,0"
-                                Style="{StaticResource IconButtonStyle}"
                                 Background="#60CDFF"
                                 Foreground="#17242A"
                                 Command="{Binding Presenter.TogglePointingCommand}"
                                 Content="{Binding Presenter.PointingActionIcon}"
-                                ToolTip="{Binding Presenter.PointingActionLabel}" />
+                                ToolTip="{Binding Presenter.PointingActionLabel}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                         <Button Grid.Column="3"
                                 Width="38"
                                 Height="38"
@@ -566,6 +640,7 @@
                               ItemsSource="{Binding Monitors}"
                               SelectedItem="{Binding SelectedMonitor}"
                               DisplayMemberPath="SelectionLabel"
+                              SelectionChanged="OnReceivingScreenSelectionChanged"
                               IsEnabled="{Binding CanSelectMonitor}" />
 
                     <TextBlock Margin="0,16,0,6" Text="Server address" />
@@ -592,8 +667,12 @@
                                            FontWeight="SemiBold"
                                            Visibility="{Binding ProfilePicturePath, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                            Text="{Binding ProfileInitials}" />
-                                <Image Source="{Binding ProfilePicturePath}"
-                                       Stretch="UniformToFill" />
+                                <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding ProfilePicturePath}"
+                                                    Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
                             </Grid>
                         </Border>
                         <TextBlock Grid.Column="1"
@@ -658,6 +737,11 @@
                               IsChecked="{Binding IsLaunchAtStartup}"
                               Content="Launch at startup" />
 
+                    <CheckBox Margin="0,14,0,0"
+                              Style="{StaticResource ToggleSwitchStyle}"
+                              IsChecked="{Binding ShowExitHint}"
+                              Content="Show ESC to Exit hint" />
+
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
@@ -691,8 +775,12 @@
                                                    Foreground="White"
                                                    Visibility="{Binding ProfilePicturePath, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                                    Text="{Binding ProfileInitials}" />
-                                        <Image Source="{Binding ProfilePicturePath}"
-                                               Stretch="UniformToFill" />
+                                        <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                            <Ellipse.Fill>
+                                                <ImageBrush ImageSource="{Binding ProfilePicturePath}"
+                                                            Stretch="UniformToFill" />
+                                            </Ellipse.Fill>
+                                        </Ellipse>
                                     </Grid>
                                 </Border>
                                 <Ellipse Width="11"

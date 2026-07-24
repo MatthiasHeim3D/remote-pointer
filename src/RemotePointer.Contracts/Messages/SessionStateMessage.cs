@@ -8,4 +8,5 @@ public sealed record SessionStateMessage(
     bool ReceiverDiscoverable = false,
     ConnectedPresenterDescriptor[]? ConnectedPresenters = null,
     string? ReceiverClientInstanceId = null,
-    byte[]? ReceiverProfilePicturePng = null);
+    byte[]? ReceiverProfilePicturePng = null,
+    string? ReceiverDisplayName = null);

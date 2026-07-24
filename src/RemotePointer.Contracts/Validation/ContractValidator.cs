@@ -256,6 +256,14 @@ public static class ContractValidator
                 nameof(state.ReceiverClientInstanceId));
         }
 
+        if (state.ReceiverDisplayName is not null)
+        {
+            AddRequired(
+                errors,
+                IsRequiredIdentifier(state.ReceiverDisplayName),
+                nameof(state.ReceiverDisplayName));
+        }
+
         if (state.ReceiverProfilePicturePng is not null)
         {
             errors.AddRange(Validate(new ClientProfile(state.ReceiverProfilePicturePng)).Errors);

@@ -18,8 +18,9 @@ public sealed class SignalRRelayClient : IRelayClient
     private readonly IClientAuditLog? auditLog;
     private readonly HubConnection connection;
     private readonly string clientInstanceId;
-    private readonly ClientProfile clientProfile;
-    private readonly int maximumPresenterConnections;
+    private ClientProfile clientProfile;
+    private int maximumPresenterConnections;
+    private string displayName;
     private readonly ClientRole? expectedRole;
     private readonly IProtectedSessionStore? sessionStore;
     private readonly SynchronizationContext? synchronizationContext;
@@ -79,7 +80,7 @@ public sealed class SignalRRelayClient : IRelayClient
         }
 
         synchronizationContext = SynchronizationContext.Current;
-        var displayName = string.IsNullOrWhiteSpace(settings.Profile.UserName)
+        displayName = string.IsNullOrWhiteSpace(settings.Profile.UserName)
             ? Environment.MachineName
             : settings.Profile.UserName.Trim();
         var hubUrl = $"{ServerUrl}/hubs/pointer"
@@ -217,10 +218,11 @@ public sealed class SignalRRelayClient : IRelayClient
         DiscardRecoveredCredential(ClientRole.Receiver);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var response = await connection.InvokeAsync<CreateSessionResponse>(
-                "CreateReceiverSessionWithSettings",
+                "CreateReceiverSessionWithClientSettings",
                 display,
                 clientProfile,
                 maximumPresenterConnections,
+                displayName,
                 cancellationToken)
             .ConfigureAwait(false);
         SetSession(response.SessionId, response.Credential);
@@ -254,8 +256,9 @@ public sealed class SignalRRelayClient : IRelayClient
             clientInstanceId,
             GetClientVersion());
         var response = await connection.InvokeAsync<JoinResponse>(
-                "RequestToJoinReceiver",
+                "RequestToJoinReceiverWithDisplayName",
                 request,
+                displayName,
                 cancellationToken)
             .ConfigureAwait(false);
         if (response.Accepted)
@@ -281,6 +284,46 @@ public sealed class SignalRRelayClient : IRelayClient
                 "UpdateReceiverDisplay",
                 currentSessionId,
                 display,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task ApplyClientSettingsAsync(
+        string newDisplayName,
+        string? profilePicturePath,
+        int newMaximumPresenterConnections,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newDisplayName);
+        if (newDisplayName.Trim().Length > 128)
+        {
+            throw new ArgumentException("The display name cannot exceed 128 characters.", nameof(newDisplayName));
+        }
+
+        if (newMaximumPresenterConnections is < 1 or > 16)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(newMaximumPresenterConnections),
+                "Maximum presenter connections must be between 1 and 16.");
+        }
+
+        displayName = newDisplayName.Trim();
+        clientProfile = CreateClientProfile(profilePicturePath);
+        maximumPresenterConnections = newMaximumPresenterConnections;
+
+        var currentSessionId = SessionId;
+        if (expectedRole != ClientRole.Receiver || currentSessionId is null)
+        {
+            return;
+        }
+
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        await connection.InvokeAsync(
+                "UpdateReceiverClientSettings",
+                currentSessionId,
+                displayName,
+                clientProfile,
+                maximumPresenterConnections,
                 cancellationToken)
             .ConfigureAwait(false);
     }

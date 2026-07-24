@@ -13,6 +13,7 @@ public sealed class TargetRegionService : ITargetRegionService
     private string? calibrationIdentity;
     private bool disposed;
     private double expectedAspectRatio = 16d / 9d;
+    private bool showExitHint = true;
     private TargetRegionWindow? window;
 
     public event EventHandler<TargetRegionStateChangedEventArgs>? StateChanged;
@@ -35,6 +36,8 @@ public sealed class TargetRegionService : ITargetRegionService
             : calibrationStore.Load(calibrationIdentity);
     }
 
+    public void SetShowExitHint(bool value) => showExitHint = value;
+
     public void BeginCalibration(double expectedAspectRatio)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -52,7 +55,8 @@ public sealed class TargetRegionService : ITargetRegionService
             startingRectangle,
             defaultRectangle,
             expectedAspectRatio,
-            lockAspectRatio: true);
+            lockAspectRatio: true,
+            showExitHint);
         window.CalibrationLocked += OnCalibrationLocked;
         window.CalibrationCancelled += OnCalibrationCancelled;
         window.Closed += OnWindowClosed;
@@ -117,7 +121,8 @@ public sealed class TargetRegionService : ITargetRegionService
             rectangle,
             rectangle,
             expectedAspectRatio,
-            lockAspectRatio: false);
+            lockAspectRatio: false,
+            showExitHint);
         window.EnterPointingMode();
         window.PointerCaptured += OnPointerCaptured;
         window.PointingExitRequested += OnPointingExitRequested;

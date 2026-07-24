@@ -175,6 +175,53 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
+    public async Task ActiveReceiver_ProfileChangePropagatesWithoutReconnect()
+    {
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        await using var receiver = CreateConnection(factory, "receiver-live-profile", "Receiver");
+        await using var presenter = CreateConnection(factory, "presenter-live-profile", "Presenter");
+        var joinRequested = CompletionSource<PresenterDescriptor>();
+        var updatedState = CompletionSource<SessionStateMessage>();
+        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
+        presenter.On<SessionStateMessage>(
+            "SessionApproved",
+            state =>
+            {
+                if (state.ReceiverDisplayName == "Updated Receiver")
+                {
+                    updatedState.TrySetResult(state);
+                }
+            });
+        await receiver.StartAsync();
+        await presenter.StartAsync();
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSessionWithClientSettings",
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            "Receiver");
+        var join = await presenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiverWithDisplayName",
+            new DirectJoinRequest(created.SessionId, "presenter-live-profile", "1.0.0"),
+            "Presenter");
+        Assert.True(join.Accepted);
+        var pending = await joinRequested.Task.WaitAsync(TestTimeout);
+        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, pending.ConnectionId);
+        byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+        await receiver.InvokeAsync(
+            "UpdateReceiverClientSettings",
+            created.SessionId,
+            "Updated Receiver",
+            new ClientProfile(picture),
+            2);
+
+        var state = await updatedState.Task.WaitAsync(TestTimeout);
+        Assert.Equal(picture, state.ReceiverProfilePicturePng);
+        Assert.Equal(created.SessionId, state.SessionId);
+    }
+
+    [Fact]
     public async Task Discovery_ReceiverDisconnectAll_PreservesReceiverAvailability()
     {
         using var factory = CreateFactory(receiverDiscoveryEnabled: true);
