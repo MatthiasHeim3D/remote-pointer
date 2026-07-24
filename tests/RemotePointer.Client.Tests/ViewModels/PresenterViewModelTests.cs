@@ -53,6 +53,26 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
+    public async Task DirectoryChange_AutomaticallyRefreshesAvailableReceivers()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(true),
+        };
+        using var viewModel = new PresenterViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        relay.AvailableReceivers =
+        [
+            new AvailableReceiverDescriptor("new-session", "New receiver"),
+        ];
+
+        relay.RaiseReceiverDirectoryChanged();
+
+        Assert.Equal("new-session", Assert.Single(viewModel.AvailableReceivers).SessionId);
+    }
+
+    [Fact]
     public void ApprovedPointer_IsSentAndAcknowledgementLatencyIsShown()
     {
         using var service = new FakeTargetRegionService();

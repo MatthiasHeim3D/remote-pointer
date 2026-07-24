@@ -28,6 +28,7 @@ public sealed class PointerHub(
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         sessionManager.Disconnect(Context.ConnectionId);
+        await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
         if (exception is null)
         {
             logger.LogInformation(
@@ -91,6 +92,7 @@ public sealed class PointerHub(
                 response.SessionId,
                 clientInstanceId,
                 response.Credential.ExpiresAt);
+            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
             return response;
         }
         catch (SessionOperationException exception)
@@ -99,15 +101,16 @@ public sealed class PointerHub(
         }
     }
 
-    public Task<bool> SetReceiverDiscoverable(string sessionId, bool discoverable)
+    public async Task<bool> SetReceiverDiscoverable(string sessionId, bool discoverable)
     {
         try
         {
-            return Task.FromResult(
-                sessionManager.SetReceiverDiscoverable(
-                    sessionId,
-                    Context.ConnectionId,
-                    discoverable));
+            var result = sessionManager.SetReceiverDiscoverable(
+                sessionId,
+                Context.ConnectionId,
+                discoverable);
+            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            return result;
         }
         catch (SessionOperationException exception)
         {
@@ -141,6 +144,7 @@ public sealed class PointerHub(
                 await Clients.Client(result.ReceiverConnectionId)
                     .PresenterJoinRequested(result.Presenter)
                     .ConfigureAwait(false);
+                await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
                 logger.LogInformation(
                     AuditEventIds.PresenterJoinRequested,
                     "Presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
@@ -187,6 +191,7 @@ public sealed class PointerHub(
                 await Clients.Client(result.ReceiverConnectionId)
                     .PresenterJoinRequested(result.Presenter)
                     .ConfigureAwait(false);
+                await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
                 logger.LogInformation(
                     AuditEventIds.PresenterJoinRequested,
                     "Direct presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
@@ -252,6 +257,7 @@ public sealed class PointerHub(
             await Clients.Client(result.ReceiverConnectionId)
                 .SessionApproved(result.State)
                 .ConfigureAwait(false);
+            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.PresenterApproved,
                 "Presenter approved. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
@@ -382,6 +388,7 @@ public sealed class PointerHub(
                 result.SessionId,
                 result.ReceiverPreserved,
                 result.PointerCount);
+            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -419,6 +426,7 @@ public sealed class PointerHub(
                 "Receiver disconnected all presenters. SessionId={SessionId} PointerCount={PointerCount}",
                 result.SessionId,
                 result.PointerCount);
+            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {

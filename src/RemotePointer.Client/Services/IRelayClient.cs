@@ -18,6 +18,8 @@ public interface IRelayClient : IAsyncDisposable
 
     event EventHandler<RelaySessionEndedEventArgs>? SessionEnded;
 
+    event EventHandler? ReceiverDirectoryChanged;
+
     string ServerUrl { get; }
 
     RelayConnectionStatus Status { get; }

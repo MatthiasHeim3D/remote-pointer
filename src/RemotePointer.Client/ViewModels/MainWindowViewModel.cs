@@ -114,15 +114,29 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 && (HasReceiverSession || SelectedMonitor is not null));
         ToggleSettingsCommand = new RelayCommand(_ =>
         {
-            IsSettingsOpen = !IsSettingsOpen;
             IsAvailabilityMenuOpen = false;
+            if (IsSettingsOpen)
+            {
+                SaveSettings();
+            }
+            else
+            {
+                IsSettingsOpen = true;
+            }
         });
         ToggleAvailabilityMenuCommand = new RelayCommand(_ =>
         {
+            if (IsSettingsOpen)
+            {
+                SaveSettings();
+                if (IsSettingsOpen)
+                {
+                    return;
+                }
+            }
+
             IsAvailabilityMenuOpen = !IsAvailabilityMenuOpen;
-            IsSettingsOpen = false;
         });
-        SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
         incrementMaximumSendersCommand = new RelayCommand(
             _ => MaximumSenderConnections++,
             _ => MaximumSenderConnections < 16);
@@ -341,8 +355,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public ICommand ToggleAvailabilityMenuCommand { get; }
 
-    public ICommand SaveSettingsCommand { get; }
-
     public ICommand IncrementMaximumSendersCommand => incrementMaximumSendersCommand;
 
     public ICommand DecrementMaximumSendersCommand => decrementMaximumSendersCommand;
@@ -397,7 +409,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public void RefreshMonitors()
     {
-        var previousDisplayId = SelectedMonitor?.Display.DisplayId;
+        var previousDisplayId = SelectedMonitor?.Display.DisplayId
+            ?? clientSettings?.Receiver.SelectedDisplayId;
 
         IReadOnlyList<MonitorDescriptor> refreshedMonitors;
         try
@@ -782,7 +795,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 UserName,
                 ProfilePicturePath,
                 MaximumSenderConnections,
-                IsLaunchAtStartup);
+                IsLaunchAtStartup,
+                SelectedMonitor?.Display.DisplayId);
             startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
             SetStatus("Settings saved.", false);
             IsSettingsOpen = false;

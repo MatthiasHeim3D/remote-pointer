@@ -63,6 +63,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             relayClient.ReceiverDisplayChanged += OnReceiverDisplayChanged;
             relayClient.PointerDisplayed += OnPointerDisplayed;
             relayClient.SessionEnded += OnSessionEnded;
+            relayClient.ReceiverDirectoryChanged += OnReceiverDirectoryChanged;
         }
 
         calibrateCommand = new RelayCommand(
@@ -327,6 +328,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             relayClient.ReceiverDisplayChanged -= OnReceiverDisplayChanged;
             relayClient.PointerDisplayed -= OnPointerDisplayed;
             relayClient.SessionEnded -= OnSessionEnded;
+            relayClient.ReceiverDirectoryChanged -= OnReceiverDirectoryChanged;
             relayClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
 
@@ -363,6 +365,16 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetStatus($"Visible receivers could not be loaded: {exception.Message}", true);
+        }
+    }
+
+    private void OnReceiverDirectoryChanged(object? sender, EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        if (!IsSessionApproved && SenderRoleEnabled)
+        {
+            _ = RefreshAvailableReceiversAsync();
         }
     }
 
@@ -512,6 +524,13 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private void OnConnectionStatusChanged(object? sender, RelayConnectionStatusChangedEventArgs e)
     {
         ConnectionMessage = e.Message;
+        if (e.Status == RelayConnectionStatus.Connected
+            && ReceiverDiscoveryEnabled
+            && SenderRoleEnabled
+            && !IsSessionApproved)
+        {
+            _ = RefreshAvailableReceiversAsync();
+        }
     }
 
     private void OnSessionApproved(object? sender, RelaySessionStateEventArgs e)

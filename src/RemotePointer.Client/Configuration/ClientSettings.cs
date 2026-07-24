@@ -65,7 +65,8 @@ public sealed class ClientSettings
         string userName,
         string? profilePicturePath,
         int? maximumSenderConnections = null,
-        bool? launchAtStartup = null)
+        bool? launchAtStartup = null,
+        string? selectedDisplayId = null)
     {
         Server.BaseUrl = serverAddress.Trim();
         Profile.UserName = userName.Trim();
@@ -78,6 +79,7 @@ public sealed class ClientSettings
         {
             Startup.LaunchAtStartup = launchAtStartup.Value;
         }
+        Receiver.SelectedDisplayId = selectedDisplayId?.Trim() ?? string.Empty;
         Validate();
 
         var parentDirectory = Path.GetDirectoryName(userPreferencesPath);
@@ -92,7 +94,8 @@ public sealed class ClientSettings
                 Profile.UserName,
                 Profile.PicturePath,
                 Receiver.MaximumSenderConnections,
-                Startup.LaunchAtStartup),
+                Startup.LaunchAtStartup,
+                Receiver.SelectedDisplayId),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -152,6 +155,7 @@ public sealed class ClientSettings
         Receiver.MaximumSenderConnections = preferences.MaximumSenderConnections <= 0
             ? 2
             : preferences.MaximumSenderConnections;
+        Receiver.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
     }
 
@@ -165,7 +169,8 @@ public sealed class ClientSettings
         string UserName,
         string ProfilePicturePath,
         int MaximumSenderConnections = 2,
-        bool LaunchAtStartup = false);
+        bool LaunchAtStartup = false,
+        string SelectedDisplayId = "");
 }
 
 public sealed class ServerSettings
@@ -199,6 +204,8 @@ public sealed class UserProfileSettings
 public sealed class ReceiverSettings
 {
     public int MaximumSenderConnections { get; set; } = 2;
+
+    public string SelectedDisplayId { get; set; } = string.Empty;
 }
 
 public sealed class StartupSettings

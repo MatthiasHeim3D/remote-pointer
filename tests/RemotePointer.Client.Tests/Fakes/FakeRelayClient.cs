@@ -19,6 +19,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public event EventHandler<RelaySessionEndedEventArgs>? SessionEnded;
 
+    public event EventHandler? ReceiverDirectoryChanged;
+
     public string ServerUrl { get; init; } = "https://relay.example";
 
     public RelayConnectionStatus Status { get; private set; } = RelayConnectionStatus.Connected;
@@ -199,6 +201,9 @@ internal sealed class FakeRelayClient : IRelayClient
             this,
             new RelayConnectionStatusChangedEventArgs(status, message));
     }
+
+    public void RaiseReceiverDirectoryChanged() =>
+        ReceiverDirectoryChanged?.Invoke(this, EventArgs.Empty);
 
     public void RaiseJoinRequest(PresenterDescriptor presenter) =>
         PresenterJoinRequested?.Invoke(this, new PresenterJoinRequestedEventArgs(presenter));

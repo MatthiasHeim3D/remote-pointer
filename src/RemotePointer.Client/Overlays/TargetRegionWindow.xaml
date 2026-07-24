@@ -177,6 +177,20 @@
                 </StackPanel>
             </Border>
 
+            <Border x:Name="PointingExitHint"
+                    Margin="0,12,12,0"
+                    Padding="9,5"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Background="#99000000"
+                    CornerRadius="4"
+                    IsHitTestVisible="False"
+                    Visibility="Collapsed">
+                <TextBlock FontSize="11"
+                           Foreground="#DDF5F5F5"
+                           Text="ESC to Exit" />
+            </Border>
+
             <primitives:Thumb x:Name="ResizeThumb"
                               Width="26"
                               Height="26"

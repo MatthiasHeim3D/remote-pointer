@@ -17,4 +17,6 @@ public interface IPointerClient
     Task PointerDisplayed(PointerAcknowledgement acknowledgement);
 
     Task SessionEnded(string reason);
+
+    Task ReceiverDirectoryChanged();
 }

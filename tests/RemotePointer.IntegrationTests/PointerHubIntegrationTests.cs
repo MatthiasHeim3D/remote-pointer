@@ -18,6 +18,39 @@ public sealed class PointerHubIntegrationTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
+    public async Task Discovery_AvailabilityChangesNotifyConnectedClients()
+    {
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        await using var receiver = CreateConnection(factory, "receiver-notify", "Receiver");
+        await using var observer = CreateConnection(factory, "observer-notify", "Observer");
+        var notificationCount = 0;
+        var receivedBoth = CompletionSource<bool>();
+        observer.On(
+            "ReceiverDirectoryChanged",
+            () =>
+            {
+                if (Interlocked.Increment(ref notificationCount) >= 2)
+                {
+                    receivedBoth.TrySetResult(true);
+                }
+            });
+        await receiver.StartAsync();
+        await observer.StartAsync();
+
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSession",
+            CreateDisplay());
+        await receiver.InvokeAsync<bool>(
+            "SetReceiverDiscoverable",
+            created.SessionId,
+            false);
+
+        Assert.True(await receivedBoth.Task.WaitAsync(TestTimeout));
+        Assert.Empty(await observer.InvokeAsync<AvailableReceiverDescriptor[]>(
+            "GetAvailableReceivers"));
+    }
+
+    [Fact]
     public async Task Receiver_AcceptsMultiplePresentersUpToConfiguredLimit()
     {
         using var factory = CreateFactory(receiverDiscoveryEnabled: true);

@@ -232,19 +232,10 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock VerticalAlignment="Center"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Text="Available clients" />
-                        <Button Width="30"
-                                Height="30"
-                                Margin="6,0,0,0"
-                                Style="{StaticResource IconButtonStyle}"
-                                Command="{Binding Presenter.RefreshReceiversCommand}"
-                                Content="&#xE72C;"
-                                ToolTip="Refresh clients" />
-                    </StackPanel>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="Available clients" />
                     <TextBlock Grid.Row="1"
                                Margin="0,5,0,12"
                                Foreground="#AFAFAF"
@@ -543,23 +534,48 @@
             </Grid>
 
             <!-- Settings view -->
-            <ScrollViewer Grid.Row="0"
-                          Margin="20,18,20,14"
-                          Padding="0,0,8,0"
-                          VerticalScrollBarVisibility="Auto"
-                          Visibility="{Binding IsSettingsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <ScrollViewer.Resources>
-                    <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
-                </ScrollViewer.Resources>
-                <StackPanel>
-                    <TextBlock FontSize="18"
+            <Grid Grid.Row="0"
+                  Margin="20,14,14,14"
+                  Visibility="{Binding IsSettingsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
                                FontWeight="SemiBold"
                                Text="Settings" />
-                    <TextBlock Margin="0,5,0,18"
+                    <Button Grid.Column="1"
+                            Style="{StaticResource IconButtonStyle}"
+                            Command="{Binding ToggleSettingsCommand}"
+                            Content="&#xE711;"
+                            ToolTip="Close settings" />
+                </Grid>
+                <ScrollViewer Grid.Row="1"
+                              Padding="0,0,8,0"
+                              VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer.Resources>
+                        <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
+                    </ScrollViewer.Resources>
+                    <StackPanel>
+                    <TextBlock Margin="0,0,0,18"
                                Foreground="#AFAFAF"
                                Text="Connection and profile" />
 
-                    <TextBlock Margin="0,0,0,6" Text="Server address" />
+                    <TextBlock Margin="0,0,0,6" Text="Receiving screen" />
+                    <ComboBox Height="36"
+                              Padding="8,5"
+                              ItemsSource="{Binding Monitors}"
+                              SelectedItem="{Binding SelectedMonitor}"
+                              DisplayMemberPath="Display.DisplayName"
+                              IsEnabled="{Binding CanSelectMonitor}" />
+
+                    <TextBlock Margin="0,16,0,6" Text="Server address" />
                     <TextBox Text="{Binding ServerAddress, UpdateSourceTrigger=PropertyChanged}" />
 
                     <TextBlock Margin="0,16,0,6" Text="Username" />
@@ -654,11 +670,9 @@
                                Foreground="#858585"
                                Text="Connection and advertised profile changes apply after restarting Remote Pointer."
                                TextWrapping="Wrap" />
-                    <Button Style="{StaticResource PrimaryButtonStyle}"
-                            Command="{Binding SaveSettingsCommand}"
-                            Content="Save settings" />
-                </StackPanel>
-            </ScrollViewer>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
 
             <!-- Bottom profile and settings bar -->
             <Border Grid.Row="1"

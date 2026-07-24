@@ -84,6 +84,7 @@ public partial class TargetRegionWindow : Window
     {
         isPointingMode = true;
         CalibrationPanel.Visibility = Visibility.Collapsed;
+        PointingExitHint.Visibility = Visibility.Visible;
         ResizeThumb.Visibility = Visibility.Collapsed;
         OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92));
         OuterBorder.BorderThickness = new Thickness(2d);

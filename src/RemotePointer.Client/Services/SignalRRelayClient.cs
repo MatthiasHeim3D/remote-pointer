@@ -114,6 +114,8 @@ public sealed class SignalRRelayClient : IRelayClient
 
     public event EventHandler<RelayConnectionStatusChangedEventArgs>? ConnectionStatusChanged;
 
+    public event EventHandler? ReceiverDirectoryChanged;
+
     public event EventHandler<PresenterJoinRequestedEventArgs>? PresenterJoinRequested;
 
     public event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
@@ -398,6 +400,9 @@ public sealed class SignalRRelayClient : IRelayClient
 
     private void RegisterCallbacks()
     {
+        connection.On(
+            "ReceiverDirectoryChanged",
+            () => Publish(() => ReceiverDirectoryChanged?.Invoke(this, EventArgs.Empty)));
         connection.On<PresenterDescriptor>(
             "PresenterJoinRequested",
             presenter => Publish(

@@ -55,7 +55,8 @@ public sealed class ClientSettingsTests
             "Ada Lovelace",
             @"C:\Pictures\ada.png",
             maximumSenderConnections: 4,
-            launchAtStartup: true);
+            launchAtStartup: true,
+            selectedDisplayId: "display-2");
         var reloaded = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://saved.example.test", reloaded.Server.BaseUrl);
@@ -63,6 +64,7 @@ public sealed class ClientSettingsTests
         Assert.Equal(@"C:\Pictures\ada.png", reloaded.Profile.PicturePath);
         Assert.Equal(4, reloaded.Receiver.MaximumSenderConnections);
         Assert.True(reloaded.Startup.LaunchAtStartup);
+        Assert.Equal("display-2", reloaded.Receiver.SelectedDisplayId);
     }
 
     [Fact]
