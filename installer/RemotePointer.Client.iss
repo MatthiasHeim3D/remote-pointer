@@ -30,6 +30,7 @@ WizardStyle=modern
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
+SetupIconFile=..\icons\exe_icon.ico
 UninstallDisplayIcon={app}\RemotePointer.Client.exe
 
 [Tasks]

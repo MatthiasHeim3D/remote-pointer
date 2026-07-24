@@ -6,6 +6,7 @@ namespace RemotePointer.Client.Services;
 
 public sealed class SystemTrayIcon : IDisposable
 {
+    private readonly System.Drawing.Icon applicationIcon;
     private readonly FormsContextMenuStrip contextMenu = new();
     private readonly FormsNotifyIcon notifyIcon;
     private bool disposed;
@@ -22,10 +23,16 @@ public sealed class SystemTrayIcon : IDisposable
         contextMenu.Items.Add(showItem);
         contextMenu.Items.Add(exitItem);
 
+        var processPath = Environment.ProcessPath;
+        applicationIcon = processPath is null
+            ? (System.Drawing.Icon)System.Drawing.SystemIcons.Application.Clone()
+            : System.Drawing.Icon.ExtractAssociatedIcon(processPath)
+                ?? (System.Drawing.Icon)System.Drawing.SystemIcons.Application.Clone();
+
         notifyIcon = new FormsNotifyIcon
         {
             ContextMenuStrip = contextMenu,
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = applicationIcon,
             Text = "Remote Pointer — Inactive",
             Visible = true,
         };
@@ -53,6 +60,7 @@ public sealed class SystemTrayIcon : IDisposable
 
         notifyIcon.Visible = false;
         notifyIcon.Dispose();
+        applicationIcon.Dispose();
         contextMenu.Dispose();
         disposed = true;
         GC.SuppressFinalize(this);

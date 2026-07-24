@@ -4,6 +4,7 @@
         xmlns:viewModels="clr-namespace:RemotePointer.Client.ViewModels"
         xmlns:views="clr-namespace:RemotePointer.Client.Views"
         Title="Remote Pointer"
+        Icon="/RemotePointer.Client;component/Assets/exe_icon.ico"
         Width="400"
         Height="520"
         WindowStyle="None"
