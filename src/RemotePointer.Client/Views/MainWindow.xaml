@@ -366,63 +366,56 @@
                             </Style.Triggers>
                         </Style>
                     </Grid.Style>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Foreground="#AFAFAF" Text="Connected to" />
-                    <StackPanel Grid.Row="1"
-                                Margin="0,5,0,0"
-                                Orientation="Horizontal">
-                        <Border Width="36"
-                                Height="36"
+                    <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="42" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="42"
+                                Height="42"
                                 Background="#343434"
-                                CornerRadius="5">
-                            <TextBlock HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       FontFamily="Segoe MDL2 Assets"
-                                       FontSize="17"
-                                       Foreground="#60CDFF"
-                                       Text="&#xE7F8;" />
+                                CornerRadius="21">
+                            <Grid>
+                                <TextBlock HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="18"
+                                           Foreground="#60CDFF"
+                                           Visibility="{Binding Presenter.CurrentReceiverProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                           Text="&#xE77B;" />
+                                <Image Source="{Binding Presenter.CurrentReceiverProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                       Stretch="UniformToFill" />
+                            </Grid>
                         </Border>
-                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
-                            <TextBlock FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Text="{Binding Presenter.CurrentReceiverName}" />
-                            <TextBlock FontSize="11"
-                                       Foreground="#6CCB7F"
-                                       Text="Connected" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <Button Grid.Row="2"
-                            Margin="0,18,0,0"
-                            Style="{StaticResource PrimaryButtonStyle}"
-                            Command="{Binding Presenter.TogglePointingCommand}"
-                            Content="{Binding Presenter.PointingActionLabel}" />
-
-                    <StackPanel Grid.Row="3" Margin="0,18,0,0">
-                        <TextBlock FontSize="12"
-                                   Foreground="#AFAFAF"
-                                   Text="{Binding Presenter.StatusMessage}"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Margin="0,6,0,0"
-                                   FontSize="11"
-                                   Foreground="#777777"
-                                   Text="Ctrl+Alt+P toggles pointing" />
-                    </StackPanel>
-
-                    <Button Grid.Row="4"
-                            Height="42"
-                            Style="{StaticResource PrimaryButtonStyle}"
-                            Background="#C42B1C"
-                            Foreground="White"
-                            Command="{Binding Presenter.EndSessionCommand}"
-                            Content="Disconnect from receiver" />
+                        <TextBlock Grid.Column="1"
+                                   Margin="10,0,8,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding Presenter.CurrentReceiverName}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Button Grid.Column="2"
+                                Width="38"
+                                Height="38"
+                                Margin="0,0,7,0"
+                                Style="{StaticResource IconButtonStyle}"
+                                Background="#60CDFF"
+                                Foreground="#17242A"
+                                Command="{Binding Presenter.TogglePointingCommand}"
+                                Content="{Binding Presenter.PointingActionIcon}"
+                                ToolTip="{Binding Presenter.PointingActionLabel}" />
+                        <Button Grid.Column="3"
+                                Width="38"
+                                Height="38"
+                                Style="{StaticResource IconButtonStyle}"
+                                Background="#C42B1C"
+                                Foreground="White"
+                                Command="{Binding Presenter.EndSessionCommand}"
+                                Content="&#xE711;"
+                                ToolTip="Disconnect from receiver" />
+                    </Grid>
                 </Grid>
 
                 <!-- Receiver-connected state takes precedence over sender discovery. -->
@@ -617,7 +610,7 @@
                                 Content="Browse" />
                     </Grid>
 
-                    <TextBlock Margin="0,16,0,6" Text="Maximum simultanious connections" />
+                    <TextBlock Margin="0,16,0,6" Text="Maximum simultaneous connections" />
                     <Grid Height="38">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

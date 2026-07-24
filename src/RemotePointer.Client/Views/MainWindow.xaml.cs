@@ -13,6 +13,8 @@ namespace RemotePointer.Client.Views;
 
 public partial class MainWindow : Window
 {
+    private const double ExpandedHeight = 520d;
+    private const double ConnectedSenderHeight = 200d;
     private GlobalHotKeyRegistration? hotKeyRegistration;
     private HwndSource? source;
     private readonly SystemTrayIcon trayIcon;
@@ -162,6 +164,15 @@ public partial class MainWindow : Window
             }
         }
 
+        if ((ReferenceEquals(sender, viewModel)
+                && e.PropertyName is nameof(MainWindowViewModel.IsSettingsOpen)
+                    or nameof(MainWindowViewModel.HasConnectedPresenter))
+            || (ReferenceEquals(sender, viewModel.Presenter)
+                && e.PropertyName == nameof(PresenterViewModel.IsSessionApproved)))
+        {
+            UpdateFlyoutHeight();
+        }
+
         var status = viewModel.Presenter.IsPointing
             ? "Pointing active"
             : viewModel.Presenter.IsSessionApproved
@@ -174,6 +185,18 @@ public partial class MainWindow : Window
                         : "Receiver invisible"
                     : "Inactive";
         trayIcon.SetStatus(status);
+    }
+
+    private void UpdateFlyoutHeight()
+    {
+        var compact = viewModel.Presenter.IsSessionApproved
+            && !viewModel.HasConnectedPresenter
+            && !viewModel.IsSettingsOpen;
+        Height = compact ? ConnectedSenderHeight : ExpandedHeight;
+        if (IsLoaded)
+        {
+            PositionFlyout();
+        }
     }
 
     private void ShowFromTray()

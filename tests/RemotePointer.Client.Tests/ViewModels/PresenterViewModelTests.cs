@@ -17,7 +17,10 @@ public sealed class PresenterViewModelTests
             Capabilities = new RelayCapabilities(true),
             AvailableReceivers =
             [
-                new AvailableReceiverDescriptor("session-visible", "Receiver PC"),
+                new AvailableReceiverDescriptor(
+                    "session-visible",
+                    "Receiver PC",
+                    ProfilePicturePng: [1, 2, 3]),
             ],
         };
         using var viewModel = new PresenterViewModel(service, relay);
@@ -29,6 +32,7 @@ public sealed class PresenterViewModelTests
         Assert.Equal("session-visible", relay.RequestedReceiverSessionId);
         Assert.True(viewModel.IsJoinPending);
         Assert.Equal("Receiver PC", viewModel.CurrentReceiverName);
+        Assert.Equal(new byte[] { 1, 2, 3 }, viewModel.CurrentReceiverProfilePicturePng);
     }
 
     [Fact]
