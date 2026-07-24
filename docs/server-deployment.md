@@ -53,9 +53,11 @@ Invoke-RestMethod https://pointer.internal.example/health
 
 ```powershell
 docker compose logs --tail 100
-docker compose pull
+git pull
 docker compose up -d --build
 docker compose down
 ```
+
+The relay image is built locally from this repository (`compose.yaml` uses a `build:` context, not a registry image), so updating means refreshing the source and rebuilding with `--build`. There is no `docker compose pull` step for the relay; `docker compose up -d --build` still pulls a newer Caddy base image when one is available. A prebuilt relay image is also published to GitHub Container Registry by CI on pushes to `main`; to run that instead, replace the relay `image:`/`build:` block in `compose.yaml` with the published image reference.
 
 `docker compose down` preserves the named Caddy data volume. Do not add `--volumes` during normal maintenance: deleting that volume creates a new CA, after which every client installer must be rebuilt with the new public root. Restarting the relay intentionally ends active in-memory sessions, so users pair again.

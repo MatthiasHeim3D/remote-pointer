@@ -98,6 +98,6 @@ No reference is permitted from contracts back to either host. Client and server 
 
 ## Phase 7 deployment boundary
 
-The client is published self-contained for `win-x64` and packaged with Inno Setup for the current user under `%LocalAppData%\Programs\Remote Pointer`. The installer embeds the chosen HTTPS relay URL and Caddy public root certificate. With the certificate task selected, setup trusts that root only for the current Windows account. DPAPI recovery data and audit records remain separate under `%LocalAppData%\RemotePointer`.
+The client is published self-contained for `win-x64` and packaged with Inno Setup for the current user under `%LocalAppData%\Programs\Remote Pointer`. The installer does not contain a relay URL; it only optionally embeds Caddy's public root certificate. With the certificate task selected, setup trusts that root only for the current Windows account. DPAPI recovery data and audit records remain separate under `%LocalAppData%\RemotePointer`.
 
-Packaged JSON provides the relay URL, with a process environment override retained for development. Both paths enforce HTTPS. In Docker, Caddy is the only published service and proxies to the non-root relay on the private Compose network. The relay's in-memory session boundary means process restart terminates active sessions.
+The packaged `appsettings.json` ships an empty relay URL; the user enters it on first launch, stored in `user-settings.json` under `%LocalAppData%\RemotePointer`, with a process environment override retained for development. Both paths enforce HTTPS. In Docker, Caddy is the only published service and proxies to the non-root relay on the private Compose network. The relay's in-memory session boundary means process restart terminates active sessions.

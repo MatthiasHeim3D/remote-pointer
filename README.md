@@ -1,47 +1,87 @@
 # Remote Pointer
 
-Remote Pointer is a side-band Windows 11 pointer application. It exchanges normalized pointer gestures, deliberate transient text annotations, and session metadata through an internal relay; it does not capture screens or inject input.
+Add a shared, on-screen pointer to any remote-desktop or screen-sharing session, so you can point at and annotate what's on someone else's Windows screen while you talk them through it.
 
-Phases 1-5 provide the contracts, desktop overlays, relay, and end-to-end workflow. Phase 6 hardens that workflow with HTTPS enforcement, DPAPI-protected transport recovery, peer revocation on disconnect, structured audit events, safe error boundaries, dependency auditing, and a threat model.
+Remote Pointer is **not** a remote-desktop tool and doesn't replace one. It doesn't show you the other screen or let you control their PC — you already see their screen through whatever tool you use (Teams, Zoom, RDP, a screen-share, and so on). What Remote Pointer adds on top is a **temporary** pointer: one or more people draw gestures and short text notes that appear on the other person's real screen, like a laser pointer you can use remotely. Because it drives the receiver's own screen, it works alongside any remote-desktop or screen-sharing tool.
 
-## Build and local test
+It only ever sends the *position* of your gestures and the text you type — it never captures or streams the screen, records anything, or moves the other person's mouse or keyboard.
 
-Prerequisites are Windows 11 and the .NET 10 SDK.
+It is built for small, trusted networks (an office LAN or VPN) and runs entirely on infrastructure you host — there is no cloud service and no peer-to-peer connection.
+
+Good for walking a colleague through an app, pointing out details during a screen-share, or remote pair-troubleshooting.
+
+## How it works
+
+Remote Pointer has two roles and a small server that connects them:
+
+- **Receiver** — the person whose screen is being pointed at. A transparent, click-through overlay shows the incoming markers while they keep using their PC normally underneath.
+- **Sender** — the person doing the pointing. In their remote-desktop or screen-share view, they line up a target area over the receiver's screen, then draw. Their gestures show up on the receiver's real screen (and so are visible back in the shared view).
+- **Relay** — a small self-hosted server that both sides connect to over HTTPS. It validates and forwards gestures; it never touches either desktop.
+
+Every sender must be **individually approved** by the receiver, and the receiver can disconnect everyone at any time. A receiver accepts a limited number of senders at once (two by default).
+
+## Using it
+
+1. On the receiving PC, open Remote Pointer and choose **Available** to become discoverable.
+2. On each sending PC, pick that receiver from the list and request access.
+3. The receiver approves each request.
+4. Senders line up their target area over the receiver's screen in their remote-desktop view, then turn on pointing (or press **Ctrl+Alt+P**).
+
+### Pointer controls
+
+While pointing is active:
+
+| Gesture | Draws |
+| --- | --- |
+| Left-click | Highlight a spot |
+| Left-drag | Freehand path |
+| Shift + left-drag | Straight line |
+| Shift + left-click | Text note (press **Enter** to place it) |
+| Right-drag | Box |
+| Shift + right-drag | Circle, grown out from its center |
+| **Escape** | Cancels the current gesture |
+| **H** | Shows or hides the on-screen controls help |
+
+Everything you draw fades on its own after a couple of seconds — nothing is saved on either side. The help panel opens the first time you point and can be reopened any time with **H**; turn off *Show usage hints* in Settings to hide its badge.
+
+## Requirements
+
+- **To use it:** Windows 11. The client is self-contained, so no separate .NET install is needed.
+- **To see the other screen:** any remote-desktop or screen-sharing tool (Teams, Zoom, RDP, and so on). Remote Pointer adds the pointer on top; it does not provide the screen view itself.
+- **To run the relay:** a machine with Docker, reachable over HTTPS from everyone taking part.
+
+## Installing
+
+Remote Pointer is distributed as a per-user Windows installer that needs no administrator rights and installs only for the current account. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address.
+
+- Set up the relay server → [Server deployment](docs/server-deployment.md)
+- Build and install the client → [Client deployment](docs/deployment.md)
+
+## Building from source
+
+Prerequisites: Windows 11 and the .NET 10 SDK.
 
 ```powershell
-dotnet restore RemotePointer.sln
-dotnet build RemotePointer.sln --configuration Release --no-restore
-dotnet test RemotePointer.sln --configuration Release --no-build
+dotnet build RemotePointer.sln --configuration Release
+dotnet test RemotePointer.sln --configuration Release
 ```
 
-Start the local relay, then start two client processes:
+To try the whole thing on one machine — a local relay plus two client windows so you can play both roles — run:
 
 ```powershell
 .\build\Start-Development.ps1
 ```
 
-The development launcher always builds Debug, starts the HTTPS relay and two clients,
-and stops its processes when both clients close or the script is interrupted. Debug
-clients allow multiple instances for local testing; Release clients allow only one
-running instance. Starting a second Release client brings the existing client's
-window to the foreground.
+It starts a local HTTPS relay and two clients and shuts everything down when both clients close.
 
-In the first client, choose **Available**. In each sender client, select it from the visible-receiver list and request access. The receiver must approve every sender and can use **Disconnect all senders** from its dedicated receiving view. A receiver accepts up to its configured sender limit (two by default), remains discoverable while below that limit, and cannot initiate its own sender connection while receiving. Receiver display dimensions synchronize automatically; after approval, calibrate and enable pointing. The receiver overlay remains click-through and each sender target consumes pointer gestures only while pointing mode is active. Left-click highlights, left-drag draws a path, Shift+left-drag draws a line, Shift+left-click creates a text annotation finalized with Enter, right-drag draws a box, and Shift+right-drag draws a circle centered at the initial click. The input-area help panel lists these controls, including Escape, and can always be toggled with `H`. It opens on first use and starts collapsed thereafter; disabling **Show usage hints** hides the collapsed help badge without disabling the shortcut.
+## Documentation
 
-## Small-network deployment
+- [Architecture](docs/architecture.md) — components, data flow, and design decisions
+- [Protocol](docs/protocol.md) — message format and coordinate math
+- [Security](docs/security.md) and [Threat model](docs/threat-model.md) — controls and trust boundaries
+- [Client deployment](docs/deployment.md) and [Server deployment](docs/server-deployment.md) — building the installer and hosting the relay
+- [Dependencies](docs/dependencies.md) and [Test matrix](docs/test-matrix.md)
 
-Docker Compose runs the relay behind Caddy HTTPS. Inno Setup produces a self-contained, admin-free per-user client installer. After exporting Caddy's public root certificate, build it with:
+## License
 
-```powershell
-.\build\Build-Installer.ps1 `
-  -RelayRootCertificatePath .\relay-root.crt
-```
-
-The installer does not contain a relay address. On first launch, the client opens
-Settings and asks the user to enter the HTTPS relay address.
-
-No MSI, WiX, corporate code-signing certificate, machine policy, service, driver, or inbound client firewall rule is required. See [server deployment](docs/server-deployment.md), [client deployment](docs/deployment.md), and [architecture](docs/architecture.md).
-
-## Versioning
-
-The repository uses Nerdbank.GitVersioning with the shared root [version.json](version.json). Its `1.0` base version becomes `1.0.<git-height>`, so every commit affects the client and relay together, even when only one changes. The installer build derives its version automatically; do not supply a version number manually. Pushes to `main` publish the relay image to GitHub Container Registry with the same numeric version and `latest` tag.
+Released under the [MIT License](LICENSE).

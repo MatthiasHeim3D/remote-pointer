@@ -79,7 +79,7 @@ No development certificate-bypass switch will be included in production builds.
 
 - Inno Setup installs the self-contained x64 client per user and requests no administrator rights.
 - The installer contains only Caddy's public CA root and adds it to the current user's root store when the clearly labelled HTTPS task is selected. Caddy's CA private key remains in its persistent server-side data volume.
-- The relay URL is embedded at build time, must use HTTPS, and still uses normal Windows certificate validation.
+- The relay URL is entered by the user on first launch, must use HTTPS, and still uses normal Windows certificate validation.
 - Client audit and DPAPI session files remain per-user and are not silently deleted by uninstall.
 - Endpoints require outbound TCP 443 only. The package creates no inbound firewall rule, Windows service, driver, remote-control capability, or certificate-validation bypass.
 - The unsigned installer is distributed through an authenticated internal channel with a separately recorded SHA-256 digest. This provides provenance checking for the pilot but is not equivalent to Authenticode.
