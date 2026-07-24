@@ -284,14 +284,15 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
-    public void SetShowUsageHints_ForwardsPreferenceToInputArea()
+    public void SetUsageHintsState_ForwardsPreferencesToInputArea()
     {
         using var service = new FakeTargetRegionService();
         using var viewModel = new PresenterViewModel(service);
 
-        viewModel.SetShowUsageHints(false);
+        viewModel.SetUsageHintsState(showUsageHints: false, hasShownUsageHints: true);
 
         Assert.False(service.ShowUsageHints);
+        Assert.True(service.HasShownUsageHints);
     }
 
     [Fact]
@@ -327,6 +328,8 @@ public sealed class PresenterViewModelTests
 
         public event EventHandler<PointerCapturedEventArgs>? PointerCaptured;
 
+        public event EventHandler? UsageHintsShown;
+
         public TargetRegionState State { get; private set; }
 
         public int BeginCalibrationCount { get; private set; }
@@ -345,10 +348,16 @@ public sealed class PresenterViewModelTests
 
         public bool ShowUsageHints { get; private set; } = true;
 
+        public bool HasShownUsageHints { get; private set; }
+
         public void SetCalibrationIdentity(string? receiverIdentity) =>
             CalibrationIdentity = receiverIdentity;
 
-        public void SetShowUsageHints(bool showUsageHints) => ShowUsageHints = showUsageHints;
+        public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints)
+        {
+            ShowUsageHints = showUsageHints;
+            HasShownUsageHints = hasShownUsageHints;
+        }
 
         public void BeginCalibration(double expectedAspectRatio)
         {
@@ -379,6 +388,8 @@ public sealed class PresenterViewModelTests
                 this,
                 new TargetRegionStateChangedEventArgs(state, message, isError));
         }
+
+        public void RaiseUsageHintsShown() => UsageHintsShown?.Invoke(this, EventArgs.Empty);
 
         public void RaisePointer(
             NormalizedPoint point,

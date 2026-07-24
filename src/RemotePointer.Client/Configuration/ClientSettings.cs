@@ -101,9 +101,14 @@ public sealed class ClientSettings
         WriteUserPreferences();
     }
 
+    public void SaveUsageHintsShown()
+    {
+        Pointer.HasShownUsageHints = true;
+        WriteUserPreferences();
+    }
+
     private void WriteUserPreferences()
     {
-
         var parentDirectory = Path.GetDirectoryName(userPreferencesPath);
         if (!string.IsNullOrEmpty(parentDirectory))
         {
@@ -119,7 +124,8 @@ public sealed class ClientSettings
                 Startup.LaunchAtStartup,
                 Receiver.SelectedDisplayId,
                 Pointer.ShowUsageHints,
-                Receiver.IsAvailable),
+                Receiver.IsAvailable,
+                Pointer.HasShownUsageHints),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -183,6 +189,7 @@ public sealed class ClientSettings
         Receiver.IsAvailable = preferences.ReceiverAvailable;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
         Pointer.ShowUsageHints = preferences.ShowUsageHints;
+        Pointer.HasShownUsageHints = preferences.HasShownUsageHints;
     }
 
     private static string GetDefaultUserPreferencesPath() => Path.Combine(
@@ -198,7 +205,8 @@ public sealed class ClientSettings
         bool LaunchAtStartup = false,
         string SelectedDisplayId = "",
         bool ShowUsageHints = true,
-        bool ReceiverAvailable = false);
+        bool ReceiverAvailable = false,
+        bool HasShownUsageHints = false);
 }
 
 public sealed class ServerSettings
@@ -217,6 +225,8 @@ public sealed class PointerSettings
     public string ToggleHotKey { get; init; } = "Ctrl+Alt+P";
 
     public bool ShowUsageHints { get; set; } = true;
+
+    public bool HasShownUsageHints { get; set; }
 }
 
 public sealed class PrivacySettings

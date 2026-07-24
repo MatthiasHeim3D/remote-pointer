@@ -49,7 +49,8 @@ public partial class TargetRegionWindow : Window
         RectangleD resetRectangle,
         double expectedAspectRatio,
         bool lockAspectRatio,
-        bool showUsageHints = true)
+        bool showUsageHints = true,
+        bool expandUsageHintsInitially = false)
     {
         if (!double.IsFinite(expectedAspectRatio) || expectedAspectRatio <= 0d)
         {
@@ -59,6 +60,7 @@ public partial class TargetRegionWindow : Window
         this.resetRectangle = resetRectangle;
         ExpectedAspectRatio = expectedAspectRatio;
         ShowUsageHints = showUsageHints;
+        ExpandUsageHintsInitially = expandUsageHintsInitially;
 
         InitializeComponent();
         pointerVisuals = new PointerVisualRenderer(RippleCanvas);
@@ -85,10 +87,12 @@ public partial class TargetRegionWindow : Window
 
     public bool ShowUsageHints { get; }
 
+    public bool ExpandUsageHintsInitially { get; }
+
     public void EnterPointingMode()
     {
         isPointingMode = true;
-        isUsageHelpCollapsed = false;
+        isUsageHelpCollapsed = !ExpandUsageHintsInitially;
         CalibrationPanel.Visibility = Visibility.Collapsed;
         UpdateUsageHelpVisibility();
         ResizeThumb.Visibility = Visibility.Collapsed;
@@ -275,13 +279,19 @@ public partial class TargetRegionWindow : Window
 
     private void UpdateUsageHelpVisibility()
     {
-        PointingUsageHint.Visibility = ShowUsageHints && !isUsageHelpCollapsed
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        PointingUsageCollapsedHint.Visibility = ShowUsageHints && isUsageHelpCollapsed
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        var (usageHelp, collapsedHint) = GetUsageHintVisibilities(
+            ShowUsageHints,
+            isUsageHelpCollapsed);
+        PointingUsageHint.Visibility = usageHelp;
+        PointingUsageCollapsedHint.Visibility = collapsedHint;
     }
+
+    internal static (Visibility UsageHelp, Visibility CollapsedHint)
+        GetUsageHintVisibilities(bool showCollapsedHint, bool isCollapsed) =>
+        (
+            isCollapsed ? Visibility.Collapsed : Visibility.Visible,
+            showCollapsedHint && isCollapsed ? Visibility.Visible : Visibility.Collapsed
+        );
 
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {

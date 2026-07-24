@@ -69,6 +69,7 @@ public sealed class ClientSettingsTests
         Assert.Equal("display-2", reloaded.Receiver.SelectedDisplayId);
         Assert.False(reloaded.Pointer.ShowUsageHints);
         Assert.True(reloaded.Receiver.IsAvailable);
+        Assert.False(reloaded.Pointer.HasShownUsageHints);
     }
 
     [Fact]
@@ -95,6 +96,19 @@ public sealed class ClientSettingsTests
         var reloaded = ClientSettings.Load(directory.Path, null);
 
         Assert.True(reloaded.Receiver.IsAvailable);
+    }
+
+    [Fact]
+    public void SaveUsageHintsShown_PersistsFirstUseState()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUsageHintsShown();
+        var reloaded = ClientSettings.Load(directory.Path, null);
+
+        Assert.True(reloaded.Pointer.HasShownUsageHints);
     }
 
     [Fact]

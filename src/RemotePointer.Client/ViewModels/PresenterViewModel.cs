@@ -299,8 +299,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void SetShowUsageHints(bool showUsageHints) =>
-        targetRegionService.SetShowUsageHints(showUsageHints);
+    public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints) =>
+        targetRegionService.SetUsageHintsState(showUsageHints, hasShownUsageHints);
 
     public Task ApplyClientSettingsAsync(
         string displayName,

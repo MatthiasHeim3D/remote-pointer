@@ -14,11 +14,14 @@ public sealed class TargetRegionService : ITargetRegionService
     private bool disposed;
     private double expectedAspectRatio = 16d / 9d;
     private bool showUsageHints = true;
+    private bool hasShownUsageHints;
     private TargetRegionWindow? window;
 
     public event EventHandler<TargetRegionStateChangedEventArgs>? StateChanged;
 
     public event EventHandler<PointerCapturedEventArgs>? PointerCaptured;
+
+    public event EventHandler? UsageHintsShown;
 
     public TargetRegionState State { get; private set; } = TargetRegionState.Inactive;
 
@@ -36,7 +39,11 @@ public sealed class TargetRegionService : ITargetRegionService
             : calibrationStore.Load(calibrationIdentity);
     }
 
-    public void SetShowUsageHints(bool value) => showUsageHints = value;
+    public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints)
+    {
+        this.showUsageHints = showUsageHints;
+        this.hasShownUsageHints = hasShownUsageHints;
+    }
 
     public void BeginCalibration(double expectedAspectRatio)
     {
@@ -122,8 +129,14 @@ public sealed class TargetRegionService : ITargetRegionService
             rectangle,
             expectedAspectRatio,
             lockAspectRatio: false,
-            showUsageHints);
+            showUsageHints,
+            expandUsageHintsInitially: !hasShownUsageHints);
         window.EnterPointingMode();
+        if (!hasShownUsageHints)
+        {
+            hasShownUsageHints = true;
+            UsageHintsShown?.Invoke(this, EventArgs.Empty);
+        }
         window.PointerCaptured += OnPointerCaptured;
         window.PointingExitRequested += OnPointingExitRequested;
         window.Closed += OnWindowClosed;

@@ -20,6 +20,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IRelayClient? receiverRelayClient;
     private readonly ClientSettings? clientSettings;
     private readonly IStartupRegistrationService? startupRegistrationService;
+    private readonly ITargetRegionService targetRegionService;
     private readonly RelayCommand decrementMaximumSendersCommand;
     private readonly RelayCommand incrementMaximumSendersCommand;
     private CancellationTokenSource? availabilityRetryCancellation;
@@ -42,6 +43,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private int maximumSenderConnections;
     private bool isLaunchAtStartup;
     private bool showUsageHints = true;
+    private bool hasShownUsageHints;
 
     public event EventHandler<ServerAddressChangeRequestedEventArgs>? ServerAddressChangeRequested;
 
@@ -75,12 +77,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ?? clientSettings?.Startup.LaunchAtStartup
             ?? false;
         showUsageHints = clientSettings?.Pointer.ShowUsageHints ?? true;
+        hasShownUsageHints = clientSettings?.Pointer.HasShownUsageHints ?? false;
         this.overlayService.StateChanged += OnOverlayStateChanged;
+        this.targetRegionService = targetRegionService ?? new TargetRegionService();
+        this.targetRegionService.UsageHintsShown += OnUsageHintsShown;
         Presenter = new PresenterViewModel(
-            targetRegionService ?? new TargetRegionService(),
+            this.targetRegionService,
             presenterRelayClient,
             pointerTtlMilliseconds);
-        Presenter.SetShowUsageHints(showUsageHints);
+        Presenter.SetUsageHintsState(showUsageHints, hasShownUsageHints);
         Presenter.PropertyChanged += OnPresenterPropertyChanged;
 
         receiverConnectionMessage = receiverRelayClient is null
@@ -557,6 +562,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         overlayService.Dispose();
+        targetRegionService.UsageHintsShown -= OnUsageHintsShown;
         Presenter.PropertyChanged -= OnPresenterPropertyChanged;
         Presenter.Dispose();
         GC.SuppressFinalize(this);
@@ -927,7 +933,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 SelectedMonitor?.Display.DisplayId,
                 ShowUsageHints,
                 ReceiverAvailability == ReceiverAvailability.Available);
-            Presenter.SetShowUsageHints(ShowUsageHints);
+            Presenter.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
             startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
             SetStatus("Settings saved.", false);
             IsSettingsOpen = false;
@@ -999,6 +1005,26 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetStatus($"Receiver availability preference could not be saved: {exception.Message}", true);
+        }
+    }
+
+    private void OnUsageHintsShown(object? sender, EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        if (hasShownUsageHints)
+        {
+            return;
+        }
+
+        hasShownUsageHints = true;
+        try
+        {
+            clientSettings?.SaveUsageHintsShown();
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Usage hint state could not be saved: {exception.Message}", true);
         }
     }
 

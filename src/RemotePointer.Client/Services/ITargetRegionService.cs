@@ -6,11 +6,13 @@ public interface ITargetRegionService : IDisposable
 
     event EventHandler<PointerCapturedEventArgs>? PointerCaptured;
 
+    event EventHandler? UsageHintsShown;
+
     TargetRegionState State { get; }
 
     void SetCalibrationIdentity(string? receiverIdentity);
 
-    void SetShowUsageHints(bool showUsageHints);
+    void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints);
 
     void BeginCalibration(double expectedAspectRatio);
 
