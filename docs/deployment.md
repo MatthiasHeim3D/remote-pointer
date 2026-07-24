@@ -2,18 +2,20 @@
 
 Remote Pointer is packaged as a self-contained x64 application in a per-user Inno Setup installer. Setup writes to `%LocalAppData%\Programs\Remote Pointer`, creates a current-user Start menu shortcut, and does not request administrator rights.
 
-The relay URL is built into the installer. If the relay's HTTPS certificate chains to a publicly trusted CA (for example, a hostname fronted by a Cloudflare Tunnel), omit `-RelayRootCertificatePath` — Windows already trusts that certificate and no root needs installing:
+The relay URL is not built into the installer. On first launch, the client opens
+Settings and asks the user to enter the HTTPS relay address. If the relay's HTTPS
+certificate chains to a publicly trusted CA (for example, a hostname fronted by a
+Cloudflare Tunnel), omit `-RelayRootCertificatePath` — Windows already trusts that
+certificate and no root needs installing:
 
 ```powershell
-.\build\Build-Installer.ps1 `
-  -ServerUrl https://pointer.example.com
+.\build\Build-Installer.ps1
 ```
 
 If the relay instead uses Caddy's private CA (see [server-deployment.md](server-deployment.md)), export its root certificate and pass it so the installer can trust it:
 
 ```powershell
 .\build\Build-Installer.ps1 `
-  -ServerUrl https://pointer.internal.example `
   -RelayRootCertificatePath .\relay-root.crt
 ```
 
@@ -30,7 +32,7 @@ No MSI, WiX, signing certificate, machine configuration, service, driver, or inb
 
 Run the setup executable as the user who will use Remote Pointer. If the installer was built with `-RelayRootCertificatePath`, leave the HTTPS certificate task selected — it adds only Caddy's **public** root certificate to `Cert:\CurrentUser\Root`; the CA private key never leaves the Docker server. Installers built without that flag (public-CA relay hostnames) have no certificate task at all, since Windows already trusts the relay's certificate chain.
 
-The client uses normal Windows certificate validation and still refuses non-HTTPS relay URLs. Changing the relay hostname, or replacing Caddy's data volume for a Caddy-fronted relay, requires exporting the new root and rebuilding the installer.
+The client uses normal Windows certificate validation and still refuses non-HTTPS relay URLs. Changing the relay hostname is done in the client's Settings. Replacing Caddy's data volume for a Caddy-fronted relay requires exporting the new root and rebuilding the installer.
 
 For a quiet current-user install:
 
@@ -48,7 +50,7 @@ An interactive uninstall asks whether to also delete `%LocalAppData%\RemotePoint
 
 ## Installer smoke test
 
-The following installs, validates the HTTPS configuration, and uninstalls without elevation:
+The following installs, validates that no relay address is preconfigured, and uninstalls without elevation:
 
 ```powershell
 .\build\Test-Installer.ps1 `

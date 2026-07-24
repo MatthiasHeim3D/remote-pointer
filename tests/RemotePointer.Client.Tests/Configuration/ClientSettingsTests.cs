@@ -32,6 +32,17 @@ public sealed class ClientSettingsTests
     }
 
     [Fact]
+    public void Load_AcceptsEmptyServerForInitialSetup()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, string.Empty);
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        Assert.Empty(settings.Server.BaseUrl);
+    }
+
+    [Fact]
     public void Load_EnvironmentServerUrlOverridesPackagedSettings()
     {
         using var directory = new TemporaryDirectory();
@@ -122,6 +133,33 @@ public sealed class ClientSettingsTests
             settings.SaveUserPreferences("https://saved.example.test", " ", null));
 
         Assert.Contains("Username", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SaveUserPreferences_InvalidServerDoesNotMutateCurrentSettings()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://original.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            settings.SaveUserPreferences("not a valid URL", "Ada", null));
+
+        Assert.Contains("HTTPS", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("https://original.example.test", settings.Server.BaseUrl);
+    }
+
+    [Fact]
+    public void SaveUserPreferences_AllowsClearingServerAddress()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://original.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUserPreferences(string.Empty, "Ada", null);
+        var reloaded = ClientSettings.Load(directory.Path, null);
+
+        Assert.Empty(reloaded.Server.BaseUrl);
     }
 
     [Fact]

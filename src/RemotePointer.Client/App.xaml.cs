@@ -37,7 +37,10 @@ public partial class App : System.Windows.Application
             var window = new MainWindow(auditLog);
             MainWindow = window;
             window.Show();
-            window.Hide();
+            if (!window.RequiresInitialSetup)
+            {
+                window.Hide();
+            }
             instanceGuard?.ListenForActivation(ShowMainWindow);
         }
         catch (Exception exception)

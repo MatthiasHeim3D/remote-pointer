@@ -32,8 +32,8 @@ if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
 
 $settings = Get-Content -Raw -LiteralPath (Join-Path $installDirectory 'appsettings.json') |
     ConvertFrom-Json
-if (-not $settings.Server.BaseUrl.StartsWith('https://', [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The installed relay URL is not HTTPS.'
+if (-not [string]::IsNullOrEmpty($settings.Server.BaseUrl)) {
+    throw 'A fresh install must not contain a preconfigured relay URL.'
 }
 
 $uninstall = Start-Process -FilePath $uninstallerPath `

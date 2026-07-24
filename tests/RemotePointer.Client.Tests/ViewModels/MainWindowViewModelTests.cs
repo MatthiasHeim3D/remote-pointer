@@ -11,6 +11,73 @@ namespace RemotePointer.Client.Tests.ViewModels;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public void MissingServer_OpensSettingsAndShowsSetupGuidance()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: new ClientSettings());
+
+        Assert.True(viewModel.IsServerConfigurationMissing);
+        Assert.True(viewModel.IsSettingsOpen);
+        Assert.Equal("Set the server address in Settings.", viewModel.ServerConnectionGuidance);
+        Assert.Equal(viewModel.ServerConnectionGuidance, viewModel.EmptyClientListMessage);
+    }
+
+    [Fact]
+    public void ServerAddressInput_StripsPastedHttpsPrefixAndRejectsHttp()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay);
+
+        viewModel.ServerAddressInput = "https://relay.example.test/path/";
+
+        Assert.Equal("relay.example.test/path/", viewModel.ServerAddressInput);
+        Assert.Equal("https://relay.example.test/path/", viewModel.ServerAddress);
+        Assert.Empty(viewModel.ServerAddressValidationMessage);
+
+        viewModel.ServerAddressInput = "http://relay.example.test";
+
+        Assert.Contains("HTTPS", viewModel.ServerAddressValidationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InvalidServerAddress_DoesNotPreventClosingSettings()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: new ClientSettings());
+        viewModel.ServerAddressInput = "http://relay.example.test";
+
+        viewModel.CloseSettingsCommand.Execute(null);
+
+        Assert.False(viewModel.IsSettingsOpen);
+        Assert.Empty(viewModel.ServerAddressInput);
+    }
+
+    [Fact]
+    public void DisconnectedServer_ShowsReachabilityGuidance()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        relay.RaiseConnectionStatus(RelayConnectionStatus.Disconnected, "Connection failed.");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            receiverRelayClient: relay);
+
+        Assert.False(viewModel.IsServerAvailable);
+        Assert.Equal(
+            "Server not reachable. Check the server address in Settings.",
+            viewModel.ServerConnectionGuidance);
+    }
+
+    [Fact]
     public async Task Initialize_RestoresSavedAvailableState()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);

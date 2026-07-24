@@ -79,8 +79,18 @@ public sealed class ClientSettings
         bool? showUsageHints = null,
         bool? receiverAvailable = null)
     {
-        Server.BaseUrl = serverAddress.Trim();
-        Profile.UserName = userName.Trim();
+        var normalizedServerAddress = NormalizeServerAddress(serverAddress);
+        var normalizedUserName = userName.Trim();
+        var requestedMaximumSenderConnections = maximumSenderConnections
+            ?? Receiver.MaximumSenderConnections;
+
+        ValidateValues(
+            normalizedServerAddress,
+            normalizedUserName,
+            requestedMaximumSenderConnections);
+
+        Server.BaseUrl = normalizedServerAddress;
+        Profile.UserName = normalizedUserName;
         Profile.PicturePath = profilePicturePath?.Trim() ?? string.Empty;
         if (maximumSenderConnections.HasValue)
         {
@@ -99,8 +109,6 @@ public sealed class ClientSettings
         {
             Receiver.IsAvailable = receiverAvailable.Value;
         }
-        Validate();
-
         WriteUserPreferences();
     }
 
@@ -144,12 +152,6 @@ public sealed class ClientSettings
 
     internal void Validate()
     {
-        if (!Uri.TryCreate(Server.BaseUrl, UriKind.Absolute, out var serverUri)
-            || serverUri.Scheme != Uri.UriSchemeHttps)
-        {
-            throw new InvalidOperationException("Server BaseUrl must use HTTPS.");
-        }
-
         if (Server.ReconnectDelaysSeconds.Length == 0
             || Server.ReconnectDelaysSeconds.Any(delay => delay < 0)
             || Pointer.DefaultTtlMilliseconds <= 0)
@@ -157,12 +159,66 @@ public sealed class ClientSettings
             throw new InvalidOperationException("Client reconnect and pointer settings are invalid.");
         }
 
-        if (string.IsNullOrWhiteSpace(Profile.UserName) || Profile.UserName.Length > 128)
+        Server.BaseUrl = NormalizeServerAddress(Server.BaseUrl);
+        ValidateValues(Server.BaseUrl, Profile.UserName, Receiver.MaximumSenderConnections);
+    }
+
+    public static bool TryNormalizeServerAddress(
+        string? serverAddress,
+        out string normalizedAddress,
+        out string validationMessage)
+    {
+        normalizedAddress = serverAddress?.Trim() ?? string.Empty;
+        validationMessage = string.Empty;
+        if (normalizedAddress.Length == 0)
+        {
+            return true;
+        }
+
+        if (!Uri.TryCreate(normalizedAddress, UriKind.Absolute, out var serverUri)
+            || !string.Equals(serverUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(serverUri.Host))
+        {
+            validationMessage = "Enter a valid HTTPS server address.";
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(serverUri.UserInfo))
+        {
+            validationMessage = "The server address must not contain a username or password.";
+            return false;
+        }
+
+        normalizedAddress = normalizedAddress.TrimEnd('/');
+        return true;
+    }
+
+    private static string NormalizeServerAddress(string? serverAddress)
+    {
+        if (TryNormalizeServerAddress(
+                serverAddress,
+                out var normalizedAddress,
+                out var validationMessage))
+        {
+            return normalizedAddress;
+        }
+
+        throw new InvalidOperationException(validationMessage);
+    }
+
+    private static void ValidateValues(
+        string serverAddress,
+        string userName,
+        int maximumSenderConnections)
+    {
+        _ = NormalizeServerAddress(serverAddress);
+
+        if (string.IsNullOrWhiteSpace(userName) || userName.Length > 128)
         {
             throw new InvalidOperationException("Username is required and must be 128 characters or fewer.");
         }
 
-        if (Receiver.MaximumSenderConnections is < 1 or > 16)
+        if (maximumSenderConnections is < 1 or > 16)
         {
             throw new InvalidOperationException(
                 "Maximum connected senders must be between 1 and 16.");
@@ -184,7 +240,7 @@ public sealed class ClientSettings
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(preferences.ServerAddress))
+        if (preferences.ServerAddress is not null)
         {
             Server.BaseUrl = preferences.ServerAddress;
         }
@@ -287,7 +343,7 @@ public sealed class ClientSettings
 
 public sealed class ServerSettings
 {
-    public string BaseUrl { get; set; } = "https://localhost:7243";
+    public string BaseUrl { get; set; } = string.Empty;
 
     public int[] ReconnectDelaysSeconds { get; init; } = [0, 2, 5, 10, 30];
 }

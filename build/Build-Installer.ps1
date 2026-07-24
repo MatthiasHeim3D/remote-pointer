@@ -1,8 +1,5 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)]
-    [uri]$ServerUrl,
-
     [string]$RelayRootCertificatePath,
 
     [string]$InnoSetupCompilerPath
@@ -10,10 +7,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-
-if ($ServerUrl.Scheme -ne [System.Uri]::UriSchemeHttps) {
-    throw 'ServerUrl must use HTTPS.'
-}
 
 $resolvedCertificatePath = $null
 if (-not [string]::IsNullOrWhiteSpace($RelayRootCertificatePath)) {
@@ -94,11 +87,6 @@ finally {
 if ($LASTEXITCODE -ne 0) {
     throw "Client publish failed with exit code $LASTEXITCODE."
 }
-
-$settingsPath = Join-Path $publishDirectory 'appsettings.json'
-$settings = Get-Content -Raw -LiteralPath $settingsPath | ConvertFrom-Json
-$settings.Server.BaseUrl = $ServerUrl.AbsoluteUri.TrimEnd('/')
-$settings | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $settingsPath -Encoding utf8
 
 New-Item -ItemType Directory -Path $installerDirectory -Force | Out-Null
 $innoDefines = @(

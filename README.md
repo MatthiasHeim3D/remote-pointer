@@ -34,9 +34,11 @@ Docker Compose runs the relay behind Caddy HTTPS. Inno Setup produces a self-con
 
 ```powershell
 .\build\Build-Installer.ps1 `
-  -ServerUrl https://pointer.internal.example `
   -RelayRootCertificatePath .\relay-root.crt
 ```
+
+The installer does not contain a relay address. On first launch, the client opens
+Settings and asks the user to enter the HTTPS relay address.
 
 No MSI, WiX, corporate code-signing certificate, machine policy, service, driver, or inbound client firewall rule is required. See [server deployment](docs/server-deployment.md), [client deployment](docs/deployment.md), and [architecture](docs/architecture.md).
 

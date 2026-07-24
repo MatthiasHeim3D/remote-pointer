@@ -38,7 +38,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isAvailabilityMenuOpen;
     private bool isSettingsOpen;
     private string profilePicturePath;
-    private string serverAddress;
+    private string serverAddressInput;
     private string userName;
     private int maximumSenderConnections;
     private bool isLaunchAtStartup;
@@ -64,9 +64,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         this.receiverRelayClient = receiverRelayClient;
         this.clientSettings = clientSettings;
         this.startupRegistrationService = startupRegistrationService;
-        serverAddress = clientSettings?.Server.BaseUrl
+        var configuredServerAddress = clientSettings?.Server.BaseUrl
             ?? receiverRelayClient?.ServerUrl
-            ?? "https://localhost:7243";
+            ?? string.Empty;
+        serverAddressInput = RemoveHttpsPrefix(configuredServerAddress);
         userName = clientSettings?.Profile.UserName ?? Environment.UserName;
         profilePicturePath = clientSettings?.Profile.PicturePath ?? string.Empty;
         maximumSenderConnections = clientSettings?.Receiver.MaximumSenderConnections ?? 2;
@@ -126,22 +127,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             IsAvailabilityMenuOpen = false;
             if (IsSettingsOpen)
             {
-                SaveSettings();
+                CancelSettings();
             }
             else
             {
-                IsSettingsOpen = true;
+                OpenSettings();
             }
         });
+        SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
+        CloseSettingsCommand = new RelayCommand(_ => CancelSettings());
         ToggleAvailabilityMenuCommand = new RelayCommand(_ =>
         {
             if (IsSettingsOpen)
             {
-                SaveSettings();
-                if (IsSettingsOpen)
-                {
-                    return;
-                }
+                CancelSettings();
             }
 
             IsAvailabilityMenuOpen = !IsAvailabilityMenuOpen;
@@ -154,6 +153,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _ => MaximumSenderConnections > 1);
 
         RefreshMonitors();
+        if (IsServerConfigurationMissing)
+        {
+            IsSettingsOpen = true;
+        }
     }
 
     public ObservableCollection<MonitorDescriptor> Monitors { get; } = [];
@@ -273,6 +276,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         receiverRelayClient?.Status is RelayConnectionStatus.Connected
             or RelayConnectionStatus.SessionExpired;
 
+    public bool IsServerConfigurationMissing =>
+        string.IsNullOrWhiteSpace(clientSettings?.Server.BaseUrl ?? receiverRelayClient?.ServerUrl);
+
+    public string ServerConnectionGuidance => IsServerConfigurationMissing
+        ? "Set the server address in Settings."
+        : "Server not reachable. Check the server address in Settings.";
+
+    public string EmptyClientListMessage => !IsServerAvailable
+        ? ServerConnectionGuidance
+        : "No available clients";
+
     public bool IsAvailabilityMenuOpen
     {
         get => isAvailabilityMenuOpen;
@@ -285,10 +299,46 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         set => SetProperty(ref isSettingsOpen, value);
     }
 
-    public string ServerAddress
+    public string ServerAddress => string.IsNullOrWhiteSpace(ServerAddressInput)
+        ? string.Empty
+        : $"https://{ServerAddressInput.Trim()}";
+
+    public string ServerAddressInput
     {
-        get => serverAddress;
-        set => SetProperty(ref serverAddress, value);
+        get => serverAddressInput;
+        set
+        {
+            var address = RemoveHttpsPrefix(value ?? string.Empty);
+            if (SetProperty(ref serverAddressInput, address))
+            {
+                RaisePropertyChanged(nameof(ServerAddress));
+                RaisePropertyChanged(nameof(ServerAddressValidationMessage));
+            }
+        }
+    }
+
+    public string ServerAddressValidationMessage
+    {
+        get
+        {
+            var input = ServerAddressInput.Trim();
+            if (input.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                return "HTTPS is required. Remove http://; https:// is added automatically.";
+            }
+
+            if (input.Contains("://", StringComparison.Ordinal))
+            {
+                return "Enter the address without a protocol; https:// is added automatically.";
+            }
+
+            return ClientSettings.TryNormalizeServerAddress(
+                ServerAddress,
+                out _,
+                out var validationMessage)
+                ? string.Empty
+                : validationMessage;
+        }
     }
 
     public string UserName
@@ -372,6 +422,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand SetReceiverAvailabilityCommand => setReceiverAvailabilityCommand;
 
     public ICommand ToggleSettingsCommand { get; }
+
+    public ICommand SaveSettingsCommand { get; }
+
+    public ICommand CloseSettingsCommand { get; }
 
     public ICommand ToggleAvailabilityMenuCommand { get; }
 
@@ -742,6 +796,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         ReceiverConnectionMessage = e.Message;
         RaisePropertyChanged(nameof(IsServerAvailable));
+        RaisePropertyChanged(nameof(ServerConnectionGuidance));
+        RaisePropertyChanged(nameof(EmptyClientListMessage));
         RaiseAvailabilityProperties();
     }
 
@@ -901,8 +957,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var serverAddressChanged = false;
         try
         {
+            if (!string.IsNullOrEmpty(ServerAddressValidationMessage))
+            {
+                SetStatus(ServerAddressValidationMessage, true);
+                return;
+            }
+
+            _ = ClientSettings.TryNormalizeServerAddress(
+                ServerAddress,
+                out var requestedServerAddress,
+                out _);
             var savedServerAddress = clientSettings.Server.BaseUrl;
-            var requestedServerAddress = ServerAddress.Trim();
             serverAddressChanged = !string.Equals(
                 savedServerAddress,
                 requestedServerAddress,
@@ -919,13 +984,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 ServerAddressChangeRequested?.Invoke(this, changeRequest);
                 if (!changeRequest.Approved)
                 {
-                    ServerAddress = savedServerAddress;
+                    ServerAddressInput = RemoveHttpsPrefix(savedServerAddress);
+                    requestedServerAddress = savedServerAddress;
                     serverAddressChanged = false;
                 }
             }
 
             clientSettings.SaveUserPreferences(
-                ServerAddress,
+                requestedServerAddress,
                 UserName,
                 ProfilePicturePath,
                 MaximumSenderConnections,
@@ -969,6 +1035,49 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 true);
         }
     }
+
+    private void OpenSettings()
+    {
+        ResetSettingsDraft();
+        IsSettingsOpen = true;
+    }
+
+    private void CancelSettings()
+    {
+        ResetSettingsDraft();
+        IsSettingsOpen = false;
+    }
+
+    private void ResetSettingsDraft()
+    {
+        if (clientSettings is null)
+        {
+            return;
+        }
+
+        ServerAddressInput = RemoveHttpsPrefix(clientSettings.Server.BaseUrl);
+        UserName = clientSettings.Profile.UserName;
+        ProfilePicturePath = clientSettings.Profile.PicturePath;
+        MaximumSenderConnections = clientSettings.Receiver.MaximumSenderConnections;
+        IsLaunchAtStartup = startupRegistrationService?.IsEnabled
+            ?? clientSettings.Startup.LaunchAtStartup;
+        ShowUsageHints = clientSettings.Pointer.ShowUsageHints;
+
+        var savedMonitor = Monitors.FirstOrDefault(
+            monitor => string.Equals(
+                monitor.Display.DisplayId,
+                clientSettings.Receiver.SelectedDisplayId,
+                StringComparison.OrdinalIgnoreCase));
+        if (savedMonitor is not null)
+        {
+            SelectedMonitor = savedMonitor;
+        }
+    }
+
+    private static string RemoveHttpsPrefix(string address) =>
+        address.TrimStart().StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? address.TrimStart()["https://".Length..]
+            : address;
 
     private void ClearReceiverSession(bool preserveAvailability = false)
     {

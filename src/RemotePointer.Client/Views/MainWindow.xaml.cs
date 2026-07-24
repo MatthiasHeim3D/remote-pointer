@@ -42,18 +42,23 @@ public partial class MainWindow : Window
         var protectedSessionStore = new ProtectedSessionStore(
             new DpapiDataProtector(),
             auditLog);
-        var receiverRelayClient = new SignalRRelayClient(
-            settings,
-            clientInstanceIdProvider,
-            expectedRole: RemotePointer.Contracts.Messages.ClientRole.Receiver,
-            sessionStore: protectedSessionStore,
-            auditLog: auditLog);
-        var presenterRelayClient = new SignalRRelayClient(
-            settings,
-            clientInstanceIdProvider,
-            expectedRole: RemotePointer.Contracts.Messages.ClientRole.Presenter,
-            sessionStore: protectedSessionStore,
-            auditLog: auditLog);
+        IRelayClient? receiverRelayClient = null;
+        IRelayClient? presenterRelayClient = null;
+        if (!string.IsNullOrWhiteSpace(settings.Server.BaseUrl))
+        {
+            receiverRelayClient = new SignalRRelayClient(
+                settings,
+                clientInstanceIdProvider,
+                expectedRole: RemotePointer.Contracts.Messages.ClientRole.Receiver,
+                sessionStore: protectedSessionStore,
+                auditLog: auditLog);
+            presenterRelayClient = new SignalRRelayClient(
+                settings,
+                clientInstanceIdProvider,
+                expectedRole: RemotePointer.Contracts.Messages.ClientRole.Presenter,
+                sessionStore: protectedSessionStore,
+                auditLog: auditLog);
+        }
         viewModel = new MainWindowViewModel(
             monitorService,
             overlayService,
@@ -79,6 +84,8 @@ public partial class MainWindow : Window
         Closed += OnClosed;
         UpdateFlyoutHeight();
     }
+
+    internal bool RequiresInitialSetup => viewModel.IsServerConfigurationMissing;
 
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
