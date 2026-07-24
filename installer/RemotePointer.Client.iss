@@ -4,9 +4,6 @@
 #ifndef PublishDir
   #error PublishDir must point to the published client.
 #endif
-#ifndef RelayRootCertificate
-  #error RelayRootCertificate must point to Caddy's public root certificate.
-#endif
 #ifndef InstallerOutputDir
   #define InstallerOutputDir "."
 #endif
@@ -33,16 +30,22 @@ RestartApplications=no
 SetupIconFile=..\icons\exe_icon.ico
 UninstallDisplayIcon={app}\RemotePointer.Client.exe
 
+#ifdef RelayRootCertificate
 [Tasks]
 Name: "trustrelay"; Description: "Trust the Remote Pointer relay certificate for this Windows account"; GroupDescription: "HTTPS certificate:"
+#endif
 
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+#ifdef RelayRootCertificate
 Source: "{#RelayRootCertificate}"; DestDir: "{app}"; DestName: "relay-root.crt"; Flags: ignoreversion
+#endif
 
 [Icons]
 Name: "{userprograms}\Remote Pointer"; Filename: "{app}\RemotePointer.Client.exe"; WorkingDir: "{app}"
 
 [Run]
+#ifdef RelayRootCertificate
 Filename: "{sys}\certutil.exe"; Parameters: "-user -f -addstore Root ""{app}\relay-root.crt"""; StatusMsg: "Trusting the relay HTTPS certificate..."; Flags: runhidden waituntilterminated; Tasks: trustrelay
+#endif
 Filename: "{app}\RemotePointer.Client.exe"; Description: "Launch Remote Pointer"; Flags: nowait postinstall skipifsilent

@@ -6,7 +6,6 @@ param(
     [Parameter(Mandatory)]
     [uri]$ServerUrl,
 
-    [Parameter(Mandatory)]
     [string]$RelayRootCertificatePath,
 
     [string]$InnoSetupCompilerPath
@@ -19,25 +18,28 @@ if ($ServerUrl.Scheme -ne [System.Uri]::UriSchemeHttps) {
     throw 'ServerUrl must use HTTPS.'
 }
 
-$resolvedCertificatePath = (Resolve-Path -LiteralPath $RelayRootCertificatePath).Path
-$certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-    $resolvedCertificatePath)
-$basicConstraints = $certificate.Extensions |
-    Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension] } |
-    Select-Object -First 1
-if ($null -eq $basicConstraints -or -not $basicConstraints.CertificateAuthority) {
-    throw 'RelayRootCertificatePath must contain a CA certificate.'
+$resolvedCertificatePath = $null
+if (-not [string]::IsNullOrWhiteSpace($RelayRootCertificatePath)) {
+    $resolvedCertificatePath = (Resolve-Path -LiteralPath $RelayRootCertificatePath).Path
+    $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+        $resolvedCertificatePath)
+    $basicConstraints = $certificate.Extensions |
+        Where-Object { $_ -is [System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension] } |
+        Select-Object -First 1
+    if ($null -eq $basicConstraints -or -not $basicConstraints.CertificateAuthority) {
+        throw 'RelayRootCertificatePath must contain a CA certificate.'
+    }
+    if ($certificate.HasPrivateKey) {
+        throw 'RelayRootCertificatePath must contain only the public certificate, never a CA private key.'
+    }
+    if ($certificate.NotBefore.ToUniversalTime() -gt [DateTime]::UtcNow) {
+        throw 'The relay root certificate is not valid yet.'
+    }
+    if ($certificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow) {
+        throw 'The relay root certificate has expired.'
+    }
+    $certificate.Dispose()
 }
-if ($certificate.HasPrivateKey) {
-    throw 'RelayRootCertificatePath must contain only the public certificate, never a CA private key.'
-}
-if ($certificate.NotBefore.ToUniversalTime() -gt [DateTime]::UtcNow) {
-    throw 'The relay root certificate is not valid yet.'
-}
-if ($certificate.NotAfter.ToUniversalTime() -le [DateTime]::UtcNow) {
-    throw 'The relay root certificate has expired.'
-}
-$certificate.Dispose()
 
 if ([string]::IsNullOrWhiteSpace($InnoSetupCompilerPath)) {
     $compilerCommand = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue
@@ -45,12 +47,16 @@ if ([string]::IsNullOrWhiteSpace($InnoSetupCompilerPath)) {
         $InnoSetupCompilerPath = $compilerCommand.Source
     }
     else {
-        $compilerCandidates = @(
-            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
-            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
-        )
-        $InnoSetupCompilerPath = $compilerCandidates |
+        $searchRoots = @(
+            (Join-Path $env:LOCALAPPDATA 'Programs')
+            $env:ProgramFiles
+            ${env:ProgramFiles(x86)}
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_) }
+        $InnoSetupCompilerPath = $searchRoots |
+            ForEach-Object { Get-ChildItem -LiteralPath $_ -Directory -Filter 'Inno Setup *' -ErrorAction SilentlyContinue } |
+            ForEach-Object { Join-Path $_.FullName 'ISCC.exe' } |
             Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+            Sort-Object -Descending |
             Select-Object -First 1
     }
 }
@@ -82,12 +88,15 @@ $settings.Server.BaseUrl = $ServerUrl.AbsoluteUri.TrimEnd('/')
 $settings | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $settingsPath -Encoding utf8
 
 New-Item -ItemType Directory -Path $installerDirectory -Force | Out-Null
-& $InnoSetupCompilerPath `
-    "/DMyAppVersion=$Version" `
-    "/DPublishDir=$publishDirectory" `
-    "/DRelayRootCertificate=$resolvedCertificatePath" `
-    "/DInstallerOutputDir=$installerDirectory" `
-    $installerScript
+$innoDefines = @(
+    "/DMyAppVersion=$Version"
+    "/DPublishDir=$publishDirectory"
+    "/DInstallerOutputDir=$installerDirectory"
+)
+if ($null -ne $resolvedCertificatePath) {
+    $innoDefines += "/DRelayRootCertificate=$resolvedCertificatePath"
+}
+& $InnoSetupCompilerPath @innoDefines $installerScript
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup failed with exit code $LASTEXITCODE."
 }
