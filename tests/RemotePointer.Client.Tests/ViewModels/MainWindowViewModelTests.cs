@@ -155,6 +155,8 @@ public sealed class MainWindowViewModelTests
                 ReceiverDiscoverable: true));
 
         Assert.True(viewModel.HasConnectedPresenter);
+        Assert.Equal("Available and connected", viewModel.AvailabilityLabel);
+        Assert.Equal("#63C5DA", viewModel.AvailabilityColor);
         Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));
         viewModel.DisconnectAllConnectionsCommand.Execute(null);
 

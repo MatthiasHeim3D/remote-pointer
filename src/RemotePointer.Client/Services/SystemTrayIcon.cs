@@ -29,7 +29,13 @@ public sealed class SystemTrayIcon : IDisposable
             Text = "Remote Pointer — Inactive",
             Visible = true,
         };
-        notifyIcon.DoubleClick += (_, _) => showWindow();
+        notifyIcon.MouseClick += (_, e) =>
+        {
+            if (e.Button == System.Windows.Forms.MouseButtons.Left)
+            {
+                showWindow();
+            }
+        };
     }
 
     public void SetStatus(string status)

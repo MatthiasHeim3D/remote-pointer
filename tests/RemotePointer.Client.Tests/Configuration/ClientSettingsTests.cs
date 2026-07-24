@@ -43,6 +43,37 @@ public sealed class ClientSettingsTests
     }
 
     [Fact]
+    public void UserPreferences_RoundTripServerAndProfile()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUserPreferences(
+            "https://saved.example.test",
+            "Ada Lovelace",
+            @"C:\Pictures\ada.png");
+        var reloaded = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal("https://saved.example.test", reloaded.Server.BaseUrl);
+        Assert.Equal("Ada Lovelace", reloaded.Profile.UserName);
+        Assert.Equal(@"C:\Pictures\ada.png", reloaded.Profile.PicturePath);
+    }
+
+    [Fact]
+    public void SaveUserPreferences_RejectsEmptyUsername()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            settings.SaveUserPreferences("https://saved.example.test", " ", null));
+
+        Assert.Contains("Username", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RelayClient_PublicApi_ExposesNoHttpHandlerOrCertificateBypassHook()
     {
         var publicConstructorParameters = typeof(SignalRRelayClient)

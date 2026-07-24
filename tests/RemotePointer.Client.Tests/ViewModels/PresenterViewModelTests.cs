@@ -28,6 +28,7 @@ public sealed class PresenterViewModelTests
         Assert.True(viewModel.ReceiverDiscoveryEnabled);
         Assert.Equal("session-visible", relay.RequestedReceiverSessionId);
         Assert.True(viewModel.IsJoinPending);
+        Assert.Equal("Receiver PC", viewModel.CurrentReceiverName);
     }
 
     [Fact]
@@ -262,6 +263,7 @@ public sealed class PresenterViewModelTests
         service.RaiseState(TargetRegionState.Pointing, "Pointing active");
 
         Assert.True(viewModel.IsPointing);
+        Assert.Equal("Stop pointing", viewModel.PointingActionLabel);
         Assert.Equal("Pointing", viewModel.StateLabel);
         Assert.Equal("Pointing active", viewModel.StatusMessage);
         Assert.False(viewModel.IsError);

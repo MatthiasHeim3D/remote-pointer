@@ -73,9 +73,12 @@ public sealed class SignalRRelayClient : IRelayClient
         }
 
         synchronizationContext = SynchronizationContext.Current;
+        var displayName = string.IsNullOrWhiteSpace(settings.Profile.UserName)
+            ? Environment.MachineName
+            : settings.Profile.UserName.Trim();
         var hubUrl = $"{ServerUrl}/hubs/pointer"
             + $"?clientInstanceId={Uri.EscapeDataString(clientInstanceId)}"
-            + $"&displayName={Uri.EscapeDataString(Environment.MachineName)}";
+            + $"&displayName={Uri.EscapeDataString(displayName)}";
         var reconnectDelays = settings.Server.ReconnectDelaysSeconds
             .Select(delay => TimeSpan.FromSeconds(delay))
             .ToArray();

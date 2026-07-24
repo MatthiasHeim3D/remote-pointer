@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.ComponentModel;
+using Microsoft.Win32;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Native;
 using RemotePointer.Client.Services;
@@ -15,6 +16,8 @@ public partial class MainWindow : Window
     private HwndSource? source;
     private readonly SystemTrayIcon trayIcon;
     private readonly MainWindowViewModel viewModel;
+    private ConnectionApprovalWindow? approvalWindow;
+    private bool suppressAutoHide;
 
     public MainWindow(IClientAuditLog? auditLog = null)
     {
@@ -47,7 +50,8 @@ public partial class MainWindow : Window
             targetRegionService,
             receiverRelayClient,
             presenterRelayClient,
-            settings.Pointer.DefaultTtlMilliseconds);
+            settings.Pointer.DefaultTtlMilliseconds,
+            settings);
         DataContext = viewModel;
 
         trayIcon = new SystemTrayIcon(ShowFromTray, ExitFromTray);
@@ -115,6 +119,8 @@ public partial class MainWindow : Window
         source = null;
         hotKeyRegistration?.Dispose();
         hotKeyRegistration = null;
+        approvalWindow?.Close();
+        approvalWindow = null;
         trayIcon.Dispose();
         viewModel.Dispose();
     }
@@ -123,6 +129,7 @@ public partial class MainWindow : Window
     {
         _ = sender;
         _ = e;
+        PositionFlyout();
         await viewModel.InitializeAsync();
         await viewModel.RestoreSessionsAsync();
     }
@@ -138,8 +145,19 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        _ = sender;
-        _ = e;
+        if (ReferenceEquals(sender, viewModel)
+            && e.PropertyName == nameof(MainWindowViewModel.HasPendingPresenter))
+        {
+            if (viewModel.HasPendingPresenter)
+            {
+                ShowConnectionApprovalPrompt();
+            }
+            else
+            {
+                approvalWindow?.Close();
+            }
+        }
+
         var status = viewModel.Presenter.IsPointing
             ? "Pointing active"
             : viewModel.Presenter.IsSessionApproved
@@ -159,15 +177,75 @@ public partial class MainWindow : Window
         _ = Dispatcher.InvokeAsync(
             () =>
             {
-                ShowInTaskbar = true;
+                if (IsVisible && IsActive)
+                {
+                    Hide();
+                    return;
+                }
+
                 Show();
                 WindowState = System.Windows.WindowState.Normal;
+                PositionFlyout();
                 Activate();
+                Focus();
             });
     }
 
     private void ExitFromTray()
     {
         _ = Dispatcher.InvokeAsync(Close);
+    }
+
+    private void OnDeactivated(object? sender, EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        if (!suppressAutoHide)
+        {
+            Hide();
+        }
+    }
+
+    private void OnBrowseProfilePicture(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        suppressAutoHide = true;
+        try
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "Choose a profile picture",
+                Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*",
+                CheckFileExists = true,
+                Multiselect = false,
+            };
+            if (dialog.ShowDialog(this) == true)
+            {
+                viewModel.ProfilePicturePath = dialog.FileName;
+            }
+        }
+        finally
+        {
+            suppressAutoHide = false;
+            Activate();
+        }
+    }
+
+    private void ShowConnectionApprovalPrompt()
+    {
+        approvalWindow?.Close();
+        approvalWindow = new ConnectionApprovalWindow(
+            viewModel.PendingPresenterName,
+            viewModel.ApprovePresenterCommand);
+        approvalWindow.Closed += (_, _) => approvalWindow = null;
+        approvalWindow.Show();
+    }
+
+    private void PositionFlyout()
+    {
+        var workArea = SystemParameters.WorkArea;
+        Left = workArea.Right - Width - 12;
+        Top = workArea.Bottom - Height - 12;
     }
 }

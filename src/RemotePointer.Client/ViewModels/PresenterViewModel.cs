@@ -32,6 +32,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private TargetRegionState state = TargetRegionState.Inactive;
     private string statusMessage;
     private string connectionMessage;
+    private string currentReceiverName = "Connected receiver";
 
     public PresenterViewModel(
         ITargetRegionService targetRegionService,
@@ -75,10 +76,10 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             _ => RefreshAvailableReceiversAsync(),
             _ => relayClient is not null && ReceiverDiscoveryEnabled && !IsSessionApproved);
         joinDiscoveredReceiverCommand = new AsyncRelayCommand(
-            _ => JoinDiscoveredReceiverAsync(),
-            _ => relayClient is not null
+            receiver => JoinDiscoveredReceiverAsync(receiver as AvailableReceiverDescriptor),
+            receiver => relayClient is not null
                 && ReceiverDiscoveryEnabled
-                && SelectedReceiver is not null
+                && (receiver is AvailableReceiverDescriptor || SelectedReceiver is not null)
                 && !IsJoinPending
                 && !IsSessionApproved);
         endSessionCommand = new AsyncRelayCommand(
@@ -135,12 +136,15 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             {
                 togglePointingCommand.RaiseCanExecuteChanged();
                 RaisePropertyChanged(nameof(IsPointing));
+                RaisePropertyChanged(nameof(PointingActionLabel));
                 RaisePropertyChanged(nameof(StateLabel));
             }
         }
     }
 
     public bool IsPointing => State == TargetRegionState.Pointing;
+
+    public string PointingActionLabel => IsPointing ? "Stop pointing" : "Enable pointing";
 
     public string StateLabel => State.ToString();
 
@@ -190,6 +194,12 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
                 togglePointingCommand.RaiseCanExecuteChanged();
             }
         }
+    }
+
+    public string CurrentReceiverName
+    {
+        get => currentReceiverName;
+        private set => SetProperty(ref currentReceiverName, value);
     }
 
     public int CapturedPointerCount
@@ -334,8 +344,13 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task JoinDiscoveredReceiverAsync()
+    private async Task JoinDiscoveredReceiverAsync(AvailableReceiverDescriptor? receiver)
     {
+        if (receiver is not null)
+        {
+            SelectedReceiver = receiver;
+        }
+
         if (relayClient is null || SelectedReceiver is null)
         {
             return;
@@ -343,12 +358,14 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
         try
         {
+            var requestedReceiver = SelectedReceiver;
             var response = await relayClient.RequestToJoinReceiverAsync(
-                SelectedReceiver.SessionId);
+                requestedReceiver.SessionId);
             HandleJoinResponse(response);
             if (response.Accepted)
             {
-                AvailableReceivers.Remove(SelectedReceiver);
+                CurrentReceiverName = requestedReceiver.DisplayName;
+                AvailableReceivers.Remove(requestedReceiver);
                 SelectedReceiver = AvailableReceivers.FirstOrDefault();
                 RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
             }
@@ -536,6 +553,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         IsJoinPending = false;
         IsSessionApproved = false;
         receiverDisplay = null;
+        CurrentReceiverName = "Connected receiver";
         RaisePropertyChanged(nameof(ReceiverDisplayShape));
         pendingAcknowledgements.Clear();
         sequenceNumber = Math.Max(sequenceNumber, CreateSequenceBase());

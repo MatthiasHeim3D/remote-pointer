@@ -4,11 +4,15 @@ namespace RemotePointer.Client.Configuration;
 
 public sealed class ClientSettings
 {
+    private string userPreferencesPath = GetDefaultUserPreferencesPath();
+
     public ServerSettings Server { get; init; } = new();
 
     public PointerSettings Pointer { get; init; } = new();
 
     public PrivacySettings Privacy { get; init; } = new();
+
+    public UserProfileSettings Profile { get; init; } = new();
 
     public static ClientSettings Load(string? baseDirectory = null)
     {
@@ -23,6 +27,9 @@ public sealed class ClientSettings
     {
         var directory = baseDirectory ?? AppContext.BaseDirectory;
         var path = Path.Combine(directory, "appsettings.json");
+        var userPreferencesPath = baseDirectory is null
+            ? GetDefaultUserPreferencesPath()
+            : Path.Combine(baseDirectory, "user-settings.json");
         ClientSettings settings;
         if (File.Exists(path))
         {
@@ -37,6 +44,9 @@ public sealed class ClientSettings
             settings = new ClientSettings();
         }
 
+        settings.userPreferencesPath = userPreferencesPath;
+        settings.ApplyUserPreferences(userPreferencesPath);
+
         if (!string.IsNullOrWhiteSpace(environmentUrl))
         {
             settings.Server.BaseUrl = environmentUrl;
@@ -44,6 +54,31 @@ public sealed class ClientSettings
 
         settings.Validate();
         return settings;
+    }
+
+    public void SaveUserPreferences(
+        string serverAddress,
+        string userName,
+        string? profilePicturePath)
+    {
+        Server.BaseUrl = serverAddress.Trim();
+        Profile.UserName = userName.Trim();
+        Profile.PicturePath = profilePicturePath?.Trim() ?? string.Empty;
+        Validate();
+
+        var parentDirectory = Path.GetDirectoryName(userPreferencesPath);
+        if (!string.IsNullOrEmpty(parentDirectory))
+        {
+            Directory.CreateDirectory(parentDirectory);
+        }
+
+        var json = JsonSerializer.Serialize(
+            new UserPreferences(Server.BaseUrl, Profile.UserName, Profile.PicturePath),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                WriteIndented = true,
+            });
+        File.WriteAllText(userPreferencesPath, json);
     }
 
     internal void Validate()
@@ -60,7 +95,46 @@ public sealed class ClientSettings
         {
             throw new InvalidOperationException("Client reconnect and pointer settings are invalid.");
         }
+
+        if (string.IsNullOrWhiteSpace(Profile.UserName) || Profile.UserName.Length > 128)
+        {
+            throw new InvalidOperationException("Username is required and must be 128 characters or fewer.");
+        }
     }
+
+    private void ApplyUserPreferences(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var preferences = JsonSerializer.Deserialize<UserPreferences>(
+            File.ReadAllText(path),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        if (preferences is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(preferences.ServerAddress))
+        {
+            Server.BaseUrl = preferences.ServerAddress;
+        }
+
+        Profile.UserName = preferences.UserName ?? string.Empty;
+        Profile.PicturePath = preferences.ProfilePicturePath ?? string.Empty;
+    }
+
+    private static string GetDefaultUserPreferencesPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RemotePointer",
+        "user-settings.json");
+
+    private sealed record UserPreferences(
+        string ServerAddress,
+        string UserName,
+        string ProfilePicturePath);
 }
 
 public sealed class ServerSettings
@@ -82,4 +156,11 @@ public sealed class PointerSettings
 public sealed class PrivacySettings
 {
     public bool LogCoordinates { get; init; }
+}
+
+public sealed class UserProfileSettings
+{
+    public string UserName { get; set; } = Environment.UserName;
+
+    public string PicturePath { get; set; } = string.Empty;
 }

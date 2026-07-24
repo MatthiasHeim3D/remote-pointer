@@ -24,6 +24,7 @@ public partial class App : System.Windows.Application
             var window = new MainWindow(auditLog);
             MainWindow = window;
             window.Show();
+            window.Hide();
         }
         catch (Exception exception)
         {

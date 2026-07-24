@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Windows.Input;
+using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
 using RemotePointer.Contracts.Messages;
@@ -16,6 +18,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IMonitorService monitorService;
     private readonly IReceiverOverlayService overlayService;
     private readonly IRelayClient? receiverRelayClient;
+    private readonly ClientSettings? clientSettings;
     private bool disposed;
     private bool isError;
     private bool isOverlayVisible;
@@ -28,6 +31,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private MonitorDescriptor? selectedMonitor;
     private string? receiverSessionId;
     private string statusMessage = "Select a monitor to begin.";
+    private bool isAvailabilityMenuOpen;
+    private bool isSettingsOpen;
+    private string profilePicturePath;
+    private string serverAddress;
+    private string userName;
 
     public MainWindowViewModel(
         IMonitorService monitorService,
@@ -35,11 +43,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ITargetRegionService? targetRegionService = null,
         IRelayClient? receiverRelayClient = null,
         IRelayClient? presenterRelayClient = null,
-        int pointerTtlMilliseconds = 2_000)
+        int pointerTtlMilliseconds = 2_000,
+        ClientSettings? clientSettings = null)
     {
         this.monitorService = monitorService ?? throw new ArgumentNullException(nameof(monitorService));
         this.overlayService = overlayService ?? throw new ArgumentNullException(nameof(overlayService));
         this.receiverRelayClient = receiverRelayClient;
+        this.clientSettings = clientSettings;
+        serverAddress = clientSettings?.Server.BaseUrl
+            ?? receiverRelayClient?.ServerUrl
+            ?? "https://localhost:7243";
+        userName = clientSettings?.Profile.UserName ?? Environment.UserName;
+        profilePicturePath = clientSettings?.Profile.PicturePath ?? string.Empty;
         this.overlayService.StateChanged += OnOverlayStateChanged;
         Presenter = new PresenterViewModel(
             targetRegionService ?? new TargetRegionService(),
@@ -67,10 +82,29 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _ => DisconnectAllConnectionsAsync(),
             _ => receiverRelayClient is not null && HasConnectedPresenter && HasReceiverSession);
         setReceiverAvailabilityCommand = new AsyncRelayCommand(
-            _ => UpdateReceiverAvailabilityAsync(),
+            async availability =>
+            {
+                if (availability is ReceiverAvailability requestedAvailability)
+                {
+                    SetReceiverAvailabilitySilently(requestedAvailability);
+                }
+
+                await UpdateReceiverAvailabilityAsync();
+            },
             _ => receiverRelayClient is not null
                 && ReceiverDiscoveryEnabled
                 && (HasReceiverSession || SelectedMonitor is not null));
+        ToggleSettingsCommand = new RelayCommand(_ =>
+        {
+            IsSettingsOpen = !IsSettingsOpen;
+            IsAvailabilityMenuOpen = false;
+        });
+        ToggleAvailabilityMenuCommand = new RelayCommand(_ =>
+        {
+            IsAvailabilityMenuOpen = !IsAvailabilityMenuOpen;
+            IsSettingsOpen = false;
+        });
+        SaveSettingsCommand = new RelayCommand(_ => SaveSettings());
 
         RefreshMonitors();
     }
@@ -130,6 +164,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (SetProperty(ref hasConnectedPresenter, value))
             {
                 disconnectAllConnectionsCommand.RaiseCanExecuteChanged();
+                RaiseAvailabilityProperties();
             }
         }
     }
@@ -164,6 +199,72 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 setReceiverAvailabilityCommand.Execute(null);
             }
+
+            RaiseAvailabilityProperties();
+        }
+    }
+
+    public string AvailabilityLabel => HasConnectedPresenter
+        ? "Available and connected"
+        : ReceiverAvailability == ReceiverAvailability.Available
+            ? "Available"
+            : "Invisible";
+
+    public string AvailabilityColor => HasConnectedPresenter
+        ? "#63C5DA"
+        : ReceiverAvailability == ReceiverAvailability.Available
+            ? "#6CCB7F"
+            : "#8B8B8B";
+
+    public bool IsAvailabilityMenuOpen
+    {
+        get => isAvailabilityMenuOpen;
+        set => SetProperty(ref isAvailabilityMenuOpen, value);
+    }
+
+    public bool IsSettingsOpen
+    {
+        get => isSettingsOpen;
+        set => SetProperty(ref isSettingsOpen, value);
+    }
+
+    public string ServerAddress
+    {
+        get => serverAddress;
+        set => SetProperty(ref serverAddress, value);
+    }
+
+    public string UserName
+    {
+        get => userName;
+        set
+        {
+            if (SetProperty(ref userName, value))
+            {
+                RaisePropertyChanged(nameof(ProfileInitials));
+            }
+        }
+    }
+
+    public string ProfilePicturePath
+    {
+        get => profilePicturePath;
+        set => SetProperty(ref profilePicturePath, value);
+    }
+
+    public string ProfileInitials
+    {
+        get
+        {
+            var parts = UserName.Split(
+                ' ',
+                StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length switch
+            {
+                0 => "?",
+                1 => parts[0][..1].ToUpperInvariant(),
+                _ => string.Concat(parts[0][0], parts[^1][0]).ToUpperInvariant(),
+            };
         }
     }
 
@@ -179,6 +280,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand ApprovePresenterCommand => approvePresenterCommand;
 
     public ICommand DisconnectAllConnectionsCommand => disconnectAllConnectionsCommand;
+
+    public ICommand SetReceiverAvailabilityCommand => setReceiverAvailabilityCommand;
+
+    public ICommand ToggleSettingsCommand { get; }
+
+    public ICommand ToggleAvailabilityMenuCommand { get; }
+
+    public ICommand SaveSettingsCommand { get; }
 
     public async Task SetReceiverAvailabilityAsync(ReceiverAvailability availability)
     {
@@ -400,6 +509,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task UpdateReceiverAvailabilityAsync()
     {
+        IsAvailabilityMenuOpen = false;
         if (receiverRelayClient is null || !CanSetReceiverAvailability)
         {
             return;
@@ -560,6 +670,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         approvePresenterCommand.RaiseCanExecuteChanged();
     }
 
+    private void SaveSettings()
+    {
+        if (clientSettings is null)
+        {
+            SetStatus("Settings are not available in this client configuration.", true);
+            return;
+        }
+
+        try
+        {
+            clientSettings.SaveUserPreferences(ServerAddress, UserName, ProfilePicturePath);
+            SetStatus("Settings saved. Restart Remote Pointer to apply server or username changes.", false);
+            IsSettingsOpen = false;
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            SetStatus($"Settings could not be saved: {exception.Message}", true);
+        }
+    }
+
     private void ClearReceiverSession()
     {
         receiverSessionId = null;
@@ -574,6 +705,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         suppressAvailabilityUpdate = true;
         ReceiverAvailability = availability;
         suppressAvailabilityUpdate = false;
+    }
+
+    private void RaiseAvailabilityProperties()
+    {
+        RaisePropertyChanged(nameof(AvailabilityLabel));
+        RaisePropertyChanged(nameof(AvailabilityColor));
     }
 
     private void RaiseReceiverSessionProperties()
