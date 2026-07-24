@@ -197,6 +197,10 @@ public static class ContractValidator
             errors,
             !string.IsNullOrWhiteSpace(request.ClientVersion) && request.ClientVersion.Length <= 64,
             nameof(request.ClientVersion));
+        if (request.Profile is not null)
+        {
+            errors.AddRange(Validate(request.Profile).Errors);
+        }
 
         return ValidationResult.Failure(errors);
     }
@@ -218,6 +222,11 @@ public static class ContractValidator
             errors,
             !string.IsNullOrWhiteSpace(request.ClientVersion) && request.ClientVersion.Length <= 64,
             nameof(request.ClientVersion));
+        if (request.Profile is not null)
+        {
+            errors.AddRange(Validate(request.Profile).Errors);
+        }
+
         return ValidationResult.Failure(errors);
     }
 

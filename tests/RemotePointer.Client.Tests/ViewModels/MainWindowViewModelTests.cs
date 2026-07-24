@@ -109,12 +109,15 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.InitializeAsync();
         await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
+        byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
         var presenter = new PresenterDescriptor(
             "connection-1",
             "presenter-1",
             "Presenter PC",
-            "1.0.0");
+            "1.0.0",
+            picture);
         relay.RaiseJoinRequest(presenter);
+        Assert.Equal(picture, viewModel.PendingPresenterProfilePicturePng);
         viewModel.ApprovePresenterCommand.Execute(null);
         var pointer = new PointerEventMessage(
             Guid.NewGuid(),

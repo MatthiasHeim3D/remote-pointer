@@ -328,6 +328,7 @@ public partial class MainWindow : Window
         approvalWindow?.Close();
         approvalWindow = new ConnectionApprovalWindow(
             viewModel.PendingPresenterName,
+            viewModel.PendingPresenterProfilePicturePng,
             viewModel.ApprovePendingPresenterAsync,
             viewModel.RejectPendingPresenterAsync);
         approvalWindow.Closed += (_, _) => approvalWindow = null;

@@ -247,7 +247,8 @@ public sealed class SessionManager : ISessionManager
                 request.ClientInstanceId,
                 applicationInstanceId,
                 displayName,
-                request.ClientVersion);
+                request.ClientVersion,
+                request.Profile?.PicturePng);
         }
     }
 
@@ -291,7 +292,8 @@ public sealed class SessionManager : ISessionManager
                 request.ClientInstanceId,
                 applicationInstanceId,
                 displayName,
-                request.ClientVersion);
+                request.ClientVersion,
+                request.Profile?.PicturePng);
         }
     }
 
@@ -812,7 +814,8 @@ public sealed class SessionManager : ISessionManager
         string clientInstanceId,
         string? applicationInstanceId,
         string displayName,
-        string clientVersion)
+        string clientVersion,
+        byte[]? profilePicturePng)
     {
         applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
             ? clientInstanceId
@@ -841,7 +844,8 @@ public sealed class SessionManager : ISessionManager
             connectionId,
             clientInstanceId,
             displayName,
-            clientVersion);
+            clientVersion,
+            profilePicturePng is null ? null : [.. profilePicturePng]);
         session.PendingPresenter = presenter;
         connections.Add(
             connectionId,
@@ -1005,7 +1009,10 @@ public sealed class SessionManager : ISessionManager
         session.IsDiscoverable,
         session.Presenters.Values
             .Select(presenter => new ConnectedPresenterDescriptor(
-                presenter.Descriptor.DisplayName))
+                presenter.Descriptor.DisplayName,
+                presenter.Descriptor.ProfilePicturePng is null
+                    ? null
+                    : [.. presenter.Descriptor.ProfilePicturePng]))
             .OrderBy(presenter => presenter.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray(),
         session.Receiver.ClientInstanceId,

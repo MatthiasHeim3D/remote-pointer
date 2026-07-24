@@ -55,6 +55,32 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void PresenterProfilePicture_IsIncludedInApprovalAndConnectedState()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+        var join = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(
+                created.SessionId,
+                "presenter-client",
+                "1.0.0",
+                new ClientProfile(picture)),
+            "presenter-connection",
+            "Presenter Machine");
+        var approval = context.Manager.ApprovePresenter(
+            created.SessionId,
+            join.Presenter!.ConnectionId,
+            "receiver-connection");
+
+        Assert.Equal(picture, join.Presenter.ProfilePicturePng);
+        var connectedPresenter = Assert.Single(approval.State.ConnectedPresenters!);
+        Assert.Equal("Presenter Machine", connectedPresenter.DisplayName);
+        Assert.Equal(picture, connectedPresenter.ProfilePicturePng);
+    }
+
+    [Fact]
     public void Discovery_ExcludesOnlySameApplicationInstanceAndIncludesProfilePicture()
     {
         var context = CreateContext(receiverDiscoveryEnabled: true);

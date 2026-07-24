@@ -4,4 +4,5 @@ public sealed record PresenterDescriptor(
     string ConnectionId,
     string ClientInstanceId,
     string DisplayName,
-    string ClientVersion);
+    string ClientVersion,
+    byte[]? ProfilePicturePng = null);

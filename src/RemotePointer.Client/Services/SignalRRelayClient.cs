@@ -254,7 +254,8 @@ public sealed class SignalRRelayClient : IRelayClient
         var request = new DirectJoinRequest(
             selectedSessionId,
             clientInstanceId,
-            GetClientVersion());
+            GetClientVersion(),
+            clientProfile);
         var response = await connection.InvokeAsync<JoinResponse>(
                 "RequestToJoinReceiverWithDisplayName",
                 request,

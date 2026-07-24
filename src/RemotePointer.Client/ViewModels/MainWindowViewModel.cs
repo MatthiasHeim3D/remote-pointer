@@ -195,6 +195,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public string PendingPresenterName => pendingPresenter?.DisplayName ?? "No presenter waiting for approval.";
 
+    public byte[]? PendingPresenterProfilePicturePng => pendingPresenter?.ProfilePicturePng;
+
     public bool HasPendingPresenter => pendingPresenter is not null;
 
     public bool HasConnectedPresenter
@@ -867,6 +869,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         pendingPresenter = presenter;
         RaisePropertyChanged(nameof(PendingPresenterName));
+        RaisePropertyChanged(nameof(PendingPresenterProfilePicturePng));
         RaisePropertyChanged(nameof(HasPendingPresenter));
         approvePresenterCommand.RaiseCanExecuteChanged();
     }
