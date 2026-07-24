@@ -17,6 +17,8 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <views:ProfilePictureConverter x:Key="ProfilePictureConverter" />
+        <views:ProfilePictureFallbackVisibilityConverter
+            x:Key="ProfilePictureFallbackVisibilityConverter" />
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI" />
@@ -287,6 +289,7 @@
                                                                FontFamily="Segoe MDL2 Assets"
                                                                FontSize="16"
                                                                Foreground="#60CDFF"
+                                                               Visibility="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                                                Text="&#xE77B;" />
                                                     <Image Source="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
                                                            Stretch="UniformToFill" />
@@ -578,6 +581,7 @@
                                 <TextBlock HorizontalAlignment="Center"
                                            VerticalAlignment="Center"
                                            FontWeight="SemiBold"
+                                           Visibility="{Binding ProfilePicturePath, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                            Text="{Binding ProfileInitials}" />
                                 <Image Source="{Binding ProfilePicturePath}"
                                        Stretch="UniformToFill" />
@@ -683,6 +687,7 @@
                                                    VerticalAlignment="Center"
                                                    FontWeight="SemiBold"
                                                    Foreground="White"
+                                                   Visibility="{Binding ProfilePicturePath, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                                    Text="{Binding ProfileInitials}" />
                                         <Image Source="{Binding ProfilePicturePath}"
                                                Stretch="UniformToFill" />
