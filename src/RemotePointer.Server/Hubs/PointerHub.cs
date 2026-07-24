@@ -13,7 +13,7 @@ public sealed class PointerHub(
         new(sessionManager.ReceiverDiscoveryEnabled);
 
     public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers() =>
-        sessionManager.GetAvailableReceivers();
+        sessionManager.GetAvailableReceivers(GetApplicationInstanceId());
 
     public override Task OnConnectedAsync()
     {
@@ -48,6 +48,16 @@ public sealed class PointerHub(
     }
 
     public async Task<CreateSessionResponse> CreateReceiverSession(DisplayDescriptor display)
+        => await CreateReceiverSessionCore(display, new ClientProfile()).ConfigureAwait(false);
+
+    public async Task<CreateSessionResponse> CreateReceiverSessionWithProfile(
+        DisplayDescriptor display,
+        ClientProfile profile)
+        => await CreateReceiverSessionCore(display, profile).ConfigureAwait(false);
+
+    private async Task<CreateSessionResponse> CreateReceiverSessionCore(
+        DisplayDescriptor display,
+        ClientProfile profile)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         try
@@ -56,7 +66,9 @@ public sealed class PointerHub(
                 display,
                 Context.ConnectionId,
                 clientInstanceId,
-                GetDisplayName(clientInstanceId));
+                GetDisplayName(clientInstanceId),
+                GetApplicationInstanceId(),
+                profile);
             await Groups.AddToGroupAsync(
                     Context.ConnectionId,
                     GroupName(response.SessionId))
@@ -108,7 +120,8 @@ public sealed class PointerHub(
             var result = sessionManager.RequestToJoinSession(
                 request,
                 Context.ConnectionId,
-                GetDisplayName(clientInstanceId));
+                GetDisplayName(clientInstanceId),
+                GetApplicationInstanceId());
             if (result.Response.Accepted
                 && result.ReceiverConnectionId is not null
                 && result.Presenter is not null)
@@ -153,7 +166,8 @@ public sealed class PointerHub(
             var result = sessionManager.RequestToJoinReceiver(
                 request,
                 Context.ConnectionId,
-                GetDisplayName(clientInstanceId));
+                GetDisplayName(clientInstanceId),
+                GetApplicationInstanceId());
             if (result.Response.Accepted
                 && result.ReceiverConnectionId is not null
                 && result.Presenter is not null)
@@ -290,7 +304,10 @@ public sealed class PointerHub(
 
         try
         {
-            var result = sessionManager.ResumeSession(Context.ConnectionId, request);
+            var result = sessionManager.ResumeSession(
+                Context.ConnectionId,
+                request,
+                GetApplicationInstanceId());
             if (result.ReplacedConnectionId is not null)
             {
                 await Groups.RemoveFromGroupAsync(
@@ -418,6 +435,14 @@ public sealed class PointerHub(
         }
 
         return clientInstanceId;
+    }
+
+    private string GetApplicationInstanceId()
+    {
+        var applicationInstanceId = GetOptionalQueryValue("applicationInstanceId");
+        return string.IsNullOrWhiteSpace(applicationInstanceId) || applicationInstanceId.Length > 128
+            ? GetRequiredClientInstanceId()
+            : applicationInstanceId;
     }
 
     private string GetDisplayName(string fallback)

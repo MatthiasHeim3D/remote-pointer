@@ -55,6 +55,55 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void Discovery_ExcludesOnlySameApplicationInstanceAndIncludesProfilePicture()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        var created = context.Manager.CreateReceiverSession(
+            CreateDisplay(),
+            "receiver-connection",
+            "shared-machine-profile",
+            "Receiver Machine",
+            "receiver-application",
+            new ClientProfile(picture));
+
+        Assert.Empty(context.Manager.GetAvailableReceivers("receiver-application"));
+        var visibleToOtherInstance = Assert.Single(
+            context.Manager.GetAvailableReceivers("other-application"));
+
+        Assert.Equal(created.SessionId, visibleToOtherInstance.SessionId);
+        Assert.Equal("receiver-application", visibleToOtherInstance.ApplicationInstanceId);
+        Assert.Equal(picture, visibleToOtherInstance.ProfilePicturePng);
+    }
+
+    [Fact]
+    public void DirectJoin_RejectsSelfButAllowsAnotherInstanceWithSameMachineProfile()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = context.Manager.CreateReceiverSession(
+            CreateDisplay(),
+            "receiver-connection",
+            "shared-machine-profile",
+            "Receiver Machine",
+            "receiver-application");
+
+        var selfJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"),
+            "self-presenter-connection",
+            "This Instance",
+            "receiver-application");
+        var otherInstanceJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"),
+            "other-presenter-connection",
+            "Other Instance",
+            "other-application");
+
+        Assert.False(selfJoin.Response.Accepted);
+        Assert.Contains("itself", selfJoin.Response.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.True(otherInstanceJoin.Response.Accepted);
+    }
+
+    [Fact]
     public void ReceiverDisplayUpdate_IsReturnedForApprovedPresenter()
     {
         var context = CreateContext();
@@ -323,6 +372,32 @@ public sealed class SessionManagerTests
                     credential.ClientInstanceId,
                     credential.SessionToken,
                     credential.ReconnectToken)));
+    }
+
+    [Fact]
+    public void ReceiverResume_UpdatesApplicationInstanceUsedForSelfFiltering()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = context.Manager.CreateReceiverSession(
+            CreateDisplay(),
+            "receiver-connection",
+            "receiver-client",
+            "Receiver",
+            "old-application");
+        context.Manager.Disconnect("receiver-connection");
+
+        _ = context.Manager.ResumeSession(
+            "receiver-reconnected",
+            new SessionResumeRequest(
+                created.Credential.SessionId,
+                created.Credential.Role,
+                created.Credential.ClientInstanceId,
+                created.Credential.SessionToken,
+                created.Credential.ReconnectToken),
+            "new-application");
+
+        Assert.Empty(context.Manager.GetAvailableReceivers("new-application"));
+        Assert.Single(context.Manager.GetAvailableReceivers("old-application"));
     }
 
     [Fact]

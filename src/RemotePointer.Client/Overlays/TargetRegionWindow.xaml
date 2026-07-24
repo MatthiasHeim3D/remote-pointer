@@ -16,78 +16,171 @@
         PreviewMouseDown="OnPreviewMouseDown"
         PreviewMouseMove="OnPreviewMouseMove"
         PreviewMouseUp="OnPreviewMouseUp">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="#E8E8E8" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="14,0" />
+            <Setter Property="Background" Value="#60CDFF" />
+            <Setter Property="Foreground" Value="#101010" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.88" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.72" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SecondaryButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource PrimaryButtonStyle}">
+            <Setter Property="Background" Value="#3A3A3A" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+        </Style>
+    </Window.Resources>
+
     <Border x:Name="OuterBorder"
-            BorderBrush="#FFCC4D"
+            BorderBrush="#60CDFF"
             BorderThickness="3"
-            Background="#22007ACC">
+            Background="#16000000"
+            CornerRadius="6">
         <Grid x:Name="TargetSurface">
             <Canvas x:Name="RippleCanvas" IsHitTestVisible="False" />
             <Canvas x:Name="EditorCanvas" IsHitTestVisible="False" />
 
             <Border x:Name="CalibrationPanel"
+                    MaxWidth="540"
+                    Margin="12"
+                    Padding="14"
+                    HorizontalAlignment="Left"
                     VerticalAlignment="Top"
-                    Margin="10"
-                    Padding="10"
-                    Background="#E6111720"
-                    BorderBrush="#627087"
+                    Background="#F2242424"
+                    BorderBrush="#505050"
                     BorderThickness="1"
-                    CornerRadius="6">
+                    CornerRadius="8">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20"
+                                      Direction="270"
+                                      Opacity="0.45"
+                                      ShadowDepth="5" />
+                </Border.Effect>
                 <StackPanel>
                     <Border x:Name="DragSurface"
-                            Padding="4"
+                            Margin="-4,-4,-4,0"
+                            Padding="4,4,4,9"
                             Background="Transparent"
+                            Cursor="SizeAll"
                             MouseLeftButtonDown="OnDragSurfaceMouseLeftButtonDown">
-                        <DockPanel>
-                            <TextBlock DockPanel.Dock="Right"
-                                       Foreground="#AAB5C7"
-                                       Text="Drag here to move" />
-                            <TextBlock Foreground="White"
-                                       FontWeight="SemiBold"
-                                       Text="Calibrate target area" />
-                        </DockPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="28"
+                                    Height="28"
+                                    Background="#60CDFF"
+                                    CornerRadius="6">
+                                <TextBlock HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           Foreground="#17242A"
+                                           Text="&#xE7C9;" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="10,0,16,0">
+                                <TextBlock FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Text="Calibrate target area" />
+                                <TextBlock FontSize="10"
+                                           Foreground="#AFAFAF"
+                                           Text="Move and resize this window over the shared screen" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="2"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="16"
+                                       Foreground="#AFAFAF"
+                                       Text="&#xE7C2;"
+                                       ToolTip="Drag to move" />
+                        </Grid>
                     </Border>
-                    <TextBlock x:Name="DimensionsText"
-                               Margin="4,7,4,0"
-                               Foreground="#E9EDF5" />
-                    <TextBlock x:Name="ExpectedAspectText"
-                               Margin="4,3,4,0"
-                               Foreground="#AAB5C7" />
-                    <TextBlock x:Name="AspectWarningText"
-                               Margin="4,5,4,0"
-                               Foreground="#FF9D9D"
-                               FontWeight="SemiBold"
-                               TextWrapping="Wrap"
-                               Visibility="Collapsed" />
-                    <WrapPanel Margin="4,9,0,0">
+
+                    <Border Margin="0,2,0,10"
+                            Padding="10,8"
+                            Background="#2D2D2D"
+                            CornerRadius="5">
+                        <StackPanel>
+                            <TextBlock x:Name="DimensionsText"
+                                       FontSize="12"
+                                       Foreground="#F0F0F0" />
+                            <TextBlock x:Name="ExpectedAspectText"
+                                       Margin="0,3,0,0"
+                                       FontSize="11"
+                                       Foreground="#AFAFAF" />
+                            <TextBlock x:Name="AspectWarningText"
+                                       Margin="0,5,0,0"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#FF9D9D"
+                                       TextWrapping="Wrap"
+                                       Visibility="Collapsed" />
+                        </StackPanel>
+                    </Border>
+
+                    <WrapPanel Margin="0,0,0,11">
                         <CheckBox x:Name="AspectLockCheckBox"
-                                  Margin="0,0,14,8"
-                                  Foreground="White"
-                                  VerticalAlignment="Center"
+                                  Margin="0,0,18,5"
                                   Checked="OnAspectLockChanged"
                                   Unchecked="OnAspectLockChanged"
                                   Content="Lock aspect ratio" />
                         <CheckBox x:Name="AllowOverrideCheckBox"
-                                  Margin="0,0,14,8"
+                                  Margin="0,0,10,5"
                                   Foreground="#FFB3B3"
-                                  VerticalAlignment="Center"
                                   Content="Allow mismatch"
                                   Visibility="Collapsed" />
                     </WrapPanel>
+
                     <WrapPanel>
-                        <Button Margin="4,0,8,4"
-                                Padding="12,6"
+                        <Button Margin="0,0,8,6"
+                                Style="{StaticResource PrimaryButtonStyle}"
                                 Click="OnLockClicked"
                                 Content="Lock region" />
-                        <Button Margin="0,0,8,4"
-                                Padding="12,6"
+                        <Button Margin="0,0,8,6"
+                                Style="{StaticResource SecondaryButtonStyle}"
                                 Click="OnFullscreenClicked"
                                 Content="Fullscreen" />
-                        <Button Margin="0,0,8,4"
-                                Padding="12,6"
+                        <Button Margin="0,0,8,6"
+                                Style="{StaticResource SecondaryButtonStyle}"
                                 Click="OnResetClicked"
                                 Content="Reset" />
-                        <Button Margin="0,0,4,4"
-                                Padding="12,6"
+                        <Button Margin="0,0,0,6"
+                                Style="{StaticResource SecondaryButtonStyle}"
                                 Click="OnCancelClicked"
                                 Content="Cancel" />
                     </WrapPanel>
@@ -95,9 +188,9 @@
             </Border>
 
             <primitives:Thumb x:Name="ResizeThumb"
-                              Width="24"
-                              Height="24"
-                              Margin="0,0,3,3"
+                              Width="26"
+                              Height="26"
+                              Margin="0,0,4,4"
                               HorizontalAlignment="Right"
                               VerticalAlignment="Bottom"
                               Cursor="SizeNWSE"
@@ -106,12 +199,12 @@
                               DragDelta="OnResizeThumbDragDelta">
                 <primitives:Thumb.Template>
                     <ControlTemplate TargetType="primitives:Thumb">
-                        <Grid Background="#DDFFCC4D">
-                            <Path Margin="5"
+                        <Border Background="#E660CDFF" CornerRadius="5">
+                            <Path Margin="6"
                                   Data="M 0 12 L 12 0 M 5 12 L 12 5"
-                                  Stroke="#202020"
+                                  Stroke="#17242A"
                                   StrokeThickness="2" />
-                        </Grid>
+                        </Border>
                     </ControlTemplate>
                 </primitives:Thumb.Template>
             </primitives:Thumb>

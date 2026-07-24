@@ -18,6 +18,53 @@ public sealed class PointerHubIntegrationTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
+    public async Task Discovery_HidesAndRejectsSelfButAllowsSameMachinePeerWithProfile()
+    {
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        await using var receiver = CreateConnection(
+            factory,
+            "shared-machine-profile",
+            "Receiver",
+            "receiver-application");
+        await using var selfProbe = CreateConnection(
+            factory,
+            "shared-machine-profile",
+            "Self probe",
+            "receiver-application");
+        await using var otherInstance = CreateConnection(
+            factory,
+            "shared-machine-profile",
+            "Other instance",
+            "other-application");
+        await receiver.StartAsync();
+        await selfProbe.StartAsync();
+        await otherInstance.StartAsync();
+        byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSessionWithProfile",
+            CreateDisplay(),
+            new ClientProfile(picture));
+
+        Assert.Empty(
+            await selfProbe.InvokeAsync<AvailableReceiverDescriptor[]>(
+                "GetAvailableReceivers"));
+        var visible = Assert.Single(
+            await otherInstance.InvokeAsync<AvailableReceiverDescriptor[]>(
+                "GetAvailableReceivers"));
+        Assert.Equal(picture, visible.ProfilePicturePng);
+        var selfJoin = await selfProbe.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"));
+        var peerJoin = await otherInstance.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"));
+
+        Assert.False(selfJoin.Accepted);
+        Assert.True(peerJoin.Accepted);
+    }
+
+    [Fact]
     public async Task Discovery_ReceiverDisconnectAll_PreservesReceiverAvailability()
     {
         using var factory = CreateFactory(receiverDiscoveryEnabled: true);
@@ -377,10 +424,13 @@ public sealed class PointerHubIntegrationTests
     private static HubConnection CreateConnection(
         WebApplicationFactory<Program> factory,
         string clientInstanceId,
-        string displayName)
+        string displayName,
+        string? applicationInstanceId = null)
     {
         var server = factory.Server;
+        applicationInstanceId ??= clientInstanceId;
         var query = $"?clientInstanceId={Uri.EscapeDataString(clientInstanceId)}"
+            + $"&applicationInstanceId={Uri.EscapeDataString(applicationInstanceId)}"
             + $"&displayName={Uri.EscapeDataString(displayName)}";
         var url = new Uri(server.BaseAddress, $"/hubs/pointer{query}");
         return new HubConnectionBuilder()

@@ -50,12 +50,20 @@ public sealed class SessionManager : ISessionManager
         DisplayDescriptor display,
         string connectionId,
         string clientInstanceId,
-        string receiverDisplayName)
+        string receiverDisplayName,
+        string? applicationInstanceId = null,
+        ClientProfile? profile = null)
     {
+        applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
+            ? clientInstanceId
+            : applicationInstanceId;
+        profile ??= new ClientProfile();
         EnsureIdentifier(connectionId, nameof(connectionId));
         EnsureIdentifier(clientInstanceId, nameof(clientInstanceId));
+        EnsureIdentifier(applicationInstanceId, nameof(applicationInstanceId));
         EnsureIdentifier(receiverDisplayName, nameof(receiverDisplayName));
         EnsureValid(ContractValidator.Validate(display), "invalid_display");
+        EnsureValid(ContractValidator.Validate(profile), "invalid_profile");
 
         lock (syncRoot)
         {
@@ -83,6 +91,8 @@ public sealed class SessionManager : ISessionManager
                 secretGenerator.HashSecret(sessionSecret),
                 display,
                 receiverDisplayName,
+                applicationInstanceId,
+                profile.PicturePng is null ? null : [.. profile.PicturePng],
                 receiver,
                 new SequenceNumberTracker(sessionOptions.SequenceWindowSize),
                 new PointerTokenBucket(
@@ -113,7 +123,8 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers()
+    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers(
+        string? excludedApplicationInstanceId = null)
     {
         if (!sessionOptions.ReceiverDiscoveryEnabled)
         {
@@ -129,11 +140,19 @@ public sealed class SessionManager : ISessionManager
                     && session.ExpiresAt > now
                     && session.Receiver.ConnectionId is not null
                     && session.PendingPresenter is null
-                    && session.Presenter is null)
+                    && session.Presenter is null
+                    && !string.Equals(
+                        session.ApplicationInstanceId,
+                        excludedApplicationInstanceId,
+                        StringComparison.Ordinal))
                 .OrderBy(session => session.ReceiverDisplayName, StringComparer.OrdinalIgnoreCase)
                 .Select(session => new AvailableReceiverDescriptor(
                     session.Id,
-                    session.ReceiverDisplayName))
+                    session.ReceiverDisplayName,
+                    session.ApplicationInstanceId,
+                    session.ProfilePicturePng is null
+                        ? null
+                        : [.. session.ProfilePicturePng]))
                 .ToArray();
         }
     }
@@ -168,7 +187,8 @@ public sealed class SessionManager : ISessionManager
     public JoinSessionResult RequestToJoinSession(
         JoinRequest request,
         string connectionId,
-        string displayName)
+        string displayName,
+        string? applicationInstanceId = null)
     {
         EnsureIdentifier(connectionId, nameof(connectionId));
         EnsureIdentifier(displayName, nameof(displayName));
@@ -216,6 +236,7 @@ public sealed class SessionManager : ISessionManager
                 session,
                 connectionId,
                 request.ClientInstanceId,
+                applicationInstanceId,
                 displayName,
                 request.ClientVersion);
         }
@@ -224,7 +245,8 @@ public sealed class SessionManager : ISessionManager
     public JoinSessionResult RequestToJoinReceiver(
         DirectJoinRequest request,
         string connectionId,
-        string displayName)
+        string displayName,
+        string? applicationInstanceId = null)
     {
         EnsureIdentifier(connectionId, nameof(connectionId));
         EnsureIdentifier(displayName, nameof(displayName));
@@ -258,6 +280,7 @@ public sealed class SessionManager : ISessionManager
                 session,
                 connectionId,
                 request.ClientInstanceId,
+                applicationInstanceId,
                 displayName,
                 request.ClientVersion);
         }
@@ -422,7 +445,10 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public ResumeSessionResult ResumeSession(string connectionId, SessionResumeRequest request)
+    public ResumeSessionResult ResumeSession(
+        string connectionId,
+        SessionResumeRequest request,
+        string? applicationInstanceId = null)
     {
         EnsureIdentifier(connectionId, nameof(connectionId));
         EnsureValid(ContractValidator.Validate(request), "invalid_resume_request");
@@ -460,6 +486,12 @@ public sealed class SessionManager : ISessionManager
             var newReconnectToken = secretGenerator.GenerateSecret();
             participant.ConnectionId = connectionId;
             participant.ReconnectTokenHash = secretGenerator.HashSecret(newReconnectToken);
+            if (participant.Role == ClientRole.Receiver
+                && !string.IsNullOrWhiteSpace(applicationInstanceId))
+            {
+                EnsureIdentifier(applicationInstanceId, nameof(applicationInstanceId));
+                session.ApplicationInstanceId = applicationInstanceId;
+            }
             connections.Add(
                 connectionId,
                 new ConnectionMembership(session.Id, participant.Role, Approved: true));
@@ -633,9 +665,21 @@ public sealed class SessionManager : ISessionManager
         SessionRecord session,
         string connectionId,
         string clientInstanceId,
+        string? applicationInstanceId,
         string displayName,
         string clientVersion)
     {
+        applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
+            ? clientInstanceId
+            : applicationInstanceId;
+        if (string.Equals(
+                session.ApplicationInstanceId,
+                applicationInstanceId,
+                StringComparison.Ordinal))
+        {
+            return RejectedJoin("A client cannot connect to itself.");
+        }
+
         if (session.Presenter is not null || session.PendingPresenter is not null)
         {
             return RejectedJoin("The session already has a presenter request.");
@@ -790,6 +834,8 @@ public sealed class SessionManager : ISessionManager
         string sessionSecretHash,
         DisplayDescriptor receiverDisplay,
         string receiverDisplayName,
+        string applicationInstanceId,
+        byte[]? profilePicturePng,
         Participant receiver,
         SequenceNumberTracker sequenceNumbers,
         PointerTokenBucket rateLimiter)
@@ -807,6 +853,10 @@ public sealed class SessionManager : ISessionManager
         internal DisplayDescriptor ReceiverDisplay { get; set; } = receiverDisplay;
 
         internal string ReceiverDisplayName { get; } = receiverDisplayName;
+
+        internal string ApplicationInstanceId { get; set; } = applicationInstanceId;
+
+        internal byte[]? ProfilePicturePng { get; } = profilePicturePng;
 
         internal Participant Receiver { get; } = receiver;
 

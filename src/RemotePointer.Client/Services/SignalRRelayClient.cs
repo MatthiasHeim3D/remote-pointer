@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Net.Http;
 using System.IO;
+using System.Windows.Media.Imaging;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +18,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private readonly IClientAuditLog? auditLog;
     private readonly HubConnection connection;
     private readonly string clientInstanceId;
+    private readonly ClientProfile clientProfile;
     private readonly ClientRole? expectedRole;
     private readonly IProtectedSessionStore? sessionStore;
     private readonly SynchronizationContext? synchronizationContext;
@@ -57,6 +59,8 @@ public sealed class SignalRRelayClient : IRelayClient
 
         ServerUrl = settings.Server.BaseUrl.TrimEnd('/');
         clientInstanceId = clientInstanceIdProvider.GetClientInstanceId();
+        var applicationInstanceId = clientInstanceIdProvider.GetApplicationInstanceId();
+        clientProfile = CreateClientProfile(settings.Profile.PicturePath);
         this.expectedRole = expectedRole;
         this.sessionStore = sessionStore;
         this.auditLog = auditLog;
@@ -78,6 +82,7 @@ public sealed class SignalRRelayClient : IRelayClient
             : settings.Profile.UserName.Trim();
         var hubUrl = $"{ServerUrl}/hubs/pointer"
             + $"?clientInstanceId={Uri.EscapeDataString(clientInstanceId)}"
+            + $"&applicationInstanceId={Uri.EscapeDataString(applicationInstanceId)}"
             + $"&displayName={Uri.EscapeDataString(displayName)}";
         var reconnectDelays = settings.Server.ReconnectDelaysSeconds
             .Select(delay => TimeSpan.FromSeconds(delay))
@@ -208,8 +213,9 @@ public sealed class SignalRRelayClient : IRelayClient
         DiscardRecoveredCredential(ClientRole.Receiver);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var response = await connection.InvokeAsync<CreateSessionResponse>(
-                "CreateReceiverSession",
+                "CreateReceiverSessionWithProfile",
                 display,
+                clientProfile,
                 cancellationToken)
             .ConfigureAwait(false);
         SetSession(response.SessionId, response.Credential);
@@ -672,6 +678,41 @@ public sealed class SignalRRelayClient : IRelayClient
     {
         var version = Assembly.GetExecutingAssembly().GetName().Version;
         return version is null ? "1.0.0" : version.ToString(3);
+    }
+
+    private static ClientProfile CreateClientProfile(string? picturePath)
+    {
+        if (string.IsNullOrWhiteSpace(picturePath) || !File.Exists(picturePath))
+        {
+            return new ClientProfile();
+        }
+
+        try
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.DecodePixelWidth = 64;
+            bitmap.UriSource = new Uri(picturePath, UriKind.Absolute);
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using var stream = new MemoryStream();
+            encoder.Save(stream);
+            return stream.Length <= ContractValidator.MaximumProfilePictureBytes
+                ? new ClientProfile(stream.ToArray())
+                : new ClientProfile();
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or NotSupportedException
+                or UnauthorizedAccessException
+                or UriFormatException)
+        {
+            return new ClientProfile();
+        }
     }
 
     private static ClientSettings ValidateProductionSettings(ClientSettings settings)

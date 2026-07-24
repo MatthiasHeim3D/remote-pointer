@@ -4,6 +4,7 @@ namespace RemotePointer.Client.Services;
 
 public sealed class ClientInstanceIdProvider : IClientInstanceIdProvider
 {
+    private readonly string applicationInstanceId = Guid.NewGuid().ToString("N");
     private readonly object syncRoot = new();
     private string? cachedIdentifier;
 
@@ -36,4 +37,6 @@ public sealed class ClientInstanceIdProvider : IClientInstanceIdProvider
             return cachedIdentifier;
         }
     }
+
+    public string GetApplicationInstanceId() => applicationInstanceId;
 }

@@ -12,9 +12,12 @@ public interface ISessionManager
         DisplayDescriptor display,
         string connectionId,
         string clientInstanceId,
-        string receiverDisplayName);
+        string receiverDisplayName,
+        string? applicationInstanceId = null,
+        ClientProfile? profile = null);
 
-    IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers();
+    IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers(
+        string? excludedApplicationInstanceId = null);
 
     bool SetReceiverDiscoverable(
         string sessionId,
@@ -24,12 +27,14 @@ public interface ISessionManager
     JoinSessionResult RequestToJoinSession(
         JoinRequest request,
         string connectionId,
-        string displayName);
+        string displayName,
+        string? applicationInstanceId = null);
 
     JoinSessionResult RequestToJoinReceiver(
         DirectJoinRequest request,
         string connectionId,
-        string displayName);
+        string displayName,
+        string? applicationInstanceId = null);
 
     ReceiverDisplayUpdateResult UpdateReceiverDisplay(
         string sessionId,
@@ -47,7 +52,10 @@ public interface ISessionManager
         string connectionId,
         PointerAcknowledgement acknowledgement);
 
-    ResumeSessionResult ResumeSession(string connectionId, SessionResumeRequest request);
+    ResumeSessionResult ResumeSession(
+        string connectionId,
+        SessionResumeRequest request,
+        string? applicationInstanceId = null);
 
     SessionTerminationResult DisconnectPresenters(
         string sessionId,

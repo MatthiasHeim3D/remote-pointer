@@ -130,8 +130,8 @@ public partial class MainWindow : Window
         _ = sender;
         _ = e;
         PositionFlyout();
-        await viewModel.InitializeAsync();
         await viewModel.RestoreSessionsAsync();
+        await viewModel.InitializeAsync();
     }
 
     private void OnWindowStateChanged(object? sender, EventArgs e)

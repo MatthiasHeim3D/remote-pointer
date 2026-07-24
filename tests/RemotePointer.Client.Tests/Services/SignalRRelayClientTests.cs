@@ -194,6 +194,8 @@ public sealed class SignalRRelayClientTests
         : IClientInstanceIdProvider
     {
         public string GetClientInstanceId() => value;
+
+        public string GetApplicationInstanceId() => $"{value}-application";
     }
 
     private sealed class ReversingDataProtector : IDataProtector

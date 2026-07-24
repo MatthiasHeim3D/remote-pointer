@@ -6,6 +6,7 @@ public static class ContractValidator
 {
     public const int MaximumPointerTextLength = 256;
     public const int MaximumPathPointsPerEvent = 128;
+    public const int MaximumProfilePictureBytes = 20 * 1_024;
 
     public static ValidationResult Validate(
         PointerEventMessage? message,
@@ -135,6 +136,38 @@ public static class ContractValidator
             errors,
             display.RotationDegrees is 0 or 90 or 180 or 270,
             nameof(display.RotationDegrees));
+
+        return ValidationResult.Failure(errors);
+    }
+
+    public static ValidationResult Validate(ClientProfile? profile)
+    {
+        if (profile is null)
+        {
+            return RequiredMessage(nameof(profile));
+        }
+
+        var errors = new List<ValidationError>();
+        AddRange(
+            errors,
+            profile.PicturePng is null
+                || profile.PicturePng.Length <= MaximumProfilePictureBytes,
+            nameof(profile.PicturePng));
+        if (profile.PicturePng is { Length: > 0 } picture)
+        {
+            AddValue(
+                errors,
+                picture.Length >= 8
+                    && picture[0] == 0x89
+                    && picture[1] == 0x50
+                    && picture[2] == 0x4E
+                    && picture[3] == 0x47
+                    && picture[4] == 0x0D
+                    && picture[5] == 0x0A
+                    && picture[6] == 0x1A
+                    && picture[7] == 0x0A,
+                nameof(profile.PicturePng));
+        }
 
         return ValidationResult.Failure(errors);
     }

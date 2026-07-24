@@ -36,6 +36,17 @@ public sealed class ContractValidatorTests
     }
 
     [Fact]
+    public void Validate_ClientProfileAcceptsBoundedPngAndRejectsOtherPayloads()
+    {
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+        Assert.True(ContractValidator.Validate(new ClientProfile(png)).IsValid);
+        Assert.False(ContractValidator.Validate(new ClientProfile([1, 2, 3])).IsValid);
+        Assert.False(ContractValidator.Validate(
+            new ClientProfile(new byte[ContractValidator.MaximumProfilePictureBytes + 1])).IsValid);
+    }
+
+    [Fact]
     public void Validate_AcceptsNormalizedPairingCodeInJoinRequest()
     {
         var request = new JoinRequest("ab2d-4e", ClientRole.Presenter, "client-id", "1.0.0");

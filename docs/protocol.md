@@ -33,7 +33,8 @@ The presenter sends each captured pointer event immediately as a `PointerEventMe
 - `PointerAcknowledgement`: event identity and receiver display time.
 - `JoinRequest`: one-time pairing code, requested role, durable client-instance identity, and version.
 - `DirectJoinRequest`: opaque session identity for an explicitly visible receiver, durable client-instance identity, and version.
-- `AvailableReceiverDescriptor`: opaque session identity and receiver-selected machine label; no pairing code, display metadata, or credential.
+- `ClientProfile`: optional PNG profile thumbnail capped to fit within the relay message limit.
+- `AvailableReceiverDescriptor`: opaque session identity, receiver-selected label, process-scoped application identity, and an optional bounded PNG profile thumbnail; no pairing code, display metadata, or credential.
 - `RelayCapabilities`: server-controlled receiver-discovery availability.
 - `SessionStateMessage`: session identity, approval state, current receiver display, expiry, and discovery state.
 - `SessionCredential`: role-restricted session token, rotating reconnect token, durable client identity, and expiry.
@@ -56,9 +57,10 @@ When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explici
 
 ## SignalR surface
 
-Clients connect to `/hubs/pointer` with a `clientInstanceId` query parameter and an optional approval `displayName`. Implemented client-to-server methods are:
+Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a process-scoped `applicationInstanceId`, and an optional approval `displayName`. The process-scoped identity prevents a running client from discovering or joining its own receiver session while still allowing separate client processes on the same machine. Implemented client-to-server methods are:
 
 - `CreateReceiverSession(DisplayDescriptor)`
+- `CreateReceiverSessionWithProfile(DisplayDescriptor, ClientProfile)`
 - `GetRelayCapabilities()`
 - `GetAvailableReceivers()`
 - `SetReceiverDiscoverable(sessionId, discoverable)`
