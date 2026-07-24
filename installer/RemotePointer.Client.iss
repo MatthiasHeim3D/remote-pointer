@@ -49,3 +49,22 @@ Name: "{userprograms}\Remote Pointer"; Filename: "{app}\RemotePointer.Client.exe
 Filename: "{sys}\certutil.exe"; Parameters: "-user -f -addstore Root ""{app}\relay-root.crt"""; StatusMsg: "Trusting the relay HTTPS certificate..."; Flags: runhidden waituntilterminated; Tasks: trustrelay
 #endif
 Filename: "{app}\RemotePointer.Client.exe"; Description: "Launch Remote Pointer"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  UserDataDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    UserDataDir := ExpandConstant('{localappdata}\RemotePointer');
+    if DirExists(UserDataDir) and not UninstallSilent() then
+    begin
+      if MsgBox('Also remove your saved Remote Pointer settings and profile data?' + #13#10 + UserDataDir,
+           mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        DelTree(UserDataDir, True, True, True);
+      end;
+    end;
+  end;
+end;

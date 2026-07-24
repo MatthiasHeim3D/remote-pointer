@@ -46,7 +46,7 @@ Uninstall from Windows Settings, or run:
 & "$env:LOCALAPPDATA\Programs\Remote Pointer\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
 ```
 
-Uninstall leaves `%LocalAppData%\RemotePointer` audit and protected recovery data, and it leaves the trusted relay root in the user's certificate store. That avoids breaking another installed version. Remove the root manually only after no internal service depends on it.
+An interactive uninstall asks whether to also delete `%LocalAppData%\RemotePointer` (saved settings, profile picture cache, audit and protected recovery data); answering No, or uninstalling silently (`/SUPPRESSMSGBOXES`), leaves it in place so another installed version keeps working. The uninstaller never touches the trusted relay root in the user's certificate store — remove that manually, and only after no internal service depends on it.
 
 ## Installer smoke test
 
