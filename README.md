@@ -82,6 +82,10 @@ It starts a local HTTPS relay and two clients and shuts everything down when bot
 - [Client deployment](docs/deployment.md) and [Server deployment](docs/server-deployment.md) — building the installer and hosting the relay
 - [Dependencies](docs/dependencies.md) and [Test matrix](docs/test-matrix.md)
 
+## Development
+
+Remote Pointer was developed with the use of AI coding agents.
+
 ## License
 
 Released under the [MIT License](LICENSE).
