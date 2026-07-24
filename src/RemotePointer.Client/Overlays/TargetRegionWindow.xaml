@@ -178,21 +178,6 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="PointingExitHint"
-                    Margin="0,12,12,0"
-                    Padding="9,5"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Background="#99000000"
-                    CornerRadius="4"
-                    IsHitTestVisible="False"
-                    Opacity="0.5"
-                    Visibility="Collapsed">
-                <TextBlock FontSize="11"
-                           Foreground="#DDF5F5F5"
-                           Text="ESC to Exit" />
-            </Border>
-
             <Border x:Name="PointingUsageHint"
                     Width="260"
                     Margin="12,0,0,12"
@@ -231,6 +216,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Text="Left click" />
                         <TextBlock Grid.Column="1" Text="Highlight" />
@@ -244,7 +230,11 @@
                         <TextBlock Grid.Row="4" Grid.Column="1" Text="Rectangle" />
                         <TextBlock Grid.Row="5" Text="Shift + right drag" />
                         <TextBlock Grid.Row="5" Grid.Column="1" Text="Circle" />
+                        <TextBlock Grid.Row="6" Text="ESC" />
+                        <TextBlock Grid.Row="6" Grid.Column="1" Text="to Exit" />
                     </Grid>
+                    <TextBlock Margin="0,6,0,0"
+                               Text="&#x1F6C8; Hide usage hints in settings" />
                 </StackPanel>
             </Border>
 

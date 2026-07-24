@@ -67,7 +67,8 @@ public sealed class ClientSettings
         int? maximumSenderConnections = null,
         bool? launchAtStartup = null,
         string? selectedDisplayId = null,
-        bool? showUsageHints = null)
+        bool? showUsageHints = null,
+        bool? receiverAvailable = null)
     {
         Server.BaseUrl = serverAddress.Trim();
         Profile.UserName = userName.Trim();
@@ -85,7 +86,23 @@ public sealed class ClientSettings
         {
             Pointer.ShowUsageHints = showUsageHints.Value;
         }
+        if (receiverAvailable.HasValue)
+        {
+            Receiver.IsAvailable = receiverAvailable.Value;
+        }
         Validate();
+
+        WriteUserPreferences();
+    }
+
+    public void SaveReceiverAvailability(bool isAvailable)
+    {
+        Receiver.IsAvailable = isAvailable;
+        WriteUserPreferences();
+    }
+
+    private void WriteUserPreferences()
+    {
 
         var parentDirectory = Path.GetDirectoryName(userPreferencesPath);
         if (!string.IsNullOrEmpty(parentDirectory))
@@ -101,7 +118,8 @@ public sealed class ClientSettings
                 Receiver.MaximumSenderConnections,
                 Startup.LaunchAtStartup,
                 Receiver.SelectedDisplayId,
-                ShowUsageHints: Pointer.ShowUsageHints),
+                Pointer.ShowUsageHints,
+                Receiver.IsAvailable),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -162,6 +180,7 @@ public sealed class ClientSettings
             ? 2
             : preferences.MaximumSenderConnections;
         Receiver.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
+        Receiver.IsAvailable = preferences.ReceiverAvailable;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
         Pointer.ShowUsageHints = preferences.ShowUsageHints;
     }
@@ -178,7 +197,8 @@ public sealed class ClientSettings
         int MaximumSenderConnections = 2,
         bool LaunchAtStartup = false,
         string SelectedDisplayId = "",
-        bool ShowUsageHints = true);
+        bool ShowUsageHints = true,
+        bool ReceiverAvailable = false);
 }
 
 public sealed class ServerSettings
@@ -216,6 +236,8 @@ public sealed class ReceiverSettings
     public int MaximumSenderConnections { get; set; } = 2;
 
     public string SelectedDisplayId { get; set; } = string.Empty;
+
+    public bool IsAvailable { get; set; }
 }
 
 public sealed class StartupSettings

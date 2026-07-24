@@ -210,6 +210,13 @@
             <Setter Property="SelectionBrush" Value="#39789C" />
             <Setter Property="CaretBrush" Value="White" />
         </Style>
+
+        <Style x:Key="SettingsSectionHeaderStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,22,0,10" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+        </Style>
     </Window.Resources>
 
     <Border Margin="8"
@@ -569,6 +576,7 @@
                              ItemsSource="{Binding ConnectedPresenters}"
                              Background="Transparent"
                              BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
@@ -670,27 +678,18 @@
                         <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
                     </ScrollViewer.Resources>
                     <StackPanel>
-                    <TextBlock Margin="0,0,0,18"
-                               Foreground="#AFAFAF"
-                               Text="Connection and profile" />
-
-                    <TextBlock Margin="0,0,0,6" Text="Receiving screen" />
-                    <ComboBox Height="36"
-                              Padding="8,5"
-                              ItemsSource="{Binding Monitors}"
-                              SelectedItem="{Binding SelectedMonitor}"
-                              DisplayMemberPath="SelectionLabel"
-                              SelectionChanged="OnReceivingScreenSelectionChanged"
-                              IsEnabled="{Binding CanSelectMonitor}" />
-
-                    <TextBlock Margin="0,16,0,6" Text="Server address" />
+                    <TextBlock Margin="0,0,0,10"
+                               Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Connection" />
+                    <TextBlock Margin="0,0,0,6" Text="Server address" />
                     <TextBox Text="{Binding ServerAddress, UpdateSourceTrigger=PropertyChanged}" />
 
-                    <TextBlock Margin="0,16,0,6" Text="Username" />
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Profile" />
+                    <TextBlock Margin="0,0,0,6" Text="Username" />
                     <TextBox MaxLength="128"
                              Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" />
-
-                    <TextBlock Margin="0,16,0,6" Text="User profile picture" />
+                    <TextBlock Margin="0,16,0,6" Text="Profile picture" />
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="44" />
@@ -729,6 +728,16 @@
                                 Content="Browse" />
                     </Grid>
 
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Receiver" />
+                    <TextBlock Margin="0,0,0,6" Text="Receiving screen" />
+                    <ComboBox Height="36"
+                              Padding="8,5"
+                              ItemsSource="{Binding Monitors}"
+                              SelectedItem="{Binding SelectedMonitor}"
+                              DisplayMemberPath="SelectionLabel"
+                              SelectionChanged="OnReceivingScreenSelectionChanged"
+                              IsEnabled="{Binding CanSelectMonitor}" />
                     <TextBlock Margin="0,16,0,6" Text="Maximum simultaneous connections" />
                     <Grid Height="38">
                         <Grid.ColumnDefinitions>
@@ -772,24 +781,18 @@
                                Foreground="#858585"
                                Text="Default: 2. This limit applies when a receiver session starts." />
 
-                    <TextBlock Margin="0,20,0,0"
-                               FontSize="14"
-                               FontWeight="SemiBold"
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
                                Text="Input Area" />
-                    <CheckBox Margin="0,10,0,0"
-                              Style="{StaticResource ToggleSwitchStyle}"
+                    <CheckBox Style="{StaticResource ToggleSwitchStyle}"
                               IsChecked="{Binding ShowUsageHints}"
                               Content="Show usage hints" />
 
-                    <TextBlock Margin="0,20,0,0"
-                               FontSize="14"
-                               FontWeight="SemiBold"
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
                                Text="Application" />
-                    <CheckBox Margin="0,10,0,0"
+                    <CheckBox Margin="0,0,0,8"
                               Style="{StaticResource ToggleSwitchStyle}"
                               IsChecked="{Binding IsLaunchAtStartup}"
                               Content="Launch at startup" />
-
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

@@ -1,4 +1,5 @@
 using RemotePointer.Client.Native;
+using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
 using RemotePointer.Client.Tests.Fakes;
 using RemotePointer.Client.ViewModels;
@@ -9,6 +10,32 @@ namespace RemotePointer.Client.Tests.ViewModels;
 
 public sealed class MainWindowViewModelTests
 {
+    [Fact]
+    public async Task Initialize_RestoresSavedAvailableState()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        var settings = new ClientSettings
+        {
+            Receiver = new ReceiverSettings
+            {
+                IsAvailable = true,
+            },
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay,
+            clientSettings: settings);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(ReceiverAvailability.Available, viewModel.ReceiverAvailability);
+        Assert.True(viewModel.HasReceiverSession);
+        Assert.True(relay.IsDiscoverable);
+    }
+
     [Fact]
     public async Task ReceiverDiscoveryCapability_ControlsVisibilityAndServerUpdate()
     {

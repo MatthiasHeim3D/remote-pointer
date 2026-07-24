@@ -57,7 +57,8 @@ public sealed class ClientSettingsTests
             maximumSenderConnections: 4,
             launchAtStartup: true,
             selectedDisplayId: "display-2",
-            showUsageHints: false);
+            showUsageHints: false,
+            receiverAvailable: true);
         var reloaded = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://saved.example.test", reloaded.Server.BaseUrl);
@@ -67,6 +68,7 @@ public sealed class ClientSettingsTests
         Assert.True(reloaded.Startup.LaunchAtStartup);
         Assert.Equal("display-2", reloaded.Receiver.SelectedDisplayId);
         Assert.False(reloaded.Pointer.ShowUsageHints);
+        Assert.True(reloaded.Receiver.IsAvailable);
     }
 
     [Fact]
@@ -80,6 +82,19 @@ public sealed class ClientSettingsTests
             settings.SaveUserPreferences("https://saved.example.test", " ", null));
 
         Assert.Contains("Username", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SaveReceiverAvailability_PersistsSelectionImmediately()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveReceiverAvailability(true);
+        var reloaded = ClientSettings.Load(directory.Path, null);
+
+        Assert.True(reloaded.Receiver.IsAvailable);
     }
 
     [Fact]

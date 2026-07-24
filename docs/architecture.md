@@ -38,7 +38,7 @@ Markers are local-only Phase 2 test visuals. Up to five expanding rings can be v
 
 Pointing mode reuses the exact calibrated top-level window bounds with transparent content and a subtle border. Because the pointer window exists only over the target rectangle, normal input outside it is unaffected. WPF distinguishes a left click, left-drag path, Shift+left-drag line, Shift+left-click text annotation, right-drag rectangle, and Shift+right-drag circle. Gestures are rendered locally, normalized through the shared `CoordinateMapper`, and never forwarded or injected into the underlying application. A dispatcher-driven sender delivers updates at roughly 60 Hz. Freehand updates batch every mouse sample collected between frames, while a low-frequency keepalive preserves stationary gestures until button release.
 
-The control window registers `Ctrl+Alt+P` with `RegisterHotKey`; no keyboard or mouse hook is installed. The target window accepts keyboard input only for Escape and an explicitly opened text annotation editor. Enter finalizes that editor into non-editable plain text. Inactive mode closes the target window entirely.
+The control window registers `Ctrl+Alt+P` with `RegisterHotKey`; no keyboard or mouse hook is installed. The target window accepts keyboard input only for Escape, the usage-help `H` shortcut, and an explicitly opened text annotation editor. Enter finalizes that editor into non-editable plain text. Inactive mode closes the target window entirely.
 
 ## Phase 4 design
 

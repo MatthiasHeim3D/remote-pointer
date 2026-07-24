@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.Win32;
 using RemotePointer.Client.Configuration;
@@ -13,7 +14,12 @@ namespace RemotePointer.Client.Views;
 public partial class MainWindow : Window
 {
     private const double ExpandedHeight = 520d;
-    private const double ConnectedSenderHeight = 200d;
+    private const double SenderSessionHeight = 200d;
+    private const double AvailableClientsBaseHeight = 244d;
+    private const double AvailableClientRowHeight = 64d;
+    private const double ConnectedClientsBaseHeight = 306d;
+    private const double ConnectedClientRowHeight = 54d;
+    private const int MaximumVisibleClientRows = 4;
     private GlobalHotKeyRegistration? hotKeyRegistration;
     private HwndSource? source;
     private readonly SystemTrayIcon trayIcon;
@@ -62,6 +68,8 @@ public partial class MainWindow : Window
         trayIcon = new SystemTrayIcon(ShowFromTray, ExitFromTray);
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged += OnViewModelPropertyChanged;
+        viewModel.Presenter.AvailableReceivers.CollectionChanged += OnClientCollectionChanged;
+        viewModel.ConnectedPresenters.CollectionChanged += OnClientCollectionChanged;
         viewModel.ServerAddressChangeRequested += OnServerAddressChangeRequested;
         viewModel.RelayReinitializationRequested += OnRelayReinitializationRequested;
         StateChanged += OnWindowStateChanged;
@@ -69,6 +77,7 @@ public partial class MainWindow : Window
 
         SourceInitialized += OnSourceInitialized;
         Closed += OnClosed;
+        UpdateFlyoutHeight();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -122,6 +131,8 @@ public partial class MainWindow : Window
         StateChanged -= OnWindowStateChanged;
         viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         viewModel.Presenter.PropertyChanged -= OnViewModelPropertyChanged;
+        viewModel.Presenter.AvailableReceivers.CollectionChanged -= OnClientCollectionChanged;
+        viewModel.ConnectedPresenters.CollectionChanged -= OnClientCollectionChanged;
         viewModel.ServerAddressChangeRequested -= OnServerAddressChangeRequested;
         viewModel.RelayReinitializationRequested -= OnRelayReinitializationRequested;
         source?.RemoveHook(WindowMessageHook);
@@ -193,15 +204,37 @@ public partial class MainWindow : Window
 
     private void UpdateFlyoutHeight()
     {
-        var compact = (viewModel.Presenter.IsSessionApproved || viewModel.Presenter.IsJoinPending)
-            && !viewModel.HasConnectedPresenter
-            && !viewModel.IsSettingsOpen;
-        Height = compact ? ConnectedSenderHeight : ExpandedHeight;
+        Height = viewModel.IsSettingsOpen
+            ? ExpandedHeight
+            : viewModel.HasConnectedPresenter
+                ? CalculateClientListHeight(
+                    ConnectedClientsBaseHeight,
+                    ConnectedClientRowHeight,
+                    viewModel.ConnectedPresenters.Count)
+                : (viewModel.Presenter.IsSessionApproved || viewModel.Presenter.IsJoinPending)
+                    ? SenderSessionHeight
+                    : CalculateClientListHeight(
+                        AvailableClientsBaseHeight,
+                        AvailableClientRowHeight,
+                        viewModel.Presenter.AvailableReceivers.Count);
         if (IsLoaded)
         {
             PositionFlyout();
         }
     }
+
+    private void OnClientCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        UpdateFlyoutHeight();
+    }
+
+    internal static double CalculateClientListHeight(
+        double baseHeight,
+        double rowHeight,
+        int clientCount) => baseHeight
+        + (Math.Clamp(clientCount, 1, MaximumVisibleClientRows) - 1) * rowHeight;
 
     private void ShowFromTray()
     {

@@ -90,7 +90,6 @@ public partial class TargetRegionWindow : Window
         isPointingMode = true;
         isUsageHelpCollapsed = false;
         CalibrationPanel.Visibility = Visibility.Collapsed;
-        PointingExitHint.Visibility = ShowUsageHints ? Visibility.Visible : Visibility.Collapsed;
         UpdateUsageHelpVisibility();
         ResizeThumb.Visibility = Visibility.Collapsed;
         OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92));

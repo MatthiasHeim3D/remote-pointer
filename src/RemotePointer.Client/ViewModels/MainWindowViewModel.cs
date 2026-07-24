@@ -28,7 +28,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isOverlayVisible;
     private bool hasConnectedPresenter;
     private bool receiverDiscoveryEnabled;
-    private ReceiverAvailability receiverAvailability = ReceiverAvailability.Invisible;
+    private ReceiverAvailability receiverAvailability;
     private PresenterDescriptor? pendingPresenter;
     private string receiverConnectionMessage;
     private MonitorDescriptor? selectedMonitor;
@@ -68,6 +68,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         userName = clientSettings?.Profile.UserName ?? Environment.UserName;
         profilePicturePath = clientSettings?.Profile.PicturePath ?? string.Empty;
         maximumSenderConnections = clientSettings?.Receiver.MaximumSenderConnections ?? 2;
+        receiverAvailability = clientSettings?.Receiver.IsAvailable == true
+            ? ReceiverAvailability.Available
+            : ReceiverAvailability.Invisible;
         isLaunchAtStartup = startupRegistrationService?.IsEnabled
             ?? clientSettings?.Startup.LaunchAtStartup
             ?? false;
@@ -380,6 +383,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         SetReceiverAvailabilitySilently(availability);
+        SaveReceiverAvailabilityPreference(availability);
         await UpdateReceiverAvailabilityAsync(availability, previousAvailability);
     }
 
@@ -400,6 +404,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         await presenterInitialization;
+        if (ReceiverAvailability == ReceiverAvailability.Available && !HasReceiverSession)
+        {
+            await UpdateReceiverAvailabilityAsync(
+                ReceiverAvailability.Available,
+                ReceiverAvailability.Invisible);
+        }
     }
 
     public async Task RestoreSessionsAsync()
@@ -915,7 +925,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 MaximumSenderConnections,
                 IsLaunchAtStartup,
                 SelectedMonitor?.Display.DisplayId,
-                ShowUsageHints);
+                ShowUsageHints,
+                ReceiverAvailability == ReceiverAvailability.Available);
             Presenter.SetShowUsageHints(ShowUsageHints);
             startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
             SetStatus("Settings saved.", false);
@@ -971,6 +982,24 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void SetReceiverAvailabilitySilently(ReceiverAvailability availability)
     {
         ReceiverAvailability = availability;
+    }
+
+    private void SaveReceiverAvailabilityPreference(ReceiverAvailability availability)
+    {
+        if (clientSettings is null)
+        {
+            return;
+        }
+
+        try
+        {
+            clientSettings.SaveReceiverAvailability(
+                availability == ReceiverAvailability.Available);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"Receiver availability preference could not be saved: {exception.Message}", true);
+        }
     }
 
     private void ScheduleAvailabilityRetry()
