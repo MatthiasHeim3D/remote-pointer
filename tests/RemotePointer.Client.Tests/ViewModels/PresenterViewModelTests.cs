@@ -33,6 +33,9 @@ public sealed class PresenterViewModelTests
         Assert.True(viewModel.IsJoinPending);
         Assert.Equal("Receiver PC", viewModel.CurrentReceiverName);
         Assert.Equal(new byte[] { 1, 2, 3 }, viewModel.CurrentReceiverProfilePicturePng);
+        Assert.Equal(
+            "Request sent. Waiting for approval.",
+            viewModel.SenderConnectionStatusLabel);
     }
 
     [Fact]

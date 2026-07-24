@@ -14,6 +14,11 @@ public sealed record ApprovePresenterResult(
     SessionCredential PresenterCredential,
     SessionStateMessage State);
 
+public sealed record RejectPresenterResult(
+    string SessionId,
+    string PresenterConnectionId,
+    string ReceiverConnectionId);
+
 public enum PointerRelayDisposition
 {
     Accepted,

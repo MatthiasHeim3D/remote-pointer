@@ -222,6 +222,42 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
+    public async Task ReceiverRejection_NotifiesPendingPresenterAndRestoresAvailability()
+    {
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        await using var receiver = CreateConnection(factory, "receiver-reject", "Receiver");
+        await using var presenter = CreateConnection(factory, "presenter-reject", "Presenter");
+        var joinRequested = CompletionSource<PresenterDescriptor>();
+        var rejected = CompletionSource<string>();
+        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
+        presenter.On<string>("SessionEnded", rejected.SetResult);
+        await receiver.StartAsync();
+        await presenter.StartAsync();
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSessionWithSettings",
+            CreateDisplay(),
+            new ClientProfile(),
+            2);
+        var join = await presenter.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-reject", "1.0.0"));
+        Assert.True(join.Accepted);
+        var pending = await joinRequested.Task.WaitAsync(TestTimeout);
+
+        await receiver.InvokeAsync("RejectPresenter", created.SessionId, pending.ConnectionId);
+
+        Assert.Contains(
+            "declined",
+            await rejected.Task.WaitAsync(TestTimeout),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(
+                await presenter.InvokeAsync<AvailableReceiverDescriptor[]>(
+                    "GetAvailableReceivers")).SessionId);
+    }
+
+    [Fact]
     public async Task Discovery_ReceiverDisconnectAll_PreservesReceiverAvailability()
     {
         using var factory = CreateFactory(receiverDiscoveryEnabled: true);

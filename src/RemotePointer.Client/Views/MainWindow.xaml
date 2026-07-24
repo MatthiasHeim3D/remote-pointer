@@ -218,7 +218,7 @@
                             <Setter Property="Visibility" Value="Visible" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Presenter.IsJoinPending}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -367,6 +367,9 @@
                                 <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding Presenter.IsJoinPending}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding HasConnectedPresenter}" Value="True">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
@@ -483,12 +486,22 @@
                         <Button Grid.Column="3"
                                 Width="38"
                                 Height="38"
-                                Style="{StaticResource IconButtonStyle}"
                                 Background="#C42B1C"
                                 Foreground="White"
                                 Command="{Binding Presenter.EndSessionCommand}"
                                 Content="&#xE711;"
-                                ToolTip="Disconnect from receiver" />
+                                ToolTip="Disconnect from receiver">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                     </Grid>
                 </Grid>
 

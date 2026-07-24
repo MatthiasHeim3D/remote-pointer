@@ -94,7 +94,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         RefreshMonitorsCommand = new RelayCommand(_ => RefreshMonitors());
         approvePresenterCommand = new AsyncRelayCommand(
-            _ => ApprovePresenterAsync(),
+            _ => ApprovePendingPresenterAsync(),
             _ => receiverRelayClient is not null
                 && pendingPresenter is not null
                 && HasReceiverSession
@@ -570,7 +570,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task ApprovePresenterAsync()
+    public async Task ApprovePendingPresenterAsync()
     {
         if (receiverRelayClient is null || receiverSessionId is null || pendingPresenter is null)
         {
@@ -588,6 +588,28 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetStatus($"The presenter could not be approved: {exception.Message}", true);
+        }
+    }
+
+    public async Task RejectPendingPresenterAsync()
+    {
+        if (receiverRelayClient is null || receiverSessionId is null || pendingPresenter is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await receiverRelayClient.RejectPresenterAsync(
+                receiverSessionId,
+                pendingPresenter.ConnectionId);
+            SetStatus($"Declined {pendingPresenter.DisplayName}.", false);
+            SetPendingPresenter(null);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"The presenter request could not be declined: {exception.Message}", true);
+            throw;
         }
     }
 

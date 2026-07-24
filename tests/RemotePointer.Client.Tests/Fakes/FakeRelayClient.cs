@@ -49,6 +49,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public PresenterDescriptor? ApprovedPresenter { get; private set; }
 
+    public PresenterDescriptor? RejectedPresenter { get; private set; }
+
     public int DisconnectAllConnectionsCount { get; private set; }
 
     public PointerEventMessage? SentPointer { get; private set; }
@@ -154,6 +156,21 @@ internal sealed class FakeRelayClient : IRelayClient
         _ = sessionId;
         _ = cancellationToken;
         ApprovedPresenter = new PresenterDescriptor(
+            presenterConnectionId,
+            "presenter-id",
+            "Presenter",
+            "1.0.0");
+        return Task.CompletedTask;
+    }
+
+    public Task RejectPresenterAsync(
+        string sessionId,
+        string presenterConnectionId,
+        CancellationToken cancellationToken = default)
+    {
+        _ = sessionId;
+        _ = cancellationToken;
+        RejectedPresenter = new PresenterDescriptor(
             presenterConnectionId,
             "presenter-id",
             "Presenter",

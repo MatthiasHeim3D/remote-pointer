@@ -63,6 +63,11 @@ public interface IRelayClient : IAsyncDisposable
         string presenterConnectionId,
         CancellationToken cancellationToken = default);
 
+    Task RejectPresenterAsync(
+        string sessionId,
+        string presenterConnectionId,
+        CancellationToken cancellationToken = default);
+
     Task DisconnectAllConnectionsAsync(CancellationToken cancellationToken = default);
 
     Task<bool> SendPointerAsync(

@@ -217,6 +217,29 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void RejectPresenter_RemovesPendingMembershipAndAllowsAnotherRequest()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        var firstJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"),
+            "presenter-connection-one",
+            "Presenter One");
+
+        var rejection = context.Manager.RejectPresenter(
+            created.SessionId,
+            firstJoin.Presenter!.ConnectionId,
+            "receiver-connection");
+        var secondJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"),
+            "presenter-connection-two",
+            "Presenter Two");
+
+        Assert.Equal("presenter-connection-one", rejection.PresenterConnectionId);
+        Assert.True(secondJoin.Response.Accepted);
+    }
+
+    [Fact]
     public void ApprovedPresenter_CanRelayPointerOnlyToReceiver()
     {
         var context = CreateContext();

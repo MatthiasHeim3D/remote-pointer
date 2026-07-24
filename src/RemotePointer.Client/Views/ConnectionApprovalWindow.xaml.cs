@@ -1,16 +1,20 @@
 using System.Windows;
-using System.Windows.Input;
 
 namespace RemotePointer.Client.Views;
 
 public partial class ConnectionApprovalWindow : Window
 {
-    private readonly ICommand approveCommand;
+    private readonly Func<Task> approveAsync;
+    private readonly Func<Task> rejectAsync;
 
-    public ConnectionApprovalWindow(string presenterName, ICommand approveCommand)
+    public ConnectionApprovalWindow(
+        string presenterName,
+        Func<Task> approveAsync,
+        Func<Task> rejectAsync)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(presenterName);
-        this.approveCommand = approveCommand ?? throw new ArgumentNullException(nameof(approveCommand));
+        this.approveAsync = approveAsync ?? throw new ArgumentNullException(nameof(approveAsync));
+        this.rejectAsync = rejectAsync ?? throw new ArgumentNullException(nameof(rejectAsync));
         InitializeComponent();
         PresenterNameText.Text = $"{presenterName} wants to connect";
     }
@@ -25,22 +29,45 @@ public partial class ConnectionApprovalWindow : Window
         Activate();
     }
 
-    private void OnApproveClicked(object sender, RoutedEventArgs e)
+    private async void OnApproveClicked(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
-        if (approveCommand.CanExecute(null))
+        IsEnabled = false;
+        try
         {
-            approveCommand.Execute(null);
+            await approveAsync();
+            if (IsVisible)
+            {
+                Close();
+            }
         }
-
-        Close();
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 
-    private void OnNotNowClicked(object sender, RoutedEventArgs e)
+    private async void OnNotNowClicked(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
-        Close();
+        IsEnabled = false;
+        try
+        {
+            await rejectAsync();
+            if (IsVisible)
+            {
+                Close();
+            }
+        }
+        catch
+        {
+            // The view model reports the relay error and keeps the request available to retry.
+        }
+        finally
+        {
+            IsEnabled = true;
+        }
     }
 }

@@ -54,6 +54,11 @@ public interface ISessionManager
         string presenterConnectionId,
         string receiverConnectionId);
 
+    RejectPresenterResult RejectPresenter(
+        string sessionId,
+        string presenterConnectionId,
+        string receiverConnectionId);
+
     PointerRelayResult AcceptPointer(string connectionId, PointerEventMessage pointerEvent);
 
     AcknowledgementRelayResult AcceptAcknowledgement(

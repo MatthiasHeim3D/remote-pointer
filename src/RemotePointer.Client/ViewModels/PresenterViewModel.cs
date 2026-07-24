@@ -170,7 +170,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public string SenderConnectionStatusLabel => IsSessionApproved
         ? "Connected"
-        : "Approval pending";
+        : "Request sent. Waiting for approval.";
 
     public string StateLabel => State.ToString();
 
@@ -401,7 +401,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         _ = sender;
         _ = e;
-        if (!IsSessionApproved && SenderRoleEnabled)
+        if (!IsSessionApproved && !IsJoinPending && SenderRoleEnabled)
         {
             _ = RefreshAvailableReceiversAsync();
         }
@@ -424,15 +424,17 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             var requestedReceiver = SelectedReceiver;
             var response = await relayClient.RequestToJoinReceiverAsync(
                 requestedReceiver.SessionId);
-            HandleJoinResponse(response);
             if (response.Accepted)
             {
                 CurrentReceiverName = requestedReceiver.DisplayName;
-                CurrentReceiverProfilePicturePng = requestedReceiver.ProfilePicturePng;
+                CurrentReceiverProfilePicturePng = requestedReceiver.ProfilePicturePng is null
+                    ? null
+                    : [.. requestedReceiver.ProfilePicturePng];
                 AvailableReceivers.Remove(requestedReceiver);
                 SelectedReceiver = AvailableReceivers.FirstOrDefault();
                 RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
             }
+            HandleJoinResponse(response);
         }
         catch (Exception exception)
         {

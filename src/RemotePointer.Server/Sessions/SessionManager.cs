@@ -432,6 +432,44 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
+    public RejectPresenterResult RejectPresenter(
+        string sessionId,
+        string presenterConnectionId,
+        string receiverConnectionId)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+        EnsureIdentifier(presenterConnectionId, nameof(presenterConnectionId));
+        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+
+        lock (syncRoot)
+        {
+            var session = GetActiveSession(sessionId);
+            EnsureMembership(
+                receiverConnectionId,
+                sessionId,
+                ClientRole.Receiver,
+                requireApproved: true);
+            var pending = session.PendingPresenter;
+            if (pending is null
+                || !string.Equals(
+                    pending.ConnectionId,
+                    presenterConnectionId,
+                    StringComparison.Ordinal))
+            {
+                throw new SessionOperationException(
+                    "presenter_not_pending",
+                    "The selected presenter no longer has a pending request.");
+            }
+
+            session.PendingPresenter = null;
+            connections.Remove(presenterConnectionId);
+            return new RejectPresenterResult(
+                sessionId,
+                presenterConnectionId,
+                receiverConnectionId);
+        }
+    }
+
     public PointerRelayResult AcceptPointer(
         string connectionId,
         PointerEventMessage pointerEvent)

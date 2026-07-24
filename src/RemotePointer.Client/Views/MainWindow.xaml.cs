@@ -328,7 +328,8 @@ public partial class MainWindow : Window
         approvalWindow?.Close();
         approvalWindow = new ConnectionApprovalWindow(
             viewModel.PendingPresenterName,
-            viewModel.ApprovePresenterCommand);
+            viewModel.ApprovePendingPresenterAsync,
+            viewModel.RejectPendingPresenterAsync);
         approvalWindow.Closed += (_, _) => approvalWindow = null;
         approvalWindow.Show();
     }

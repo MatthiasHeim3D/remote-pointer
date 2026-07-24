@@ -182,6 +182,31 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task PendingPresenter_CanBeExplicitlyRejected()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateReceiverRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
+        var presenter = new PresenterDescriptor(
+            "pending-connection",
+            "pending-client",
+            "Pending Presenter",
+            "1.0.0");
+        relay.RaiseJoinRequest(presenter);
+
+        await viewModel.RejectPendingPresenterAsync();
+
+        Assert.False(viewModel.HasPendingPresenter);
+        Assert.Equal("pending-connection", relay.RejectedPresenter?.ConnectionId);
+    }
+
+    [Fact]
     public async Task ReceiverSession_DropsExpiredPointerWithoutAcknowledging()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);

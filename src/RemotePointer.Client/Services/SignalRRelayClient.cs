@@ -342,6 +342,20 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
     }
 
+    public async Task RejectPresenterAsync(
+        string sessionId,
+        string presenterConnectionId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        await connection.InvokeAsync(
+                "RejectPresenter",
+                sessionId,
+                presenterConnectionId,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task DisconnectAllConnectionsAsync(
         CancellationToken cancellationToken = default)
     {

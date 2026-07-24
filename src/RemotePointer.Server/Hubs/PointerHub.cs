@@ -330,6 +330,30 @@ public sealed class PointerHub(
         }
     }
 
+    public async Task RejectPresenter(string sessionId, string presenterConnectionId)
+    {
+        try
+        {
+            var result = sessionManager.RejectPresenter(
+                sessionId,
+                presenterConnectionId,
+                Context.ConnectionId);
+            await Clients.Client(result.PresenterConnectionId)
+                .SessionEnded("Connection request declined by receiver.")
+                .ConfigureAwait(false);
+            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            logger.LogInformation(
+                AuditEventIds.PresenterJoinRejected,
+                "Presenter join declined. SessionId={SessionId} PresenterConnectionId={PresenterConnectionId}",
+                result.SessionId,
+                result.PresenterConnectionId);
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "RejectPresenter");
+        }
+    }
+
     public async Task SendPointer(PointerEventMessage pointerEvent)
     {
         try
