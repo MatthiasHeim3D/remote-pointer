@@ -34,6 +34,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private string statusMessage;
     private string connectionMessage;
     private string currentReceiverName = "Connected receiver";
+    private byte[]? currentReceiverProfilePicturePng;
 
     public PresenterViewModel(
         ITargetRegionService targetRegionService,
@@ -155,6 +156,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
                 togglePointingCommand.RaiseCanExecuteChanged();
                 RaisePropertyChanged(nameof(IsPointing));
                 RaisePropertyChanged(nameof(PointingActionLabel));
+                RaisePropertyChanged(nameof(PointingActionIcon));
                 RaisePropertyChanged(nameof(StateLabel));
             }
         }
@@ -163,6 +165,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     public bool IsPointing => State == TargetRegionState.Pointing;
 
     public string PointingActionLabel => IsPointing ? "Stop pointing" : "Enable pointing";
+
+    public string PointingActionIcon => IsPointing ? "\uE71A" : "\uE768";
 
     public string StateLabel => State.ToString();
 
@@ -218,6 +222,12 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         get => currentReceiverName;
         private set => SetProperty(ref currentReceiverName, value);
+    }
+
+    public byte[]? CurrentReceiverProfilePicturePng
+    {
+        get => currentReceiverProfilePicturePng;
+        private set => SetProperty(ref currentReceiverProfilePicturePng, value);
     }
 
     public int CapturedPointerCount
@@ -399,6 +409,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             if (response.Accepted)
             {
                 CurrentReceiverName = requestedReceiver.DisplayName;
+                CurrentReceiverProfilePicturePng = requestedReceiver.ProfilePicturePng;
                 AvailableReceivers.Remove(requestedReceiver);
                 SelectedReceiver = AvailableReceivers.FirstOrDefault();
                 RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
@@ -542,6 +553,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
         IsJoinPending = false;
         IsSessionApproved = true;
+        CurrentReceiverProfilePicturePng = e.State.ReceiverProfilePicturePng
+            ?? CurrentReceiverProfilePicturePng;
         targetRegionService.SetCalibrationIdentity(
             e.State.ReceiverClientInstanceId ?? CurrentReceiverName);
         if (e.State.ReceiverDisplay is not null)
@@ -598,6 +611,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         targetRegionService.SetCalibrationIdentity(null);
         receiverDisplay = null;
         CurrentReceiverName = "Connected receiver";
+        CurrentReceiverProfilePicturePng = null;
         RaisePropertyChanged(nameof(ReceiverDisplayShape));
         pendingAcknowledgements.Clear();
         sequenceNumber = Math.Max(sequenceNumber, CreateSequenceBase());

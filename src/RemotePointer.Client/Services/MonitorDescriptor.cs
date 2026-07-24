@@ -11,6 +11,6 @@ public sealed record MonitorDescriptor(
     bool IsPrimary)
 {
     public string SelectionLabel =>
-        $"{Display.DisplayName} — {Display.WidthPixels} × {Display.HeightPixels} at {Display.ScaleFactor:P0}"
+        $"{Display.DisplayName} ({Display.WidthPixels} × {Display.HeightPixels})"
         + (IsPrimary ? " (Primary)" : string.Empty);
 }

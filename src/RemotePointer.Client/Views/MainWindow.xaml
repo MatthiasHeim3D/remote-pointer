@@ -572,7 +572,7 @@
                               Padding="8,5"
                               ItemsSource="{Binding Monitors}"
                               SelectedItem="{Binding SelectedMonitor}"
-                              DisplayMemberPath="Display.DisplayName"
+                              DisplayMemberPath="SelectionLabel"
                               IsEnabled="{Binding CanSelectMonitor}" />
 
                     <TextBlock Margin="0,16,0,6" Text="Server address" />
@@ -617,7 +617,7 @@
                                 Content="Browse" />
                     </Grid>
 
-                    <TextBlock Margin="0,16,0,6" Text="Maximum connected senders" />
+                    <TextBlock Margin="0,16,0,6" Text="Maximum simultanious connections" />
                     <Grid Height="38">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -665,11 +665,6 @@
                               IsChecked="{Binding IsLaunchAtStartup}"
                               Content="Launch at startup" />
 
-                    <TextBlock Margin="0,16,0,14"
-                               FontSize="11"
-                               Foreground="#858585"
-                               Text="Connection and advertised profile changes apply after restarting Remote Pointer."
-                               TextWrapping="Wrap" />
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

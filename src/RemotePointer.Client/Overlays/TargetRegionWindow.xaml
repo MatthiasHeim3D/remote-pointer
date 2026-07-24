@@ -185,6 +185,7 @@
                     Background="#99000000"
                     CornerRadius="4"
                     IsHitTestVisible="False"
+                    Opacity="0.5"
                     Visibility="Collapsed">
                 <TextBlock FontSize="11"
                            Foreground="#DDF5F5F5"

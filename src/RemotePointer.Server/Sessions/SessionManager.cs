@@ -928,7 +928,8 @@ public sealed class SessionManager : ISessionManager
                 presenter.Descriptor.DisplayName))
             .OrderBy(presenter => presenter.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray(),
-        session.Receiver.ClientInstanceId);
+        session.Receiver.ClientInstanceId,
+        session.ProfilePicturePng is null ? null : [.. session.ProfilePicturePng]);
 
     private sealed class SessionRecord(
         string id,
