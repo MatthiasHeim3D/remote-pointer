@@ -1,17 +1,15 @@
 [CmdletBinding()]
-param(
-    [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Debug'
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$configuration = 'Debug'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $solutionPath = Join-Path $repositoryRoot 'RemotePointer.sln'
 $serverProject = 'src\RemotePointer.Server\RemotePointer.Server.csproj'
 $clientDirectory = Join-Path $repositoryRoot (
-    "src\RemotePointer.Client\bin\$Configuration\net10.0-windows\win-x64")
+    "src\RemotePointer.Client\bin\$configuration\net10.0-windows\win-x64")
 $clientExecutable = Join-Path $clientDirectory 'RemotePointer.Client.exe'
 $developmentServerUrl = 'https://localhost:7243'
 $serverPort = 7243
@@ -71,8 +69,8 @@ try {
             'with the two clients started by this script.')
     }
 
-    Write-Host "Building RemotePointer.sln ($Configuration)..." -ForegroundColor Cyan
-    & dotnet build $solutionPath --configuration $Configuration
+    Write-Host "Building RemotePointer.sln ($configuration development build)..." -ForegroundColor Cyan
+    & dotnet build $solutionPath --configuration $configuration
     if ($LASTEXITCODE -ne 0) {
         throw "Solution build failed with exit code $LASTEXITCODE."
     }
@@ -93,7 +91,7 @@ try {
         -ArgumentList @(
             'run',
             '--project', $serverProject,
-            '--configuration', $Configuration,
+            '--configuration', $configuration,
             '--no-build',
             '--launch-profile', 'https') `
         -WorkingDirectory $repositoryRoot `
