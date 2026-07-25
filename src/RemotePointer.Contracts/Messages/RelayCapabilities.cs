@@ -1,5 +1,3 @@
 namespace RemotePointer.Contracts.Messages;
 
-public sealed record RelayCapabilities(
-    bool ReceiverDiscoveryEnabled,
-    bool ServerPasswordRequired);
+public sealed record RelayCapabilities(bool ServerPasswordRequired);

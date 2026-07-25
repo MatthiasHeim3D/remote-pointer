@@ -32,7 +32,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isError;
     private bool isOverlayVisible;
     private bool hasConnectedPresenter;
-    private bool receiverDiscoveryEnabled;
     private ReceiverAvailability receiverAvailability;
     private PresenterDescriptor? pendingPresenter;
     private string receiverConnectionMessage;
@@ -258,20 +257,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool HasReceiverSession => receiverSessionId is not null;
 
     public bool CanSelectMonitor => Monitors.Count > 0;
-
-    public bool ReceiverDiscoveryEnabled
-    {
-        get => receiverDiscoveryEnabled;
-        private set
-        {
-            if (SetProperty(ref receiverDiscoveryEnabled, value))
-            {
-                RaisePropertyChanged(nameof(CanSetReceiverAvailability));
-                RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
-                setReceiverAvailabilityCommand.RaiseCanExecuteChanged();
-            }
-        }
-    }
 
     public IReadOnlyList<ReceiverAvailability> ReceiverAvailabilityOptions { get; } =
         [ReceiverAvailability.Available, ReceiverAvailability.Invisible];
@@ -531,10 +516,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool CanSetReceiverAvailability => receiverRelayClient is not null;
 
-    public string ReceiverDiscoveryMessage => ReceiverDiscoveryEnabled
-        ? "Available receivers can receive access requests. Approval is still required."
-        : "Receiver discovery is disabled on this relay.";
-
     public ICommand RefreshMonitorsCommand { get; }
 
     public ICommand ApprovePresenterCommand => approvePresenterCommand;
@@ -578,7 +559,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             try
             {
                 var capabilities = await receiverRelayClient.GetRelayCapabilitiesAsync();
-                ReceiverDiscoveryEnabled = capabilities.ReceiverDiscoveryEnabled;
                 ServerPasswordRequired = capabilities.ServerPasswordRequired;
             }
             catch (Exception exception)

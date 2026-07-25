@@ -22,7 +22,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private bool disposed;
     private DisplayDescriptor? receiverDisplay;
     private AvailableReceiverDescriptor? selectedReceiver;
-    private bool receiverDiscoveryEnabled;
     private bool isError;
     private bool isJoinPending;
     private bool isSessionApproved;
@@ -79,13 +78,11 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             _ => RefreshAvailableReceiversAsync(),
             _ => relayClient is not null
                 && SenderRoleEnabled
-                && ReceiverDiscoveryEnabled
                 && !IsSessionApproved);
         joinDiscoveredReceiverCommand = new AsyncRelayCommand(
             receiver => JoinDiscoveredReceiverAsync(receiver as AvailableReceiverDescriptor),
             receiver => relayClient is not null
                 && SenderRoleEnabled
-                && ReceiverDiscoveryEnabled
                 && (receiver is AvailableReceiverDescriptor || SelectedReceiver is not null)
                 && !IsJoinPending
                 && !IsSessionApproved);
@@ -108,20 +105,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool ReceiverDiscoveryEnabled
-    {
-        get => receiverDiscoveryEnabled;
-        private set
-        {
-            if (SetProperty(ref receiverDiscoveryEnabled, value))
-            {
-                RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
-                refreshReceiversCommand.RaiseCanExecuteChanged();
-                joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
-            }
-        }
-    }
-
     public bool SenderRoleEnabled
     {
         get => senderRoleEnabled;
@@ -134,11 +117,9 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string ReceiverDiscoveryMessage => ReceiverDiscoveryEnabled
-        ? AvailableReceivers.Count == 0
-            ? "No visible receivers are currently available."
-            : $"{AvailableReceivers.Count} visible receiver{(AvailableReceivers.Count == 1 ? string.Empty : "s")} available."
-        : "Receiver discovery is disabled on this relay.";
+    public string ReceiverDiscoveryMessage => AvailableReceivers.Count == 0
+        ? "No visible receivers are currently available."
+        : $"{AvailableReceivers.Count} visible receiver{(AvailableReceivers.Count == 1 ? string.Empty : "s")} available.";
 
     public string ReceiverDisplayShape => receiverDisplay is null
         ? "Available after receiver approval."
@@ -272,27 +253,12 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public ICommand EndSessionCommand => endSessionCommand;
 
-    public async Task InitializeAsync()
-    {
-        if (relayClient is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var capabilities = await relayClient.GetRelayCapabilitiesAsync();
-            ReceiverDiscoveryEnabled = capabilities.ReceiverDiscoveryEnabled;
-            if (ReceiverDiscoveryEnabled && SenderRoleEnabled)
-            {
-                await RefreshAvailableReceiversAsync();
-            }
-        }
-        catch (Exception exception)
-        {
-            SetStatus($"Relay capabilities could not be loaded: {exception.Message}", true);
-        }
-    }
+    // The directory is the only thing this view model ever read from relay capabilities, so it
+    // goes straight to the listing and skips the extra round trip on every start.
+    public Task InitializeAsync() =>
+        relayClient is null || !SenderRoleEnabled
+            ? Task.CompletedTask
+            : RefreshAvailableReceiversAsync();
 
     public void SetSenderRoleEnabled(bool enabled)
     {
@@ -376,7 +342,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     private async Task RefreshAvailableReceiversAsync()
     {
-        if (relayClient is null || !ReceiverDiscoveryEnabled || !SenderRoleEnabled)
+        if (relayClient is null || !SenderRoleEnabled)
         {
             return;
         }
@@ -574,7 +540,6 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         ConnectionMessage = e.Message;
         if (e.Status == RelayConnectionStatus.Connected
-            && ReceiverDiscoveryEnabled
             && SenderRoleEnabled
             && !IsSessionApproved)
         {

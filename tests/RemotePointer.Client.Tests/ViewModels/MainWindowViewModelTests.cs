@@ -35,9 +35,7 @@ public sealed class MainWindowViewModelTests
         using var overlay = new FakeOverlayService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(
-                ReceiverDiscoveryEnabled: true,
-                ServerPasswordRequired: true),
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: true),
         };
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
@@ -62,7 +60,10 @@ public sealed class MainWindowViewModelTests
     public async Task OpenRelayWithoutPassword_WarnsThatEveryoneCanSeeTheProfile()
     {
         using var overlay = new FakeOverlayService();
-        var relay = new FakeRelayClient { Capabilities = new RelayCapabilities(true, false) };
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
+        };
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
             overlay,
@@ -273,12 +274,11 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ReceiverDiscoveryCapability_ControlsVisibilityAndServerUpdate()
+    public async Task ReceiverAvailability_PublishesTheSessionAndUpdatesTheServer()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
         using var overlay = new FakeOverlayService();
         var relay = CreateReceiverRelay();
-        relay.Capabilities = new RelayCapabilities(true, false);
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([monitor]),
             overlay,
@@ -287,7 +287,6 @@ public sealed class MainWindowViewModelTests
         await viewModel.InitializeAsync();
         await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
 
-        Assert.True(viewModel.ReceiverDiscoveryEnabled);
         Assert.True(viewModel.CanSetReceiverAvailability);
         Assert.Equal(ReceiverAvailability.Available, viewModel.ReceiverAvailability);
         Assert.True(relay.IsDiscoverable);
@@ -794,7 +793,7 @@ public sealed class MainWindowViewModelTests
             expiresAt);
         return new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true, false),
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
             CreateResponse = new CreateSessionResponse(
                 "session-1",
                 new string('x', 32),

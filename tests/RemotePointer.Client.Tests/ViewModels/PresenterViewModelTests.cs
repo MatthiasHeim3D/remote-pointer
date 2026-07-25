@@ -14,7 +14,7 @@ public sealed class PresenterViewModelTests
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true, false),
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
             AvailableReceivers =
             [
                 new AvailableReceiverDescriptor(
@@ -28,7 +28,6 @@ public sealed class PresenterViewModelTests
         await viewModel.InitializeAsync();
         viewModel.JoinDiscoveredReceiverCommand.Execute(null);
 
-        Assert.True(viewModel.ReceiverDiscoveryEnabled);
         Assert.Equal("session-visible", relay.RequestedReceiverSessionId);
         Assert.True(viewModel.IsJoinPending);
         Assert.Equal("Receiver PC", viewModel.CurrentReceiverName);
@@ -46,7 +45,7 @@ public sealed class PresenterViewModelTests
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true, false),
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
             AvailableReceivers = [new AvailableReceiverDescriptor("session-visible", "Receiver PC")],
         };
         using var viewModel = new PresenterViewModel(service, relay);
@@ -64,33 +63,12 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
-    public async Task DiscoveryInitialization_RemainsDisabledWhenServerDisallowsIt()
-    {
-        using var service = new FakeTargetRegionService();
-        var relay = new FakeRelayClient
-        {
-            Capabilities = new RelayCapabilities(false, false),
-            AvailableReceivers =
-            [
-                new AvailableReceiverDescriptor("session-hidden", "Hidden Receiver"),
-            ],
-        };
-        using var viewModel = new PresenterViewModel(service, relay);
-
-        await viewModel.InitializeAsync();
-
-        Assert.False(viewModel.ReceiverDiscoveryEnabled);
-        Assert.Empty(viewModel.AvailableReceivers);
-        Assert.False(viewModel.JoinDiscoveredReceiverCommand.CanExecute(null));
-    }
-
-    [Fact]
     public async Task DirectoryChange_AutomaticallyRefreshesAvailableReceivers()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true, false),
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
         };
         using var viewModel = new PresenterViewModel(service, relay);
         await viewModel.InitializeAsync();

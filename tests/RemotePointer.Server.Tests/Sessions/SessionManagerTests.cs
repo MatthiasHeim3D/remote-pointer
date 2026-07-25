@@ -11,29 +11,9 @@ public sealed class SessionManagerTests
         new(2026, 7, 23, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void ReceiverDiscovery_IsDisabledByDefault()
-    {
-        var context = CreateContext();
-        var created = CreateReceiver(context);
-
-        Assert.False(context.Manager.ReceiverDiscoveryEnabled);
-        Assert.Empty(context.Manager.GetAvailableReceivers());
-        Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.SetReceiverDiscoverable(
-                created.SessionId,
-                "receiver-connection",
-                true));
-        var join = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
-            "presenter-connection",
-            "Presenter Machine");
-        Assert.False(join.Response.Accepted);
-    }
-
-    [Fact]
     public void Receiver_IsAutomaticallyDiscoverableAndDirectJoinStillRequiresApproval()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
 
         var available = Assert.Single(context.Manager.GetAvailableReceivers());
@@ -57,7 +37,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void PresenterProfilePicture_IsIncludedInApprovalAndConnectedState()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
@@ -83,7 +63,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void Discovery_ExcludesOnlySameApplicationInstanceAndIncludesProfilePicture()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
         var created = context.Manager.CreateReceiverSession(
             CreateDisplay(),
@@ -105,7 +85,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void DirectJoin_RejectsSelfButAllowsAnotherInstanceWithSameMachineProfile()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = context.Manager.CreateReceiverSession(
             CreateDisplay(),
             "receiver-connection",
@@ -132,7 +112,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ReceiverDisplayUpdate_IsReturnedForApprovedPresenter()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         var changed = new DisplayDescriptor("display-1", "Display 1", 1_200, 1_920, 1d, 90);
 
@@ -148,7 +128,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ReceiverClientSettingsUpdate_ChangesActiveSessionAndDirectoryImmediately()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
@@ -170,7 +150,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void DiscoverableReceiver_RemainsAvailableAfterTheAbandonmentGrace()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
 
@@ -188,7 +168,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void InvisibleReceiver_KeepsItsSessionAfterTheAbandonmentGrace()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", false);
         context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
@@ -207,7 +187,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void AbandonedInvisibleSession_IsCollectedAfterTheAbandonmentGrace()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", false);
         _ = context.Manager.Disconnect("receiver-connection");
@@ -222,7 +202,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ServerPassword_ScopesTheDirectoryAndJoinsToClientsThatShareIt()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true, requireServerPassword: true);
+        var context = CreateContext(requireServerPassword: true);
         context.Manager.SetConnectionGroup("receiver-connection", "group-one");
         var created = CreateReceiver(context);
         context.Manager.SetConnectionGroup("insider-connection", "group-one");
@@ -249,7 +229,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ServerPassword_IsRequiredBeforeAnythingIsPublishedOrListed()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true, requireServerPassword: true);
+        var context = CreateContext(requireServerPassword: true);
 
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.SetConnectionGroup("receiver-connection", null));
@@ -261,7 +241,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void OpenRelay_KeepsPasswordlessClientsInOneSharedGroup()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
 
         Assert.Equal(SessionManager.OpenGroupKey, context.Manager.GetConnectionGroup("anyone"));
@@ -273,7 +253,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ConnectionGroup_IsReleasedWhenTheConnectionDrops()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true, requireServerPassword: true);
+        var context = CreateContext(requireServerPassword: true);
         context.Manager.SetConnectionGroup("browser-connection", "group-one");
 
         _ = context.Manager.Disconnect("browser-connection");
@@ -287,7 +267,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void CreateReceiverSession_FitsTheDefaultPresenterCountToTheRelayLimit()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true, maximumPresentersPerReceiver: 1);
+        var context = CreateContext(maximumPresentersPerReceiver: 1);
         var created = CreateReceiver(context);
         ApproveDirectPresenter(context, created, "presenter-one");
 
@@ -345,7 +325,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void SecondJoinRequest_ExposesNoSessionDataToTheRejectedClient()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
 
         var first = context.Manager.RequestToJoinReceiver(
@@ -368,7 +348,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ApprovePresenter_RequiresOwningReceiver()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         var join = JoinPresenter(context, created);
 
@@ -382,7 +362,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void RejectPresenter_RemovesPendingMembershipAndAllowsAnotherRequest()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         var firstJoin = context.Manager.RequestToJoinReceiver(
             new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"),
@@ -405,7 +385,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ApprovedPresenter_CanRelayPointerOnlyToReceiver()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.AcceptPointer(
@@ -419,7 +399,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ApprovedPresenter_CanRelayValidatedGesturePointer()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         var pointer = CreatePointer(
             context.TimeProvider.GetUtcNow(),
@@ -450,7 +430,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void DuplicateSequence_IsIgnored()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         var pointer = CreatePointer(
             context.TimeProvider.GetUtcNow(),
@@ -470,7 +450,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void BurstRateLimit_RejectsThirtyFirstImmediateEvent()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         for (var sequence = 0; sequence < 30; sequence++)
         {
@@ -495,7 +475,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void BurstRateLimit_IsTrackedPerPresenter()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = context.Manager.CreateReceiverSession(
             CreateDisplay(),
             "receiver-connection",
@@ -528,7 +508,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void RateLimit_RefillsOverTime()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         for (var sequence = 0; sequence < 30; sequence++)
         {
@@ -552,22 +532,9 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void SessionOnARelayWithoutDiscovery_IsCollectedAfterTheAbandonmentGrace()
-    {
-        var context = CreateContext();
-        var created = CreateReceiver(context);
-        context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
-
-        var expired = context.Manager.CollectExpiredSessions();
-
-        Assert.Equal(created.SessionId, Assert.Single(expired).SessionId);
-        Assert.Equal(0, context.Manager.ActiveSessionCount);
-    }
-
-    [Fact]
     public void ActiveSessionExpiry_RejectsPointer()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         context.TimeProvider.Advance(TimeSpan.FromHours(8).Add(TimeSpan.FromMilliseconds(1)));
 
@@ -584,7 +551,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void PresenterDisconnect_RevokesCredentialAndClearsConnectedState()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         var credential = approved.Approval.PresenterCredential;
 
@@ -609,7 +576,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ReceiverDisconnect_RevokesPresentersAndResumeRequiresNewRequest()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var disconnected = Assert.IsType<ConnectionDisconnectResult>(
@@ -654,7 +621,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void PendingPresenterDisconnect_CancelsRequestAndAllowsReplacement()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         var pending = context.Manager.RequestToJoinReceiver(
             new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
@@ -678,7 +645,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ReceiverResume_UpdatesApplicationInstanceUsedForSelfFiltering()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = context.Manager.CreateReceiverSession(
             CreateDisplay(),
             "receiver-connection",
@@ -704,7 +671,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ReceiverAcknowledgement_RelaysOnlyToApprovedPresenter()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
         var pointer = CreatePointer(InitialTime, approved.Created.SessionId, 1);
         _ = context.Manager.AcceptPointer(approved.PresenterConnectionId, pointer);
@@ -724,7 +691,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void MultiplePresenters_HonorLimitAndRouteSequencesAndAcknowledgementsIndependently()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = context.Manager.CreateReceiverSession(
             CreateDisplay(),
             "receiver-connection",
@@ -793,7 +760,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void PresenterEnd_PreservesAvailableReceiverForAnotherRequest()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.EndSession(
@@ -818,7 +785,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void PendingPresenterEnd_WithdrawsRequestAndReleasesTheReceiver()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         var join = JoinPresenter(context, created);
 
@@ -843,7 +810,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void PendingPresenterEnd_CannotEndTheReceiverSession()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var created = CreateReceiver(context);
         _ = JoinPresenter(context, created);
 
@@ -857,7 +824,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ReceiverEnd_RemovesReceiverAndPresenter()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.EndSession(
@@ -873,7 +840,7 @@ public sealed class SessionManagerTests
     [Fact]
     public void ReceiverDisconnectPresenters_PreservesAvailability()
     {
-        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.DisconnectPresenters(
@@ -893,7 +860,6 @@ public sealed class SessionManagerTests
     }
 
     private static TestContext CreateContext(
-        bool receiverDiscoveryEnabled = false,
         int maximumPresentersPerReceiver = 16,
         bool requireServerPassword = false)
     {
@@ -905,7 +871,6 @@ public sealed class SessionManagerTests
                 MaximumSessionHours = 8,
                 SequenceWindowSize = 64,
                 MaximumPresentersPerReceiver = maximumPresentersPerReceiver,
-                ReceiverDiscoveryEnabled = receiverDiscoveryEnabled,
                 RequireServerPassword = requireServerPassword,
             }),
             Options.Create(new PointerRateLimitOptions

@@ -34,7 +34,7 @@ The presenter sends each captured pointer event immediately as a `PointerEventMe
 - `DirectJoinRequest`: opaque session identity for an explicitly visible receiver, durable client-instance identity, and version.
 - `ClientProfile`: optional PNG profile thumbnail capped to fit within the relay message limit.
 - `AvailableReceiverDescriptor`: opaque session identity, receiver-selected label, process-scoped application identity, and an optional bounded PNG profile thumbnail; no display metadata or credential.
-- `RelayCapabilities`: server-controlled receiver-discovery availability and whether a server password is required.
+- `RelayCapabilities`: whether the relay requires a server password.
 - `SessionStateMessage`: session identity, approval state, current receiver display, expiry, discovery state, and receiver-visible connected-presenter names.
 - `SessionCredential`: role-restricted session token, rotating reconnect token, durable client identity, and expiry.
 - `CreateSessionResponse`: opaque session identity, receiver-only session secret, and receiver credential.
@@ -52,9 +52,9 @@ The default pointer TTL is 2,000 ms at the client. Structural validation current
 
 `EnterRelayGroup` carries the key the client derives from its server password with PBKDF2-SHA256 — never the password, and passed as a hub argument rather than a connection query parameter so it stays out of proxy access logs. The relay holds it per connection, so it is presented again after every connect and reconnect, and two clients share a group only by deriving the same value. Listings, join requests and directory notifications never cross groups. When `Sessions:RequireServerPassword` is true a client that presents no key can neither publish itself nor list or reach anyone; when it is false such clients share one open pool.
 
-When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explicitly publish its chosen display name, optional profile picture, and opaque session ID to the clients that share its server password. A presenter may submit a direct join request for that entry, but receives no credential and cannot send pointers until the receiver approves. Disabled, hidden, disconnected, pending, and full-capacity receivers are omitted. A receiver chooses a maximum presenter count when creating the session; the client default is two and the server maximum is sixteen. A discoverable receiver stays available until it reaches capacity, hides/ends the session, or the session expires. This is the only way into a session: a relay with discovery switched off accepts no join request.
+An active receiver publishes its chosen display name, optional profile picture, and opaque session ID to the clients that share its server password. A new session starts published and the receiver can hide it at any time. A presenter may submit a direct join request for a listed entry, but receives no credential and cannot send pointers until the receiver approves. Hidden, disconnected, pending, and full-capacity receivers are omitted from the listing. A receiver chooses a maximum presenter count when creating the session; the client default is two and the server maximum is sixteen. A published receiver stays available until it reaches capacity, hides/ends the session, or the session expires. The directory is the only way into a session; there is no other join path.
 
-A session that nobody has asked to join is collected once `Sessions:AbandonedSessionLifetimeMinutes` — ten minutes by default — has passed, unless something can still reach it. A connected receiver that chose to be invisible can publish itself again and keeps its session; a disconnected shell, or any session on a relay with discovery switched off, cannot be joined and is collected.
+A session that nobody has asked to join is collected once `Sessions:AbandonedSessionLifetimeMinutes` — ten minutes by default — has passed, unless something can still reach it. A connected receiver that chose to be invisible can publish itself again and keeps its session; a hidden, disconnected shell cannot be joined and is collected.
 
 ## SignalR surface
 

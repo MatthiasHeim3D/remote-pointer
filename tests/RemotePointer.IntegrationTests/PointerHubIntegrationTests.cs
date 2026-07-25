@@ -20,7 +20,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task Discovery_AvailabilityChangesNotifyConnectedClients()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(factory, "receiver-notify", "Receiver");
         await using var observer = CreateConnection(factory, "observer-notify", "Observer");
         var notificationCount = 0;
@@ -56,7 +56,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task Receiver_AcceptsMultiplePresentersUpToConfiguredLimit()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(factory, "receiver-multi", "Receiver");
         await using var firstPresenter = CreateConnection(factory, "presenter-one", "Presenter One");
         await using var secondPresenter = CreateConnection(factory, "presenter-two", "Presenter Two");
@@ -133,7 +133,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task Discovery_HidesAndRejectsSelfButAllowsSameMachinePeerWithProfile()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(
             factory,
             "shared-machine-profile",
@@ -182,7 +182,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task ActiveReceiver_ProfileChangePropagatesWithoutReconnect()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(factory, "receiver-live-profile", "Receiver");
         await using var presenter = CreateConnection(factory, "presenter-live-profile", "Presenter");
         var joinRequested = CompletionSource<PresenterDescriptor>();
@@ -229,7 +229,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task ReceiverRejection_NotifiesPendingPresenterAndRestoresAvailability()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(factory, "receiver-reject", "Receiver");
         await using var presenter = CreateConnection(factory, "presenter-reject", "Presenter");
         var joinRequested = CompletionSource<PresenterDescriptor>();
@@ -266,7 +266,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task Discovery_ReceiverDisconnectAll_PreservesReceiverAvailability()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
         await using var presenter = CreateConnection(factory, "presenter-client", "Presenter Machine");
         var joinRequested = CompletionSource<PresenterDescriptor>();
@@ -290,8 +290,6 @@ public sealed class PointerHubIntegrationTests
         await receiver.StartAsync();
         await presenter.StartAsync();
 
-        var capabilities = await presenter.InvokeAsync<RelayCapabilities>("GetRelayCapabilities");
-        Assert.True(capabilities.ReceiverDiscoveryEnabled);
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
             CreateDisplay(),
@@ -341,7 +339,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task ApprovedSession_RevokesPeersOnDisconnectAndRequiresFreshRequest()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
         await using var presenter = CreateConnection(factory, "presenter-client", "Presenter Machine");
         var joinRequested = CompletionSource<PresenterDescriptor>();
@@ -588,7 +586,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task HubRateLimit_RejectsThirtyFirstImmediatePointer()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true).WithWebHostBuilder(
+        using var factory = CreateFactory().WithWebHostBuilder(
             builder =>
             {
                 builder.UseSetting("RateLimits:EventsPerSecond", "20");
@@ -645,9 +643,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task ServerPassword_ScopesTheDirectoryToClientsThatShareIt()
     {
-        using var factory = CreateFactory(
-            receiverDiscoveryEnabled: true,
-            requireServerPassword: true);
+        using var factory = CreateFactory(requireServerPassword: true);
         await using var receiver = CreateConnection(factory, "receiver-group", "Receiver");
         await using var insider = CreateConnection(factory, "insider-group", "Insider");
         await using var outsider = CreateConnection(factory, "outsider-group", "Outsider");
@@ -692,7 +688,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task ServerPassword_IsNotRequiredOnAnOpenRelay()
     {
-        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        using var factory = CreateFactory();
         await using var receiver = CreateConnection(factory, "open-receiver", "Receiver");
         await using var presenter = CreateConnection(factory, "open-presenter", "Presenter");
         await receiver.StartAsync();
@@ -714,16 +710,12 @@ public sealed class PointerHubIntegrationTests
     }
 
     private static WebApplicationFactory<Program> CreateFactory(
-        bool receiverDiscoveryEnabled = false,
         bool requireServerPassword = false) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(
                 builder =>
                 {
                     builder.UseEnvironment("Development");
-                    builder.UseSetting(
-                        "Sessions:ReceiverDiscoveryEnabled",
-                        receiverDiscoveryEnabled.ToString());
                     builder.UseSetting(
                         "Sessions:RequireServerPassword",
                         requireServerPassword.ToString());

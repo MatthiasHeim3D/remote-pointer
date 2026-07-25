@@ -6,8 +6,6 @@ public interface ISessionManager
 {
     int ActiveSessionCount { get; }
 
-    bool ReceiverDiscoveryEnabled { get; }
-
     bool ServerPasswordRequired { get; }
 
     RelayGroupChange SetConnectionGroup(string connectionId, string? groupKey);

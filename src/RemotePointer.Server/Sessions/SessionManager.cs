@@ -53,8 +53,6 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public bool ReceiverDiscoveryEnabled => sessionOptions.ReceiverDiscoveryEnabled;
-
     public bool ServerPasswordRequired => sessionOptions.RequireServerPassword;
 
     /// <summary>
@@ -168,7 +166,7 @@ public sealed class SessionManager : ISessionManager
                 sessionOptions.SequenceWindowSize,
                 presenterLimit,
                 GetConnectionGroupNoLock(connectionId));
-            session.IsDiscoverable = sessionOptions.ReceiverDiscoveryEnabled;
+            session.IsDiscoverable = true;
 
             sessions.Add(sessionId, session);
             connections.Add(
@@ -190,11 +188,6 @@ public sealed class SessionManager : ISessionManager
         string? excludedApplicationInstanceId = null,
         string? connectionId = null)
     {
-        if (!sessionOptions.ReceiverDiscoveryEnabled)
-        {
-            return [];
-        }
-
         lock (syncRoot)
         {
             var groupKey = connectionId is null
@@ -237,12 +230,6 @@ public sealed class SessionManager : ISessionManager
     {
         EnsureIdentifier(sessionId, nameof(sessionId));
         EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
-        if (!sessionOptions.ReceiverDiscoveryEnabled)
-        {
-            throw new SessionOperationException(
-                "receiver_discovery_disabled",
-                "Receiver discovery is disabled on this relay.");
-        }
 
         lock (syncRoot)
         {
@@ -265,11 +252,6 @@ public sealed class SessionManager : ISessionManager
     {
         EnsureIdentifier(connectionId, nameof(connectionId));
         EnsureIdentifier(displayName, nameof(displayName));
-        if (!sessionOptions.ReceiverDiscoveryEnabled)
-        {
-            return RejectedJoin("Receiver discovery is disabled on this relay.");
-        }
-
         var validation = ContractValidator.Validate(request);
         if (!validation.IsValid)
         {
@@ -959,12 +941,11 @@ public sealed class SessionManager : ISessionManager
     /// <summary>
     /// A session nobody has asked to join is abandoned only when nothing can make it reachable.
     /// A connected receiver that chose to be invisible can publish itself at any time, so it
-    /// keeps its session; a disconnected shell, or any session on a relay with discovery
-    /// switched off, can no longer be joined and is collected.
+    /// keeps its session; a disconnected shell that is also hidden can no longer be joined and
+    /// is collected.
     /// </summary>
-    private bool IsAbandonedNoLock(SessionRecord session) =>
-        !session.IsDiscoverable
-        && (session.Receiver.ConnectionId is null || !sessionOptions.ReceiverDiscoveryEnabled);
+    private static bool IsAbandonedNoLock(SessionRecord session) =>
+        !session.IsDiscoverable && session.Receiver.ConnectionId is null;
 
     private void EnsureConnectionIsUnbound(string connectionId)
     {

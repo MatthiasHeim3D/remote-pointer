@@ -20,7 +20,7 @@
 | Presenter state | Expected-ratio validation, calibration request, ready/pointing transitions, hotkey errors |
 | Presenter capture reporting | Normalized local pointer count and coordinate presentation |
 | Session secrets and lifetime | Cryptographic generation, hashing, constant-time comparison, abandoned-session collection, expiry |
-| Receiver discovery | Server capability, receiver opt-in, directory filtering, direct request, mandatory approval |
+| Receiver directory | Receiver visibility choice, directory filtering, direct request, mandatory approval |
 | Server password | Stable key derivation, minimum length, protected round trip, corrupt-file discard, group-scoped listing and joins, enforced and open relay modes, client warning states |
 | Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
 | Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
@@ -88,7 +88,7 @@
 8. Restore connectivity within the reconnect window. Confirm the receiver can return, the previous sender is no longer connected, and pointing remains unavailable until that sender submits a new request and is approved again.
 9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
 10. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
-11. Disable discovery on the relay and confirm both discovery controls are disabled and the presenter cannot submit a new join request. Re-enable discovery and confirm the visible-receiver flow becomes available again.
+11. Set the receiver to **Invisible** and confirm it leaves the directory on the other client and cannot be joined. Set it back to **Available** and confirm the visible-receiver flow works again.
 12. While approved, change the receiver resolution and confirm the sender's displayed dimensions update. Change the receiver aspect ratio and confirm stale calibration is invalidated. Change the sender's local display configuration and confirm recalibration is required there as well.
 
 ## Phase 6 manual procedure

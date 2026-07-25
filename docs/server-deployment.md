@@ -15,7 +15,6 @@ Edit `.env`, then start the stack:
 
 ```text
 REMOTEPOINTER_HOSTNAME=pointer.internal.example
-REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=true
 REMOTEPOINTER_REQUIRE_SERVER_PASSWORD=true
 ```
 
@@ -25,9 +24,11 @@ Clients see each other only when they use the same server password, which they e
 
 `REMOTEPOINTER_REQUIRE_SERVER_PASSWORD` defaults to `true`, and a client that presents no password can then neither publish itself nor list or reach anyone. Set it to `false` to allow clients without one; they all land in a single open pool and share their names and profile pictures with anyone who can reach the relay, which the client warns about. Choose a password with the same care as one for a video meeting: everyone holding it sees every published name and picture, and changing it means telling everyone.
 
-Receiver discovery lets receivers publish themselves in the relay directory, which is how the desktop client finds them. `.env.example` ships with `REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=false`, so a stack started from an unedited copy has the directory switched off and no receiver can be found; set it to `true` to enable it. Removing the variable altogether is not the same as setting it to `false` — Compose then falls back to `true`, matching the relay image's own default.
+## The receiver directory
 
-Enabling the directory does not grant access: every direct join still requires receiver approval, and each receiver additionally opts in per session. It does mean that anyone who can reach the relay can list the receivers that opted in. It is also the only route into a session — with the directory switched off the relay accepts no join request, so no client can connect to another.
+Receivers publish themselves in the relay directory, which is how the desktop client finds them, and it is the only route into a session. There is no switch to turn it off: a relay that published nothing would accept no join request and could serve nobody. Each receiver still controls its own visibility and can hide itself at any time.
+
+Being listed does not grant access — every direct join still requires receiver approval. It does mean anyone holding the server password can list the receivers currently published under it, which is why that password is the boundary that matters.
 
 ```powershell
 docker compose up -d --build
