@@ -78,12 +78,12 @@ public sealed class PointerHub(
     }
 
     public async Task<CreateSessionResponse> CreateReceiverSession(DisplayDescriptor display)
-        => await CreateReceiverSessionCore(display, new ClientProfile(), 2).ConfigureAwait(false);
+        => await CreateReceiverSessionCore(display, new ClientProfile(), null).ConfigureAwait(false);
 
     public async Task<CreateSessionResponse> CreateReceiverSessionWithProfile(
         DisplayDescriptor display,
         ClientProfile profile)
-        => await CreateReceiverSessionCore(display, profile, 2).ConfigureAwait(false);
+        => await CreateReceiverSessionCore(display, profile, null).ConfigureAwait(false);
 
     public async Task<CreateSessionResponse> CreateReceiverSessionWithSettings(
         DisplayDescriptor display,
@@ -111,7 +111,7 @@ public sealed class PointerHub(
     private async Task<CreateSessionResponse> CreateReceiverSessionCore(
         DisplayDescriptor display,
         ClientProfile profile,
-        int maximumPresenterConnections,
+        int? maximumPresenterConnections,
         string? displayName = null)
     {
         var clientInstanceId = GetRequiredClientInstanceId();

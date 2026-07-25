@@ -7,6 +7,8 @@ namespace RemotePointer.Server.Sessions;
 
 public sealed class SessionManager : ISessionManager
 {
+    private const int DefaultPresenterConnections = 2;
+
     private readonly Dictionary<string, ConnectionMembership> connections = new(StringComparer.Ordinal);
     private readonly object syncRoot = new();
     private readonly Dictionary<string, string> pairingCodeSessions = new(StringComparer.Ordinal);
@@ -53,7 +55,7 @@ public sealed class SessionManager : ISessionManager
         string receiverDisplayName,
         string? applicationInstanceId = null,
         ClientProfile? profile = null,
-        int maximumPresenterConnections = 2)
+        int? maximumPresenterConnections = null)
     {
         applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
             ? clientInstanceId
@@ -65,8 +67,13 @@ public sealed class SessionManager : ISessionManager
         EnsureIdentifier(receiverDisplayName, nameof(receiverDisplayName));
         EnsureValid(ContractValidator.Validate(display), "invalid_display");
         EnsureValid(ContractValidator.Validate(profile), "invalid_profile");
-        if (maximumPresenterConnections < 1
-            || maximumPresenterConnections > sessionOptions.MaximumPresentersPerReceiver)
+
+        // Callers that do not choose a limit get the client default, kept within whatever the
+        // relay allows, so a relay configured for a single presenter still accepts them.
+        var presenterLimit = maximumPresenterConnections
+            ?? Math.Min(DefaultPresenterConnections, sessionOptions.MaximumPresentersPerReceiver);
+        if (presenterLimit < 1
+            || presenterLimit > sessionOptions.MaximumPresentersPerReceiver)
         {
             throw new SessionOperationException(
                 "invalid_presenter_limit",
@@ -103,7 +110,7 @@ public sealed class SessionManager : ISessionManager
                 profile.PicturePng is null ? null : [.. profile.PicturePng],
                 receiver,
                 sessionOptions.SequenceWindowSize,
-                maximumPresenterConnections);
+                presenterLimit);
             session.IsDiscoverable = sessionOptions.ReceiverDiscoveryEnabled;
 
             sessions.Add(sessionId, session);

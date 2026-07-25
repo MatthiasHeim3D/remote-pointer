@@ -220,6 +220,29 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void CreateReceiverSession_FitsTheDefaultPresenterCountToTheRelayLimit()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true, maximumPresentersPerReceiver: 1);
+        var created = CreateReceiver(context);
+        ApproveDirectPresenter(context, created, "presenter-one");
+
+        var rejected = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"),
+            "presenter-two-connection",
+            "Presenter Two");
+
+        Assert.False(rejected.Response.Accepted);
+        Assert.Contains("limit", rejected.Response.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.CreateReceiverSession(
+                CreateDisplay(),
+                "other-connection",
+                "other-client",
+                "Other Receiver",
+                maximumPresenterConnections: 2));
+    }
+
+    [Fact]
     public void CreateReceiverSession_ReportsAnOversizedIdentifierAsAValidationFailure()
     {
         var context = CreateContext();
@@ -809,7 +832,9 @@ public sealed class SessionManagerTests
                 CreatePointer(InitialTime, approved.Created.SessionId, 1)));
     }
 
-    private static TestContext CreateContext(bool receiverDiscoveryEnabled = false)
+    private static TestContext CreateContext(
+        bool receiverDiscoveryEnabled = false,
+        int maximumPresentersPerReceiver = 16)
     {
         var timeProvider = new ManualTimeProvider(InitialTime);
         var manager = new SessionManager(
@@ -818,6 +843,7 @@ public sealed class SessionManagerTests
                 PairingCodeLifetimeMinutes = 10,
                 MaximumSessionHours = 8,
                 SequenceWindowSize = 64,
+                MaximumPresentersPerReceiver = maximumPresentersPerReceiver,
                 ReceiverDiscoveryEnabled = receiverDiscoveryEnabled,
             }),
             Options.Create(new PointerRateLimitOptions
