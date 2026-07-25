@@ -50,7 +50,7 @@ Pairing codes use a six-character unambiguous cryptographic alphabet and are ind
 
 Receiver discovery is enabled by the default deployment configuration and can be disabled by the server operator. Receivers still opt in per active session. Directory entries contain only a receiver machine label and opaque session ID. Direct requests enter the same pending-presenter state as pairing-code requests, so explicit receiver approval remains the sole credential-issuance boundary.
 
-Pointer acceptance applies strict JSON/contract validation, current role authorization, session expiry, a 30-event token-bucket burst with a 20-event-per-second refill, and a bounded sequence window. Duplicate or significantly old sequence numbers are dropped. Events are delivered only when the receiver is currently connected and are never queued for replay.
+Pointer acceptance applies strict JSON/contract validation, current role authorization, session expiry, a token bucket, and a bounded sequence window. Each approved presenter has its own bucket, created on approval and sized by `RateLimits:EventsPerSecond` and `RateLimits:BurstSize` — 90 events per second with a burst of 180 by default. The budget describes one sender's stream: a presenter draws at roughly 60 Hz, so a shared session budget would throttle every participant as soon as two of them drew at the same time. Duplicate or significantly old sequence numbers are dropped. Events are delivered only when the receiver is currently connected and are never queued for replay.
 
 A hosted cleanup service expires unused pairing sessions and active sessions. The relay uses structured JSON console logging and records aggregate pointer counts only when a session ends or expires.
 

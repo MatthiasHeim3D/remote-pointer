@@ -50,6 +50,7 @@ No development certificate-bypass switch will be included in production builds.
 - Role and session membership are revalidated for every pointer, acknowledgement, resume, and termination operation.
 - Reconnect requires the client-instance ID, session token, role, and a single-use rotating reconnect token.
 - Pointer events are rejected for invalid coordinates, stale TTL, future timestamps, wrong sessions, unauthorized roles, excessive rate, and duplicate/old sequence numbers.
+- The pointer rate limit is metered per approved sender, so an abusive sender exhausts only its own budget and cannot throttle the other senders in the session.
 - SignalR receive payloads are limited to 32 KB; each freehand batch is separately limited to 128 validated normalized points.
 - Structured logs omit pairing secrets, role tokens, reconnect tokens, and individual pointer coordinates.
 - Production refuses plaintext requests by default; the Docker profile permits it only on the unexposed relay container port behind Caddy. No certificate-validation bypass exists.

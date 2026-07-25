@@ -49,7 +49,7 @@ The default pointer TTL is 2,000 ms at the client. Structural validation current
 
 1. JSON parsing rejects malformed or unexpected fields.
 2. Contract validation rejects missing identities, invalid enums, invalid display metadata, non-finite/out-of-range coordinates, invalid TTLs, expired events, and implausible future timestamps.
-3. The relay validates live session state, the approved presenter identity, role permissions, replay/reordering, message size, and rate limits.
+3. The relay validates live session state, the approved presenter identity, role permissions, replay/reordering, message size, and rate limits. The pointer rate limit is metered per approved presenter — 90 events per second with a burst of 180 by default — which is above the client's own update rate, so reaching it means a faulty or abusive sender and the event is rejected rather than dropped silently.
 
 Pairing codes normalize case, whitespace, and hyphens. The accepted six-character alphabet excludes `0`, `O`, `1`, and `I` to reduce transcription errors. Codes are generated cryptographically, stored only by hash, expire after ten minutes when unused, and are consumed by the first accepted join request.
 

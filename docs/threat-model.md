@@ -40,7 +40,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 | Credential theft from disk | Windows DPAPI CurrentUser encryption and no plaintext fallback | Malware running as the same user can call DPAPI and remains outside the app's isolation capability |
 | Token replay | Session/role/client binding and single-use reconnect-token rotation | A token stolen from live process memory can be used until rotation or expiry |
 | Stale or duplicate pointers | Two-second TTL, event ID, bounded sequence window, no reconnect queue | Clock error can reject legitimate events; managed endpoint time synchronization is assumed |
-| Pointer flooding | 32 KB hub message ceiling, 128-point batch bound, one parallel invocation, 90/s token bucket and burst 180 | Distributed connection exhaustion requires reverse-proxy/network controls |
+| Pointer flooding | 32 KB hub message ceiling, 128-point batch bound, one parallel invocation, and a per-sender token bucket of 90/s with burst 180 | An approved sender's budget is its own, so a session's total ceiling grows with the presenter limit the receiver chose; distributed connection exhaustion requires reverse-proxy/network controls |
 | Unauthorized receiver control | Receiver display selection is local only; overlay never injects input | A local user can intentionally choose the wrong monitor |
 | Overlay input interception | Receiver uses transparent/no-activate native styles; presenter capture is bounded to calibrated window and pointing state | WPF/Windows defects could affect focus; manual release testing remains required |
 | TLS downgrade or invalid certificate | Caddy is the only published container port; client configuration requires HTTPS; platform validation trusts the per-user Caddy root and has no bypass | Replacing or losing the Caddy data volume requires rebuilding/reinstalling the client package with the new public root |
@@ -54,7 +54,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 - Unapproved and third-party connections cannot send pointers.
 - Rejected joins receive no session data.
 - Invalid, stale, future, duplicate, significantly old, oversized, and over-rate events fail or are ignored.
-- The thirty-first immediate pointer exceeds the configured burst.
+- The thirty-first immediate pointer exceeds the configured burst, and one sender exhausting its budget does not consume another sender's.
 - Production plaintext requests receive an error and no redirect.
 - Corrupt, expired, wrong-user, or wrong-role protected state is discarded.
 - Receiver recovery rotates the reconnect token, but pointer delivery cannot resume until the presenter submits a new request and is approved again.

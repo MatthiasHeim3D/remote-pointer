@@ -24,7 +24,7 @@
 | Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
 | Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
 | Session lifecycle | Creation, approval, active expiry, termination, disconnect revocation, empty receiver-shell resume |
-| Pointer defenses | TTL, sequence duplicate suppression, configurable token refill/burst, production defaults of 90/s and 180 |
+| Pointer defenses | TTL, sequence duplicate suppression, implausible forward-jump rejection, configurable token refill/burst metered per sender, production defaults of 90/s and 180 |
 | In-memory SignalR | Join/approve/send/acknowledge, peer revocation on disconnect, fresh-request enforcement, termination, unauthorized sender |
 | Relay hosting | Health endpoint, 32 KB message limit, single invocation per client |
 | Receiver networking | Session creation, approval presentation, fresh marker acknowledgement, expired marker drop |
@@ -33,7 +33,7 @@
 | Production transport | Plaintext refusal by default, explicit private proxy mode, secure health response, HSTS |
 | Protected recovery | At-rest token opacity, corruption/identity rejection, graceful-shutdown deletion, empty receiver recovery, fresh approval requirement |
 | Audit privacy | Structured client record excludes exception messages, credentials, and coordinate fields |
-| Hub rate limiting | Real transport accepts burst of 30 and rejects immediate event 31 |
+| Hub rate limiting | Real transport accepts burst of 30 and rejects immediate event 31; a second sender keeps its own budget |
 | Client configuration | Packaged and environment URLs both enforce HTTPS |
 
 ## Manual display matrix for Phases 2–5
