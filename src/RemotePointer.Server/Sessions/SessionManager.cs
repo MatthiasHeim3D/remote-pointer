@@ -833,7 +833,11 @@ public sealed class SessionManager : ISessionManager
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
         {
-            throw new ArgumentException("A non-empty identifier of at most 128 characters is required.", parameterName);
+            // A rejected identifier is invalid input like any other contract failure, so it
+            // carries a stable audit code instead of surfacing as an unexpected hub error.
+            throw new SessionOperationException(
+                "invalid_identifier",
+                $"{parameterName} must be a non-empty identifier of at most 128 characters.");
         }
     }
 

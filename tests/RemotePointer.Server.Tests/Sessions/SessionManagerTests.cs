@@ -220,6 +220,22 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void CreateReceiverSession_ReportsAnOversizedIdentifierAsAValidationFailure()
+    {
+        var context = CreateContext();
+
+        var exception = Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.CreateReceiverSession(
+                CreateDisplay(),
+                "receiver-connection",
+                "receiver-client",
+                new string('n', 129)));
+
+        Assert.Contains("128", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(0, context.Manager.ActiveSessionCount);
+    }
+
+    [Fact]
     public void CreateReceiverSession_IssuesReceiverOnlyCredentialAndPairingExpiry()
     {
         var context = CreateContext();
