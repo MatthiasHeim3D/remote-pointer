@@ -269,11 +269,64 @@
             <Setter Property="CaretBrush" Value="White" />
         </Style>
 
+        <Style TargetType="PasswordBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Background" Value="#292929" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="BorderBrush" Value="#555555" />
+            <Setter Property="SelectionBrush" Value="#39789C" />
+            <Setter Property="CaretBrush" Value="White" />
+        </Style>
+
         <Style x:Key="SettingsSectionHeaderStyle" TargetType="TextBlock">
             <Setter Property="Margin" Value="0,22,0,10" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Foreground" Value="#F5F5F5" />
+        </Style>
+
+        <!-- Collapses while its text is empty so no blank line is reserved for it. -->
+        <Style x:Key="ValidationMessageStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,6,0,0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#FF8A80" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}"
+                             Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="LinkButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="7,3" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#60CDFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#2C3A42" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -858,6 +911,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Border Padding="10,0"
                                 Background="#343434"
@@ -871,74 +925,85 @@
                         <TextBox Grid.Column="1"
                                  BorderThickness="0,1,1,1"
                                  Text="{Binding ServerAddressInput, UpdateSourceTrigger=PropertyChanged}" />
-                    </Grid>
-                    <TextBlock Margin="0,6,0,0"
-                               FontSize="11"
-                               Foreground="#FF8A80"
-                               TextWrapping="Wrap"
-                               Text="{Binding ServerAddressValidationMessage}" />
-                    <Grid Margin="0,10,0,0">
-                        <Button Width="124"
-                                Height="34"
-                                HorizontalAlignment="Left"
+                        <Button Grid.Column="2"
+                                Width="72"
+                                Height="36"
+                                Margin="8,0,0,0"
                                 Style="{StaticResource PrimaryButtonStyle}"
                                 Command="{Binding TestServerConnectionCommand}"
-                                Content="Test Connection"
-                                Visibility="{Binding ShowTestServerConnectionButton, Converter={StaticResource BooleanToVisibilityConverter}}" />
-                        <StackPanel HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Orientation="Horizontal"
-                                    Visibility="{Binding IsServerAddressVerified, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <TextBlock FontFamily="Segoe MDL2 Assets"
-                                       FontSize="18"
-                                       Foreground="#6CCB7F"
-                                       Text="&#xE73E;" />
-                            <TextBlock Margin="7,0,0,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="#6CCB7F"
-                                       Text="Connection verified" />
-                        </StackPanel>
+                                Content="Test"
+                                ToolTip="Test the server connection and save the address" />
                     </Grid>
-                    <TextBlock Margin="0,6,0,0"
-                               FontSize="11"
-                               Foreground="#FF8A80"
-                               TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource ValidationMessageStyle}"
+                               Text="{Binding ServerAddressValidationMessage}" />
+                    <StackPanel Margin="0,6,0,0"
+                                Orientation="Horizontal"
+                                Visibility="{Binding IsServerAddressVerified, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   FontSize="14"
+                                   Foreground="#6CCB7F"
+                                   Text="&#xE73E;" />
+                        <TextBlock Margin="7,0,0,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="#6CCB7F"
+                                   Text="Connection verified" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource ValidationMessageStyle}"
                                Text="{Binding ServerConnectionTestMessage}" />
 
                     <TextBlock Margin="0,18,0,6" Text="Server password" />
-                    <TextBlock Margin="0,0,0,6"
+                    <TextBlock Margin="0,0,0,8"
                                FontSize="11"
                                Foreground="#AFAFAF"
                                TextWrapping="Wrap"
-                               Text="Clients see each other only when they use the same server password. Share it with your team the way you would share a meeting password." />
-                    <PasswordBox x:Name="ServerPasswordBox"
-                                 PasswordChanged="OnServerPasswordChanged" />
-                    <TextBlock Margin="0,6,0,0"
-                               FontSize="11"
-                               Foreground="#FF8A80"
-                               TextWrapping="Wrap"
-                               Text="{Binding ServerPasswordValidationMessage}" />
-                    <Grid Margin="0,6,0,0">
+                               Text="Clients see each other only when they use the same server password." />
+                    <Grid Visibility="{Binding ShowServerPasswordSetState, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock VerticalAlignment="Center"
-                                   FontSize="11"
-                                   Foreground="#AFAFAF"
-                                   TextWrapping="Wrap"
-                                   Text="{Binding ServerPasswordStatus}" />
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="Server password is set" />
                         <Button Grid.Column="1"
-                                Padding="8,2"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Cursor="Hand"
-                                FontSize="11"
-                                Foreground="#60CDFF"
+                                Style="{StaticResource LinkButtonStyle}"
+                                Command="{Binding ChangeServerPasswordCommand}"
+                                Content="Change" />
+                        <Button Grid.Column="2"
+                                Style="{StaticResource LinkButtonStyle}"
                                 Command="{Binding ClearServerPasswordCommand}"
-                                Content="Remove"
-                                Visibility="{Binding HasServerPassword, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                Content="Remove" />
                     </Grid>
+                    <StackPanel Visibility="{Binding ShowServerPasswordEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <PasswordBox x:Name="ServerPasswordBox"
+                                         PasswordChanged="OnServerPasswordChanged" />
+                            <Button Grid.Column="1"
+                                    Width="66"
+                                    Height="36"
+                                    Margin="8,0,0,0"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Command="{Binding ApplyServerPasswordCommand}"
+                                    Content="Apply" />
+                            <Button Grid.Column="2"
+                                    Width="66"
+                                    Height="36"
+                                    Margin="6,0,0,0"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding CancelServerPasswordChangeCommand}"
+                                    Content="Cancel"
+                                    Visibility="{Binding IsChangingServerPassword, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </Grid>
+                        <TextBlock Style="{StaticResource ValidationMessageStyle}"
+                                   Text="{Binding ServerPasswordValidationMessage}" />
+                    </StackPanel>
                     <StackPanel Margin="0,10,0,0"
                                 Visibility="{Binding HasServerPasswordCheckCode, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <StackPanel Orientation="Horizontal">
@@ -966,18 +1031,25 @@
                             BorderThickness="1"
                             CornerRadius="4"
                             Visibility="{Binding ShowServerPasswordWarning, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <StackPanel Orientation="Horizontal">
+                        <!-- A Grid, not a horizontal StackPanel: the text column has to be
+                             bounded for the warning to wrap instead of running past the box. -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
                             <TextBlock VerticalAlignment="Top"
                                        FontFamily="Segoe MDL2 Assets"
                                        FontSize="14"
                                        Foreground="#FFB900"
                                        Text="&#xE7BA;" />
-                            <TextBlock Margin="8,0,0,0"
+                            <TextBlock Grid.Column="1"
+                                       Margin="8,0,0,0"
                                        FontSize="11"
                                        Foreground="#F0D79A"
                                        TextWrapping="Wrap"
                                        Text="{Binding ServerPasswordWarning}" />
-                        </StackPanel>
+                        </Grid>
                     </Border>
                     <Border Margin="0,24,0,2"
                             Padding="0,12,0,0"

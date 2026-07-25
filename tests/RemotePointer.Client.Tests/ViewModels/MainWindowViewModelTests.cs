@@ -110,6 +110,70 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void WithoutAStoredServerPassword_TheBoxIsOfferedWithoutAChangeStep()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: new ClientSettings());
+
+        Assert.True(viewModel.ShowServerPasswordEditor);
+        Assert.False(viewModel.ShowServerPasswordSetState);
+        Assert.False(viewModel.IsChangingServerPassword);
+        Assert.False(viewModel.ChangeServerPasswordCommand.CanExecute(null));
+        Assert.False(viewModel.ClearServerPasswordCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ChangingAStoredServerPassword_OffersTheBoxUntilItIsAppliedOrCancelled()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        var storedKey = ServerPasswordKey.Derive("first team password");
+        settings.Server.PasswordKey = storedKey;
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            receiverRelayClient: relay,
+            clientSettings: settings);
+
+        Assert.True(viewModel.ShowServerPasswordSetState);
+        Assert.False(viewModel.ShowServerPasswordEditor);
+
+        viewModel.ChangeServerPasswordCommand.Execute(null);
+
+        Assert.True(viewModel.IsChangingServerPassword);
+        Assert.True(viewModel.ShowServerPasswordEditor);
+        Assert.False(viewModel.ShowServerPasswordSetState);
+        Assert.False(viewModel.ApplyServerPasswordCommand.CanExecute(null));
+
+        viewModel.ServerPasswordInput = "short";
+
+        Assert.False(viewModel.ApplyServerPasswordCommand.CanExecute(null));
+
+        viewModel.CancelServerPasswordChangeCommand.Execute(null);
+
+        Assert.False(viewModel.IsChangingServerPassword);
+        Assert.True(viewModel.ShowServerPasswordSetState);
+        Assert.Empty(viewModel.ServerPasswordInput);
+        Assert.Equal(storedKey, settings.Server.PasswordKey);
+
+        viewModel.ChangeServerPasswordCommand.Execute(null);
+        viewModel.ServerPasswordInput = "second team password";
+
+        Assert.True(viewModel.ApplyServerPasswordCommand.CanExecute(null));
+        await viewModel.ApplyServerPasswordDraftAsync();
+
+        Assert.False(viewModel.IsChangingServerPassword);
+        Assert.True(viewModel.ShowServerPasswordSetState);
+        Assert.Empty(viewModel.ServerPasswordInput);
+        Assert.Equal(ServerPasswordKey.Derive("second team password"), relay.ServerPasswordKey);
+        Assert.Equal(relay.ServerPasswordKey, settings.Server.PasswordKey);
+    }
+
+    [Fact]
     public async Task ServerPasswordCheckCode_IdentifiesTheCurrentPasswordAndFollowsAChange()
     {
         using var overlay = new FakeOverlayService();

@@ -199,6 +199,16 @@ public partial class MainWindow : Window
             ServerPasswordBox.Clear();
         }
 
+        if (ReferenceEquals(sender, viewModel)
+            && e.PropertyName == nameof(MainWindowViewModel.IsChangingServerPassword)
+            && viewModel.IsChangingServerPassword)
+        {
+            // The same property change reveals the box, so focus has to wait for that layout pass.
+            _ = Dispatcher.BeginInvoke(
+                () => ServerPasswordBox.Focus(),
+                DispatcherPriority.Input);
+        }
+
         if ((ReferenceEquals(sender, viewModel)
                 && e.PropertyName is nameof(MainWindowViewModel.IsSettingsOpen)
                     or nameof(MainWindowViewModel.HasConnectedPresenter))

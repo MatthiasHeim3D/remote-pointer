@@ -12,8 +12,10 @@ namespace RemotePointer.Client.ViewModels;
 
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
+    private readonly AsyncRelayCommand applyServerPasswordCommand;
     private readonly AsyncRelayCommand approvePresenterCommand;
     private readonly SemaphoreSlim availabilityUpdateGate = new(1, 1);
+    private readonly RelayCommand changeServerPasswordCommand;
     private readonly AsyncRelayCommand disconnectAllConnectionsCommand;
     private readonly AsyncRelayCommand setReceiverAvailabilityCommand;
     private readonly AsyncRelayCommand testServerConnectionCommand;
@@ -49,6 +51,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool hasShownUsageHints;
     private bool isServerAddressVerified;
     private bool hasServerPassword;
+    private bool isChangingServerPassword;
     private bool serverPasswordRequired;
     private string serverPasswordInput = string.Empty;
     private bool pendingRelayReinitialization;
@@ -175,6 +178,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ClearServerPasswordCommand = new AsyncRelayCommand(
             _ => ClearServerPasswordAsync(),
             _ => HasServerPassword);
+        changeServerPasswordCommand = new RelayCommand(
+            _ => BeginServerPasswordChange(),
+            _ => HasServerPassword);
+        applyServerPasswordCommand = new AsyncRelayCommand(
+            _ => ApplyServerPasswordDraftAsync(),
+            _ => ServerPasswordInput.Length > 0
+                && string.IsNullOrEmpty(ServerPasswordValidationMessage));
+        CancelServerPasswordChangeCommand = new RelayCommand(
+            _ => CancelServerPasswordChange());
         incrementMaximumSendersCommand = new RelayCommand(
             _ => MaximumSenderConnections++,
             _ => MaximumSenderConnections < 16);
@@ -395,6 +407,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (SetProperty(ref serverPasswordInput, value ?? string.Empty))
             {
                 RaisePropertyChanged(nameof(ServerPasswordValidationMessage));
+                applyServerPasswordCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -423,15 +436,31 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// A stored password cannot be shown back, so the box is only offered when there is nothing to
+    /// show: no password is set yet, or the user asked to replace the one that is.
+    /// </summary>
+    public bool IsChangingServerPassword
+    {
+        get => isChangingServerPassword;
+        private set
+        {
+            if (SetProperty(ref isChangingServerPassword, value))
+            {
+                RaiseServerPasswordProperties();
+            }
+        }
+    }
+
+    public bool ShowServerPasswordEditor => !HasServerPassword || IsChangingServerPassword;
+
+    public bool ShowServerPasswordSetState => HasServerPassword && !IsChangingServerPassword;
+
     public bool ShowServerPasswordWarning => !HasServerPassword;
 
     public string ServerPasswordWarning => ServerPasswordRequired
         ? "This relay requires a server password. Set one to see other clients and be seen by them."
         : "No server password is set. Your name and picture are visible to everyone who can reach this relay.";
-
-    public string ServerPasswordStatus => HasServerPassword
-        ? "A server password is set. Only clients using the same one can see you."
-        : "Not set";
 
     /// <summary>
     /// The password itself is never stored, so it cannot be shown back. This code can: it is
@@ -543,6 +572,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand ToggleAvailabilityMenuCommand { get; }
 
     public ICommand ClearServerPasswordCommand { get; }
+
+    public ICommand ChangeServerPasswordCommand => changeServerPasswordCommand;
+
+    public ICommand ApplyServerPasswordCommand => applyServerPasswordCommand;
+
+    public ICommand CancelServerPasswordChangeCommand { get; }
 
     public ICommand IncrementMaximumSendersCommand => incrementMaximumSendersCommand;
 
@@ -1199,6 +1234,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void OpenSettings()
     {
         ServerPasswordInput = string.Empty;
+        IsChangingServerPassword = false;
         ResetSettingsDraft();
         IsServerAddressVerified = false;
         ServerConnectionTestMessage = string.Empty;
@@ -1457,7 +1493,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     /// Derives the group key from the draft password, stores it protected, and hands it to both
     /// relay connections. The password is used here and nowhere else.
     /// </summary>
-    private async Task ApplyServerPasswordDraftAsync()
+    internal async Task ApplyServerPasswordDraftAsync()
     {
         var draft = ServerPasswordInput;
         if (draft.Length == 0)
@@ -1475,12 +1511,26 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ServerPasswordInput = string.Empty;
         serverPasswordStore?.Save(key);
         HasServerPassword = true;
+        IsChangingServerPassword = false;
         await ApplyServerPasswordKeyAsync(key);
+    }
+
+    private void BeginServerPasswordChange()
+    {
+        ServerPasswordInput = string.Empty;
+        IsChangingServerPassword = true;
+    }
+
+    private void CancelServerPasswordChange()
+    {
+        ServerPasswordInput = string.Empty;
+        IsChangingServerPassword = false;
     }
 
     public async Task ClearServerPasswordAsync()
     {
         ServerPasswordInput = string.Empty;
+        IsChangingServerPassword = false;
         serverPasswordStore?.Clear();
         HasServerPassword = false;
         await ApplyServerPasswordKeyAsync(null);
@@ -1521,12 +1571,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void RaiseServerPasswordProperties()
     {
+        RaisePropertyChanged(nameof(ShowServerPasswordEditor));
+        RaisePropertyChanged(nameof(ShowServerPasswordSetState));
         RaisePropertyChanged(nameof(ShowServerPasswordWarning));
         RaisePropertyChanged(nameof(ServerPasswordWarning));
-        RaisePropertyChanged(nameof(ServerPasswordStatus));
         RaisePropertyChanged(nameof(ServerPasswordCheckCode));
         RaisePropertyChanged(nameof(HasServerPasswordCheckCode));
         RaisePropertyChanged(nameof(EmptyClientListMessage));
+        changeServerPasswordCommand.RaiseCanExecuteChanged();
         (ClearServerPasswordCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
     }
 
