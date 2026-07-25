@@ -175,6 +175,40 @@ public sealed class SignalRRelayClientTests
         },
     };
 
+    [Fact]
+    public async Task Construction_SkipsAProfilePictureThatCannotBeDecoded()
+    {
+        using var directory = new TemporaryDirectory();
+        var picturePath = System.IO.Path.Combine(directory.Path, "corrupt.png");
+        File.WriteAllBytes(
+            picturePath,
+            [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01, 0x02, 0x03]);
+        var settings = new ClientSettings
+        {
+            Server = new ServerSettings
+            {
+                BaseUrl = "https://pointer.example.test",
+                ReconnectDelaysSeconds = [0, 1],
+            },
+            Profile = new UserProfileSettings
+            {
+                UserName = "Ada Lovelace",
+                PicturePath = picturePath,
+            },
+        };
+
+        SignalRRelayClient? client = null;
+        var exception = Record.Exception(
+            () => client = new SignalRRelayClient(
+                settings,
+                new FixedClientInstanceIdProvider("client"),
+                messageHandlerFactory: null));
+
+        Assert.Null(exception);
+        Assert.NotNull(client);
+        await client.DisposeAsync();
+    }
+
     private static TaskCompletionSource<T> CompletionSource<T>() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 

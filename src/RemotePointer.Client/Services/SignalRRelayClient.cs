@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Net.Http;
 using System.IO;
+using System.Security;
 using System.Windows.Media.Imaging;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -797,10 +798,15 @@ public sealed class SignalRRelayClient : IRelayClient
         }
         catch (Exception exception) when (
             exception is IOException
+                or ArgumentException
+                or FormatException
+                or InvalidOperationException
                 or NotSupportedException
                 or UnauthorizedAccessException
-                or UriFormatException)
+                or SecurityException)
         {
+            // A picture that cannot be decoded is not worth failing over: this runs from the
+            // constructor, so an unhandled failure here would stop the client from starting.
             return new ClientProfile();
         }
     }
