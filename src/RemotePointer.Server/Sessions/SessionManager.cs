@@ -229,7 +229,7 @@ public sealed class SessionManager : ISessionManager
             {
                 pairingCodeSessions.Remove(session.PairingCodeHash);
                 session.PairingCodeConsumed = true;
-                if (!session.IsDiscoverable)
+                if (IsAbandonedNoLock(session))
                 {
                     _ = TerminateSessionNoLock(session);
                 }
@@ -728,12 +728,9 @@ public sealed class SessionManager : ISessionManager
 
                 if (!session.PairingCodeConsumed && session.PairingCodeExpiresAt <= now)
                 {
-                    if (session.IsDiscoverable)
-                    {
-                        pairingCodeSessions.Remove(session.PairingCodeHash);
-                        session.PairingCodeConsumed = true;
-                    }
-                    else
+                    pairingCodeSessions.Remove(session.PairingCodeHash);
+                    session.PairingCodeConsumed = true;
+                    if (IsAbandonedNoLock(session))
                     {
                         terminated.Add(TerminateSessionNoLock(session));
                     }
@@ -927,6 +924,16 @@ public sealed class SessionManager : ISessionManager
 
         return pairingCode;
     }
+
+    /// <summary>
+    /// A session whose pairing code has expired unused is abandoned only when nothing can make
+    /// it reachable again. A connected receiver that chose to be invisible can publish itself
+    /// at any time, so it keeps its session; a disconnected shell, or any session on a relay
+    /// with discovery switched off, can no longer be joined and is collected.
+    /// </summary>
+    private bool IsAbandonedNoLock(SessionRecord session) =>
+        !session.IsDiscoverable
+        && (session.Receiver.ConnectionId is null || !sessionOptions.ReceiverDiscoveryEnabled);
 
     private void EnsureConnectionIsUnbound(string connectionId)
     {

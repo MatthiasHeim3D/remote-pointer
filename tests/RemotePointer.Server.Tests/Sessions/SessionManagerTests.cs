@@ -186,6 +186,40 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void InvisibleReceiver_KeepsItsSessionAfterThePairingCodeExpires()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", false);
+        context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
+
+        var expired = context.Manager.CollectExpiredSessions();
+
+        Assert.Empty(expired);
+        Assert.Equal(1, context.Manager.ActiveSessionCount);
+        Assert.True(
+            context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", true));
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
+    }
+
+    [Fact]
+    public void AbandonedInvisibleSession_IsCollectedAfterThePairingCodeExpires()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", false);
+        _ = context.Manager.Disconnect("receiver-connection");
+        context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
+
+        var expired = context.Manager.CollectExpiredSessions();
+
+        Assert.Equal(created.SessionId, Assert.Single(expired).SessionId);
+        Assert.Equal(0, context.Manager.ActiveSessionCount);
+    }
+
+    [Fact]
     public void CreateReceiverSession_IssuesReceiverOnlyCredentialAndPairingExpiry()
     {
         var context = CreateContext();
