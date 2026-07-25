@@ -18,7 +18,9 @@ REMOTEPOINTER_HOSTNAME=pointer.internal.example
 REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=true
 ```
 
-Receiver discovery is enabled by default so receivers can explicitly publish themselves in the relay directory. Set `REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=false` to disable the directory. Every direct join still requires receiver approval. Pairing-code joins remain available at the relay protocol level for compatibility but are not exposed by the desktop client.
+Receiver discovery lets receivers publish themselves in the relay directory, which is how the desktop client finds them. `.env.example` ships with `REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=false`, so a stack started from an unedited copy has the directory switched off and no receiver can be found; set it to `true` to enable it. Removing the variable altogether is not the same as setting it to `false` — Compose then falls back to `true`, matching the relay image's own default.
+
+Enabling the directory does not grant access: every direct join still requires receiver approval, and each receiver additionally opts in per session. It does mean that anyone who can reach the relay can list the receivers that opted in. Pairing-code joins remain available at the relay protocol level for compatibility but are not exposed by the desktop client.
 
 ```powershell
 docker compose up -d --build

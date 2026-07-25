@@ -35,7 +35,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 | Threat | Control | Residual risk |
 | --- | --- | --- |
 | Pairing-code guessing | Cryptographic alphabet, short expiry, one-time consumption, explicit receiver approval | Online attempts are not globally throttled by source IP in the MVP; network perimeter controls remain required |
-| Receiver-directory enumeration | Disabled by default, receiver opt-in, machine label plus opaque session ID only, approval before credentials | Other users who can reach the relay can see opted-in receiver labels; the small-network deployment relies on its closed network/VPN boundary |
+| Receiver-directory enumeration | Operator-controlled and off in the shipped `.env.example`, receiver opt-in per session, machine label plus opaque session ID only, approval before credentials | The relay image enables the directory unless the deployment turns it off, so a stack that omits the variable exposes opted-in receiver labels to anyone who can reach the relay; the small-network deployment relies on its closed network/VPN boundary |
 | Presenter impersonation | Random client identity, receiver-visible machine name, explicit approval, role token | Machine name is not cryptographic identity until optional Entra ID is added |
 | Credential theft from disk | Windows DPAPI CurrentUser encryption and no plaintext fallback | Malware running as the same user can call DPAPI and remains outside the app's isolation capability |
 | Token replay | Session/role/client binding and single-use reconnect-token rotation | A token stolen from live process memory can be used until rotation or expiry |
