@@ -272,14 +272,16 @@ public sealed class MainWindowViewModelTests
         viewModel.ToggleSettingsCommand.Execute(null);
         viewModel.ServerAddressInput = "relay.example.test";
 
-        Assert.True(viewModel.ShowTestServerConnectionButton);
+        Assert.True(viewModel.TestServerConnectionCommand.CanExecute(null));
         await viewModel.TestServerConnectionAsync();
 
         Assert.Equal(["https://relay.example.test"], tester.TestedAddresses);
         Assert.Equal("https://relay.example.test", testSettings.Settings.Server.BaseUrl);
-        Assert.False(viewModel.ShowTestServerConnectionButton);
         Assert.True(viewModel.IsServerAddressVerified);
         Assert.True(viewModel.IsSettingsOpen);
+
+        // The saved address stays testable so a reachability check never needs a fake edit first.
+        Assert.True(viewModel.TestServerConnectionCommand.CanExecute(null));
     }
 
     [Fact]

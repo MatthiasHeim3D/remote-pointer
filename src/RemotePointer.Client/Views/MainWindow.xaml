@@ -279,6 +279,115 @@
             <Setter Property="CaretBrush" Value="White" />
         </Style>
 
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="9,7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="3">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#353535" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#39789C" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Background" Value="#292929" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="BorderBrush" Value="#555555" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Chrome"
+                                    Grid.ColumnSpan="2"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4" />
+                            <!-- Carries the whole face: a click anywhere on it opens the list. -->
+                            <ToggleButton Grid.ColumnSpan="2"
+                                          Background="Transparent"
+                                          ClickMode="Press"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" />
+                            <TextBlock Grid.Column="1"
+                                       Margin="0,0,11,0"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="9"
+                                       Foreground="#D8D8D8"
+                                       IsHitTestVisible="False"
+                                       Text="&#xE70D;" />
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade">
+                                <Border MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Margin="0,2,0,0"
+                                        Padding="3"
+                                        Background="#2B2B2B"
+                                        BorderBrush="#555555"
+                                        BorderThickness="1"
+                                        CornerRadius="4">
+                                    <ScrollViewer Style="{StaticResource CompactVerticalScrollViewerStyle}"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#333333" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="SettingsSectionHeaderStyle" TargetType="TextBlock">
             <Setter Property="Margin" Value="0,22,0,10" />
             <Setter Property="FontSize" Value="14" />
@@ -841,13 +950,19 @@
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
                                Text="Receiver" />
                     <TextBlock Margin="0,0,0,6" Text="Receiving screen" />
-                    <ComboBox Height="36"
-                              Padding="8,5"
-                              ItemsSource="{Binding Monitors}"
+                    <!-- An item template rather than DisplayMemberPath: the closed selection box
+                         of the dark template renders through SelectionBoxItemTemplate, which only
+                         an explicit template fills in. -->
+                    <ComboBox ItemsSource="{Binding Monitors}"
                               SelectedItem="{Binding SelectedMonitor}"
-                              DisplayMemberPath="SelectionLabel"
                               SelectionChanged="OnReceivingScreenSelectionChanged"
-                              IsEnabled="{Binding CanSelectMonitor}" />
+                              IsEnabled="{Binding CanSelectMonitor}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding SelectionLabel}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
                     <TextBlock Margin="0,16,0,6" Text="Maximum simultaneous connections" />
                     <Grid Height="38">
                         <Grid.ColumnDefinitions>

@@ -157,10 +157,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
         });
         CloseSettingsCommand = new AsyncRelayCommand(_ => CloseSettingsAsync());
+        // Testing an address that is already saved is allowed on purpose: it is the only way to
+        // confirm a relay is still reachable without editing the address first.
         testServerConnectionCommand = new AsyncRelayCommand(
             _ => TestServerConnectionAsync(),
-            _ => ShowTestServerConnectionButton
-                && string.IsNullOrEmpty(ServerAddressValidationMessage)
+            _ => string.IsNullOrEmpty(ServerAddressValidationMessage)
                 && !string.IsNullOrWhiteSpace(ServerAddress));
         ToggleAvailabilityMenuCommand = new AsyncRelayCommand(async _ =>
         {
@@ -346,7 +347,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 ServerConnectionTestMessage = string.Empty;
                 RaisePropertyChanged(nameof(ServerAddress));
                 RaisePropertyChanged(nameof(ServerAddressValidationMessage));
-                RaiseServerAddressStateProperties();
+                RaiseServerAddressCommandState();
             }
         }
     }
@@ -380,8 +381,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 : validationMessage;
         }
     }
-
-    public bool ShowTestServerConnectionButton => HasServerAddressChanged;
 
     public bool IsServerAddressVerified
     {
@@ -1132,6 +1131,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            var addressIsNew = !string.Equals(
+                clientSettings.Server.BaseUrl,
+                requestedServerAddress,
+                StringComparison.Ordinal);
             PersistSettings(requestedServerAddress);
             pendingRelayReinitialization = !string.Equals(
                 activeServerAddress,
@@ -1139,8 +1142,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 StringComparison.Ordinal);
             ServerConnectionTestMessage = string.Empty;
             IsServerAddressVerified = true;
-            RaiseServerAddressStateProperties();
-            SetStatus("Server connection verified and address saved.", false);
+            RaiseServerAddressCommandState();
+            SetStatus(
+                addressIsNew
+                    ? "Server connection verified and address saved."
+                    : "Server connection verified.",
+                false);
         }
         catch (Exception exception)
         {
@@ -1313,7 +1320,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ReceiverAvailability == ReceiverAvailability.Available);
         Presenter.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
         startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
-        RaiseServerAddressStateProperties();
+        RaiseServerAddressCommandState();
     }
 
     private Task ApplyActiveClientSettingsAsync() => Task.WhenAll(
@@ -1332,11 +1339,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ServerConnectionTestMessage = string.Empty;
     }
 
-    private void RaiseServerAddressStateProperties()
-    {
-        RaisePropertyChanged(nameof(ShowTestServerConnectionButton));
+    private void RaiseServerAddressCommandState() =>
         testServerConnectionCommand.RaiseCanExecuteChanged();
-    }
 
     private void ResetSettingsDraft()
     {
