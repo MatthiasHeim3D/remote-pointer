@@ -19,7 +19,6 @@ public sealed class SessionManager : ISessionManager
     private readonly Dictionary<string, string> connectionGroups = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ConnectionMembership> connections = new(StringComparer.Ordinal);
     private readonly object syncRoot = new();
-    private readonly Dictionary<string, string> pairingCodeSessions = new(StringComparer.Ordinal);
     private readonly PointerRateLimitOptions rateLimitOptions;
     private readonly ISessionSecretGenerator secretGenerator;
     private readonly SessionOptions sessionOptions;
@@ -145,8 +144,6 @@ public sealed class SessionManager : ISessionManager
             EnsureGroupIsPermittedNoLock(connectionId);
             var now = timeProvider.GetUtcNow();
             var sessionId = GenerateUniqueSessionId();
-            var pairingCode = GenerateUniquePairingCode();
-            var pairingCodeHash = secretGenerator.HashSecret(pairingCode);
             var sessionSecret = secretGenerator.GenerateSecret();
             var sessionToken = secretGenerator.GenerateSecret();
             var reconnectToken = secretGenerator.GenerateSecret();
@@ -160,8 +157,7 @@ public sealed class SessionManager : ISessionManager
                 secretGenerator.HashSecret(reconnectToken));
             var session = new SessionRecord(
                 sessionId,
-                pairingCodeHash,
-                now.AddMinutes(sessionOptions.PairingCodeLifetimeMinutes),
+                now.AddMinutes(sessionOptions.AbandonedSessionLifetimeMinutes),
                 expiresAt,
                 secretGenerator.HashSecret(sessionSecret),
                 display,
@@ -175,7 +171,6 @@ public sealed class SessionManager : ISessionManager
             session.IsDiscoverable = sessionOptions.ReceiverDiscoveryEnabled;
 
             sessions.Add(sessionId, session);
-            pairingCodeSessions.Add(pairingCodeHash, sessionId);
             connections.Add(
                 connectionId,
                 new ConnectionMembership(sessionId, ClientRole.Receiver, Approved: true));
@@ -187,12 +182,7 @@ public sealed class SessionManager : ISessionManager
                 sessionToken,
                 reconnectToken,
                 expiresAt);
-            return new CreateSessionResponse(
-                sessionId,
-                pairingCode,
-                sessionSecret,
-                credential,
-                session.PairingCodeExpiresAt);
+            return new CreateSessionResponse(sessionId, sessionSecret, credential);
         }
     }
 
@@ -264,65 +254,6 @@ public sealed class SessionManager : ISessionManager
                 requireApproved: true);
             session.IsDiscoverable = discoverable;
             return session.IsDiscoverable;
-        }
-    }
-
-    public JoinSessionResult RequestToJoinSession(
-        JoinRequest request,
-        string connectionId,
-        string displayName,
-        string? applicationInstanceId = null)
-    {
-        EnsureIdentifier(connectionId, nameof(connectionId));
-        EnsureIdentifier(displayName, nameof(displayName));
-        var validation = ContractValidator.Validate(request);
-        if (!validation.IsValid || request.Role != ClientRole.Presenter)
-        {
-            return RejectedJoin("The join request is invalid.");
-        }
-
-        lock (syncRoot)
-        {
-            if (connections.ContainsKey(connectionId))
-            {
-                return RejectedJoin("This connection is already participating in a session.");
-            }
-
-            var normalizedCode = PairingCodeValidator.Normalize(request.PairingCode);
-            var pairingHash = secretGenerator.HashSecret(normalizedCode);
-            if (!pairingCodeSessions.TryGetValue(pairingHash, out var sessionId)
-                || !sessions.TryGetValue(sessionId, out var session))
-            {
-                return RejectedJoin("The pairing code is invalid or expired.");
-            }
-
-            var now = timeProvider.GetUtcNow();
-            if (session.ExpiresAt <= now)
-            {
-                _ = TerminateSessionNoLock(session);
-                return RejectedJoin("The pairing code is invalid or expired.");
-            }
-
-            if (session.PairingCodeExpiresAt <= now)
-            {
-                pairingCodeSessions.Remove(session.PairingCodeHash);
-                session.PairingCodeConsumed = true;
-                if (IsAbandonedNoLock(session))
-                {
-                    _ = TerminateSessionNoLock(session);
-                }
-
-                return RejectedJoin("The pairing code is invalid or expired.");
-            }
-
-            return BindPendingPresenterNoLock(
-                session,
-                connectionId,
-                request.ClientInstanceId,
-                applicationInstanceId,
-                displayName,
-                request.ClientVersion,
-                request.Profile?.PicturePng);
         }
     }
 
@@ -804,10 +735,9 @@ public sealed class SessionManager : ISessionManager
                     continue;
                 }
 
-                if (!session.PairingCodeConsumed && session.PairingCodeExpiresAt <= now)
+                if (!session.AbandonmentResolved && session.AbandonedAfter <= now)
                 {
-                    pairingCodeSessions.Remove(session.PairingCodeHash);
-                    session.PairingCodeConsumed = true;
+                    session.AbandonmentResolved = true;
                     if (IsAbandonedNoLock(session))
                     {
                         terminated.Add(TerminateSessionNoLock(session));
@@ -897,7 +827,7 @@ public sealed class SessionManager : ISessionManager
         SessionOptions sessionOptions,
         PointerRateLimitOptions rateLimitOptions)
     {
-        if (sessionOptions.PairingCodeLifetimeMinutes <= 0
+        if (sessionOptions.AbandonedSessionLifetimeMinutes <= 0
             || sessionOptions.MaximumSessionHours <= 0
             || sessionOptions.MaximumSessionHours > 8
             || sessionOptions.SequenceWindowSize <= 0
@@ -976,8 +906,9 @@ public sealed class SessionManager : ISessionManager
             return RejectedJoin("The session already has a presenter request.");
         }
 
-        session.PairingCodeConsumed = true;
-        pairingCodeSessions.Remove(session.PairingCodeHash);
+        // An access request settles the question the grace period asks, so the session is no
+        // longer a candidate for collection even on a relay that publishes nothing.
+        session.AbandonmentResolved = true;
         var presenter = new PresenterDescriptor(
             connectionId,
             clientInstanceId,
@@ -1007,26 +938,6 @@ public sealed class SessionManager : ISessionManager
         return sessionId;
     }
 
-    private string GenerateUniquePairingCode()
-    {
-        string pairingCode;
-        string pairingHash;
-        do
-        {
-            pairingCode = secretGenerator.GeneratePairingCode();
-            pairingHash = secretGenerator.HashSecret(pairingCode);
-        }
-        while (pairingCodeSessions.ContainsKey(pairingHash));
-
-        return pairingCode;
-    }
-
-    /// <summary>
-    /// A session whose pairing code has expired unused is abandoned only when nothing can make
-    /// it reachable again. A connected receiver that chose to be invisible can publish itself
-    /// at any time, so it keeps its session; a disconnected shell, or any session on a relay
-    /// with discovery switched off, can no longer be joined and is collected.
-    /// </summary>
     private string GetConnectionGroupNoLock(string connectionId) =>
         connectionGroups.TryGetValue(connectionId, out var groupKey) ? groupKey : OpenGroupKey;
 
@@ -1045,6 +956,12 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
+    /// <summary>
+    /// A session nobody has asked to join is abandoned only when nothing can make it reachable.
+    /// A connected receiver that chose to be invisible can publish itself at any time, so it
+    /// keeps its session; a disconnected shell, or any session on a relay with discovery
+    /// switched off, can no longer be joined and is collected.
+    /// </summary>
     private bool IsAbandonedNoLock(SessionRecord session) =>
         !session.IsDiscoverable
         && (session.Receiver.ConnectionId is null || !sessionOptions.ReceiverDiscoveryEnabled);
@@ -1107,7 +1024,6 @@ public sealed class SessionManager : ISessionManager
     private SessionTerminationResult TerminateSessionNoLock(SessionRecord session)
     {
         sessions.Remove(session.Id);
-        pairingCodeSessions.Remove(session.PairingCodeHash);
         var connectionIds = connections
             .Where(pair => string.Equals(pair.Value.SessionId, session.Id, StringComparison.Ordinal))
             .Select(pair => pair.Key)
@@ -1216,8 +1132,7 @@ public sealed class SessionManager : ISessionManager
 
     private sealed class SessionRecord(
         string id,
-        string pairingCodeHash,
-        DateTimeOffset pairingCodeExpiresAt,
+        DateTimeOffset abandonedAfter,
         DateTimeOffset expiresAt,
         string sessionSecretHash,
         DisplayDescriptor receiverDisplay,
@@ -1231,9 +1146,7 @@ public sealed class SessionManager : ISessionManager
     {
         internal string Id { get; } = id;
 
-        internal string PairingCodeHash { get; } = pairingCodeHash;
-
-        internal DateTimeOffset PairingCodeExpiresAt { get; } = pairingCodeExpiresAt;
+        internal DateTimeOffset AbandonedAfter { get; } = abandonedAfter;
 
         internal DateTimeOffset ExpiresAt { get; } = expiresAt;
 
@@ -1255,7 +1168,7 @@ public sealed class SessionManager : ISessionManager
 
         internal string GroupKey { get; } = groupKey;
 
-        internal bool PairingCodeConsumed { get; set; }
+        internal bool AbandonmentResolved { get; set; }
 
         internal bool IsDiscoverable { get; set; }
 

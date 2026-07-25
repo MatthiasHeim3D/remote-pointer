@@ -47,25 +47,6 @@ public sealed class ContractValidatorTests
     }
 
     [Fact]
-    public void Validate_AcceptsNormalizedPairingCodeInJoinRequest()
-    {
-        var request = new JoinRequest("ab2d-4e", ClientRole.Presenter, "client-id", "1.0.0");
-
-        Assert.True(ContractValidator.Validate(request).IsValid);
-    }
-
-    [Fact]
-    public void Validate_RejectsInvalidJoinRequest()
-    {
-        var request = new JoinRequest("OOO-111", (ClientRole)99, "", "");
-
-        var result = ContractValidator.Validate(request);
-
-        Assert.False(result.IsValid);
-        Assert.Equal(4, result.Errors.Count);
-    }
-
-    [Fact]
     public void Validate_AcceptsValidDirectJoinRequest()
     {
         var request = new DirectJoinRequest("session-id", "client-id", "1.0.0");

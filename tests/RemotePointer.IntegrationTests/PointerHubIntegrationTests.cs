@@ -363,12 +363,9 @@ public sealed class PointerHubIntegrationTests
             2,
             string.Empty);
         var joinResponse = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinSession",
-            new JoinRequest(
-                created.PairingCode,
-                ClientRole.Presenter,
-                "presenter-client",
-                "1.0.0"));
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
+            string.Empty);
         var presenterDescriptor = await joinRequested.Task.WaitAsync(TestTimeout);
 
         Assert.True(joinResponse.Accepted);
@@ -503,14 +500,16 @@ public sealed class PointerHubIntegrationTests
         using var factory = CreateFactory();
         await using var connection = CreateConnection(factory, "large-client", "Large Client");
         await connection.StartAsync();
-        var oversizedRequest = new JoinRequest(
-            "AB2D4E",
-            ClientRole.Presenter,
+        var oversizedRequest = new DirectJoinRequest(
+            "unknown-session",
             "large-client",
             new string('x', 40_000));
 
         var exception = await Record.ExceptionAsync(
-            () => connection.InvokeAsync("RequestToJoinSession", oversizedRequest)
+            () => connection.InvokeAsync(
+                    "RequestToJoinReceiver",
+                    oversizedRequest,
+                    string.Empty)
                 .WaitAsync(TestTimeout));
 
         Assert.NotNull(exception);
@@ -589,7 +588,7 @@ public sealed class PointerHubIntegrationTests
     [Fact]
     public async Task HubRateLimit_RejectsThirtyFirstImmediatePointer()
     {
-        using var factory = CreateFactory().WithWebHostBuilder(
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true).WithWebHostBuilder(
             builder =>
             {
                 builder.UseSetting("RateLimits:EventsPerSecond", "20");
@@ -622,12 +621,9 @@ public sealed class PointerHubIntegrationTests
             2,
             string.Empty);
         _ = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinSession",
-            new JoinRequest(
-                created.PairingCode,
-                ClientRole.Presenter,
-                "presenter-rate",
-                "1.0.0"));
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "presenter-rate", "1.0.0"),
+            string.Empty);
         var pending = await joinRequested.Task.WaitAsync(TestTimeout);
         await receiver.InvokeAsync("ApprovePresenter", created.SessionId, pending.ConnectionId);
         _ = await presenterCredential.Task.WaitAsync(TestTimeout);

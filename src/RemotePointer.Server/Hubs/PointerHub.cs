@@ -171,56 +171,6 @@ public sealed class PointerHub(
         }
     }
 
-    public async Task<JoinResponse> RequestToJoinSession(JoinRequest request)
-    {
-        var clientInstanceId = GetRequiredClientInstanceId();
-        if (!string.Equals(
-                request.ClientInstanceId,
-                clientInstanceId,
-                StringComparison.Ordinal))
-        {
-            LogValidationFailure("client_identity_mismatch", "RequestToJoinSession");
-            return new JoinResponse(false, null, "The join request identity is invalid.");
-        }
-
-        try
-        {
-            var result = sessionManager.RequestToJoinSession(
-                request,
-                Context.ConnectionId,
-                GetDisplayName(clientInstanceId),
-                GetApplicationInstanceId());
-            if (result.Response.Accepted
-                && result.ReceiverConnectionId is not null
-                && result.Presenter is not null)
-            {
-                await Clients.Client(result.ReceiverConnectionId)
-                    .PresenterJoinRequested(result.Presenter)
-                    .ConfigureAwait(false);
-                await NotifyDirectoryChangedAsync().ConfigureAwait(false);
-                logger.LogInformation(
-                    AuditEventIds.PresenterJoinRequested,
-                    "Presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
-                    result.Response.SessionId,
-                    request.ClientInstanceId);
-            }
-            else
-            {
-                logger.LogWarning(
-                    AuditEventIds.PresenterJoinRejected,
-                    "Presenter join rejected. ClientInstanceId={ClientInstanceId} Reason={Reason}",
-                    request.ClientInstanceId,
-                    result.Response.Reason);
-            }
-
-            return result.Response;
-        }
-        catch (SessionOperationException exception)
-        {
-            throw ToHubException(exception, "RequestToJoinSession");
-        }
-    }
-
     public async Task<JoinResponse> RequestToJoinReceiver(
         DirectJoinRequest request,
         string displayName)

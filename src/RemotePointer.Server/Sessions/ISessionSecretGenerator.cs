@@ -4,8 +4,6 @@ public interface ISessionSecretGenerator
 {
     string GenerateIdentifier();
 
-    string GeneratePairingCode();
-
     string GenerateSecret();
 
     string HashSecret(string secret);

@@ -12,7 +12,6 @@ The shared library does not reference Windows desktop APIs. Client Win32 interop
 - All normalized coordinates must be finite and within the inclusive unit interval.
 - Pointer timestamps and TTLs are validated before an event can be considered for display.
 - Event IDs and a bounded sequence-number window support replay rejection.
-- Friendly pairing codes exclude visually ambiguous characters.
 - Nullable analysis, .NET analyzers, and warnings-as-errors are enabled repository-wide.
 
 ## Phase 2 overlay controls
@@ -42,9 +41,8 @@ No development certificate-bypass switch will be included in production builds.
 
 ## Phase 4 relay controls
 
-- Pairing codes, session secrets, session tokens, and reconnect tokens are cryptographically generated; only hashes are retained in server state.
-- A pairing code is one-time and does not become a durable session credential.
-- Receiver discovery can be disabled by the server operator and always requires explicit receiver opt-in for each active session.
+- Session secrets, session tokens, and reconnect tokens are cryptographically generated; only hashes are retained in server state.
+- Receiver discovery can be disabled by the server operator and always requires explicit receiver opt-in for each active session. It is the only route into a session, so a relay with it switched off accepts no join request at all.
 - A server password scopes the directory. The client derives a key from it with PBKDF2-SHA256 and the relay never receives the password, so listings, join requests and directory notifications reach only clients holding the same one. `Sessions:RequireServerPassword` defaults to true and rejects clients that present none; disabling it puts passwordless clients into one open pool and the client warns about it.
 - Only the derived key is stored on the client, under DPAPI `CurrentUser` alongside session credentials, never in the preferences file and never shown back to the user.
 - Directory entries expose the receiver's chosen display name, optional profile picture, and opaque session ID to the clients that share its password. Direct requests still require receiver approval before any presenter credential is issued.
@@ -54,7 +52,7 @@ No development certificate-bypass switch will be included in production builds.
 - Pointer events are rejected for invalid coordinates, stale TTL, future timestamps, wrong sessions, unauthorized roles, excessive rate, and duplicate/old sequence numbers.
 - The pointer rate limit is metered per approved sender, so an abusive sender exhausts only its own budget and cannot throttle the other senders in the session.
 - SignalR receive payloads are limited to 32 KB; each freehand batch is separately limited to 128 validated normalized points.
-- Structured logs omit pairing secrets, role tokens, reconnect tokens, and individual pointer coordinates.
+- Structured logs omit session secrets, role tokens, reconnect tokens, and individual pointer coordinates.
 - Production refuses plaintext requests by default; the Docker profile permits it only on the unexposed relay container port behind Caddy. No certificate-validation bypass exists.
 
 ## Phase 5 client controls
@@ -74,7 +72,7 @@ No development certificate-bypass switch will be included in production builds.
 - SignalR detailed errors are disabled, unexpected operations are audited by a hub filter, and safe production exception handling avoids stack-trace disclosure.
 - Client role and reconnect credentials are encrypted with Windows DPAPI `CurrentUser`, written atomically, cleared on normal shutdown, and never fall back to plaintext.
 - Protected recovery state is rejected when corrupt, expired, wrong-role, or bound to a different durable client ID. An ungracefully interrupted receiver may recover only an empty session shell; successful recovery rotates and re-protects the reconnect token.
-- Client crash handling preserves only protected credentials. Calibration rectangles, pairing codes, pointer events, and coordinates are never persisted.
+- Client crash handling preserves only protected credentials. Calibration rectangles, pointer events, and coordinates are never persisted.
 - Server and client use stable structured audit events. Client audit schema deliberately has no arbitrary message or coordinate fields and records exception type/code rather than exception text.
 - Release builds use latest installed .NET analyzers with warnings as errors. The Phase 6 NuGet advisory scan found no known vulnerable direct or transitive packages.
 

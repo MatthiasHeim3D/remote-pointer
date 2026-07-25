@@ -27,7 +27,7 @@ Clients see each other only when they use the same server password, which they e
 
 Receiver discovery lets receivers publish themselves in the relay directory, which is how the desktop client finds them. `.env.example` ships with `REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=false`, so a stack started from an unedited copy has the directory switched off and no receiver can be found; set it to `true` to enable it. Removing the variable altogether is not the same as setting it to `false` — Compose then falls back to `true`, matching the relay image's own default.
 
-Enabling the directory does not grant access: every direct join still requires receiver approval, and each receiver additionally opts in per session. It does mean that anyone who can reach the relay can list the receivers that opted in. Pairing-code joins remain available at the relay protocol level for compatibility but are not exposed by the desktop client.
+Enabling the directory does not grant access: every direct join still requires receiver approval, and each receiver additionally opts in per session. It does mean that anyone who can reach the relay can list the receivers that opted in. It is also the only route into a session — with the directory switched off the relay accepts no join request, so no client can connect to another.
 
 ```powershell
 docker compose up -d --build

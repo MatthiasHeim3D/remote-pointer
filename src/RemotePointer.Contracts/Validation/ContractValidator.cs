@@ -174,38 +174,6 @@ public static class ContractValidator
         return ValidationResult.Failure(errors);
     }
 
-    public static ValidationResult Validate(JoinRequest? request)
-    {
-        if (request is null)
-        {
-            return RequiredMessage(nameof(request));
-        }
-
-        var errors = new List<ValidationError>();
-        if (!PairingCodeValidator.IsValid(request.PairingCode))
-        {
-            errors.Add(new ValidationError(
-                ValidationErrors.InvalidValue,
-                "PairingCode is not in the expected format."));
-        }
-
-        AddValue(errors, Enum.IsDefined(request.Role), nameof(request.Role));
-        AddRequired(
-            errors,
-            IsRequiredIdentifier(request.ClientInstanceId),
-            nameof(request.ClientInstanceId));
-        AddRequired(
-            errors,
-            !string.IsNullOrWhiteSpace(request.ClientVersion) && request.ClientVersion.Length <= 64,
-            nameof(request.ClientVersion));
-        if (request.Profile is not null)
-        {
-            errors.AddRange(Validate(request.Profile).Errors);
-        }
-
-        return ValidationResult.Failure(errors);
-    }
-
     public static ValidationResult Validate(DirectJoinRequest? request)
     {
         if (request is null)

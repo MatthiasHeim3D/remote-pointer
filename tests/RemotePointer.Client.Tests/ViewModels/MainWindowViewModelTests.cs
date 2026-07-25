@@ -797,10 +797,8 @@ public sealed class MainWindowViewModelTests
             Capabilities = new RelayCapabilities(true, false),
             CreateResponse = new CreateSessionResponse(
                 "session-1",
-                "AB2D4E",
                 new string('x', 32),
-                credential,
-                DateTimeOffset.UtcNow.AddMinutes(10)),
+                credential),
         };
     }
 

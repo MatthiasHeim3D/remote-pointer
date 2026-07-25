@@ -17,7 +17,7 @@ builder.Services
     .AddOptions<PointerSessionOptions>()
     .Bind(builder.Configuration.GetSection(PointerSessionOptions.SectionName))
     .Validate(
-        options => options.PairingCodeLifetimeMinutes > 0
+        options => options.AbandonedSessionLifetimeMinutes > 0
             && options.MaximumSessionHours is > 0 and <= 8
             && options.SequenceWindowSize > 0,
         "Session options must use positive values and a maximum lifetime of eight hours.")

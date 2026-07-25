@@ -9,7 +9,7 @@
 | Numeric safety | NaN, positive/negative infinity, zero/negative dimensions |
 | Aspect ratio | Landscape, portrait, ultrawide, exact and over-2% tolerance |
 | Pointer validation | Inclusive boundaries, stale TTL, TTL boundary, future timestamps, identity, sequence, gesture identity, bounded text, kind |
-| Display/join validation | Dimensions, DPI scale, rotation, pairing-code formatting, required identity/version |
+| Display/join validation | Dimensions, DPI scale, rotation, required identity/version |
 | Sequence handling | Increasing values, duplicates, bounded reordering, significantly old values |
 | JSON policy | camelCase, string enums, integer enum rejection, unknown-member rejection |
 | Client DPI conversion | 100%, 125%, and 150% scale; negative physical coordinates; reverse conversion |
@@ -19,7 +19,7 @@
 | Calibration geometry | Locked/unlocked resize, horizontal/vertical ratio preservation, minimum dimensions, fullscreen monitor fitting |
 | Presenter state | Expected-ratio validation, calibration request, ready/pointing transitions, hotkey errors |
 | Presenter capture reporting | Normalized local pointer count and coordinate presentation |
-| Pairing and secrets | Friendly cryptographic codes, hashing, one-time consumption, expiry |
+| Session secrets and lifetime | Cryptographic generation, hashing, constant-time comparison, abandoned-session collection, expiry |
 | Receiver discovery | Server capability, receiver opt-in, directory filtering, direct request, mandatory approval |
 | Server password | Stable key derivation, minimum length, protected round trip, corrupt-file discard, group-scoped listing and joins, enforced and open relay modes, client warning states |
 | Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
@@ -96,7 +96,7 @@
 1. On distinct Windows user profiles or endpoints, establish and approve a session, then terminate one client from Task Manager while leaving the relay running.
 2. Restart that client. After an ungraceful receiver exit, confirm it recovers with zero connected senders and the former sender must request approval again. After a normal exit, confirm no previous session is recovered.
 3. Confirm the corresponding protected role file under `%LocalAppData%\RemotePointer\Sessions` is removed on normal shutdown.
-4. Inspect `%LocalAppData%\RemotePointer\Logs\audit-YYYYMMDD.jsonl`. Confirm records are valid JSON and contain no coordinates, pairing codes, session/reconnect tokens, exception messages, screen metadata, or typed data.
+4. Inspect `%LocalAppData%\RemotePointer\Logs\audit-YYYYMMDD.jsonl`. Confirm records are valid JSON and contain no coordinates, session/reconnect tokens, exception messages, screen metadata, or typed data.
 5. Start the Docker deployment. Confirm HTTPS health succeeds through Caddy, relay port 8080 is not reachable from the LAN, HSTS is present, and an untrusted Caddy root causes the client connection to fail.
 6. Repeat the full Phase 5 display matrix as a standard user and confirm no administrator rights are required by the client.
 

@@ -32,12 +32,6 @@ public interface ISessionManager
         string receiverConnectionId,
         bool discoverable);
 
-    JoinSessionResult RequestToJoinSession(
-        JoinRequest request,
-        string connectionId,
-        string displayName,
-        string? applicationInstanceId = null);
-
     JoinSessionResult RequestToJoinReceiver(
         DirectJoinRequest request,
         string connectionId,
