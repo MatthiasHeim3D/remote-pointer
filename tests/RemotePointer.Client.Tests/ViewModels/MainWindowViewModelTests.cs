@@ -285,6 +285,79 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task TestServerConnection_AdvertisedVersionIsShownAndClearedOnEdit()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful.", "1.2.3"));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "relay.example.test";
+
+        await viewModel.TestServerConnectionAsync();
+
+        Assert.True(viewModel.HasServerVersion);
+        Assert.Equal("Server version 1.2.3", viewModel.ServerVersionLabel);
+
+        viewModel.ServerAddressInput = "other.example.test";
+
+        Assert.False(viewModel.HasServerVersion);
+        Assert.Empty(viewModel.ServerVersionLabel);
+    }
+
+    [Fact]
+    public async Task TestServerConnection_ServerWithoutVersionShowsNoLabel()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful."));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "relay.example.test";
+
+        await viewModel.TestServerConnectionAsync();
+
+        Assert.True(viewModel.IsServerAddressVerified);
+        Assert.False(viewModel.HasServerVersion);
+        Assert.Empty(viewModel.ServerVersionLabel);
+    }
+
+    [Fact]
+    public async Task TestServerConnection_UnreachableServerDropsStaleVersion()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful.", "1.2.3"));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "relay.example.test";
+        await viewModel.TestServerConnectionAsync();
+
+        tester.Result = new ServerConnectionTestResult(
+            false,
+            "The server could not be reached.");
+        await viewModel.TestServerConnectionAsync();
+
+        Assert.False(viewModel.HasServerVersion);
+        Assert.Empty(viewModel.ServerVersionLabel);
+    }
+
+    [Fact]
     public async Task ClosingSettings_UntestedReachableAddressTestsAndSavesIt()
     {
         using var testSettings = new TemporaryClientSettings("https://old.example.test");
@@ -923,13 +996,15 @@ public sealed class MainWindowViewModelTests
     {
         public List<string> TestedAddresses { get; } = [];
 
+        public ServerConnectionTestResult Result { get; set; } = result;
+
         public Task<ServerConnectionTestResult> TestAsync(
             string serverAddress,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             TestedAddresses.Add(serverAddress);
-            return Task.FromResult(result);
+            return Task.FromResult(Result);
         }
     }
 

@@ -59,6 +59,8 @@ On a client where the installer has run, this should succeed without `-k`:
 Invoke-RestMethod https://pointer.internal.example/health
 ```
 
+`Invoke-RestMethod https://pointer.internal.example/version` reports the deployed relay build. The client shows the same value under the server address in its settings after a connection test, which is the quickest way to confirm which build a user is actually talking to.
+
 ## Routine operation
 
 ```powershell

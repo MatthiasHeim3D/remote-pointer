@@ -58,6 +58,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string? lastTestedServerAddress;
     private bool lastServerConnectionTestSucceeded;
     private string serverConnectionTestMessage = string.Empty;
+    private string serverVersionLabel = string.Empty;
     private readonly string activeServerAddress;
 
     public event EventHandler<ServerAddressChangeRequestedEventArgs>? ServerAddressChangeRequested;
@@ -345,6 +346,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 lastServerConnectionTestSucceeded = false;
                 IsServerAddressVerified = false;
                 ServerConnectionTestMessage = string.Empty;
+                ServerVersionLabel = string.Empty;
                 RaisePropertyChanged(nameof(ServerAddress));
                 RaisePropertyChanged(nameof(ServerAddressValidationMessage));
                 RaiseServerAddressCommandState();
@@ -393,6 +395,25 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => serverConnectionTestMessage;
         private set => SetProperty(ref serverConnectionTestMessage, value);
     }
+
+    /// <summary>
+    /// The version the last reached server advertised, empty when it is unknown. It is refreshed
+    /// by every connection test and cleared as soon as the address is edited. It is rendered next
+    /// to the verified checkmark, which carries the success message on its own.
+    /// </summary>
+    public string ServerVersionLabel
+    {
+        get => serverVersionLabel;
+        private set
+        {
+            if (SetProperty(ref serverVersionLabel, value))
+            {
+                RaisePropertyChanged(nameof(HasServerVersion));
+            }
+        }
+    }
+
+    public bool HasServerVersion => ServerVersionLabel.Length > 0;
 
     /// <summary>
     /// The draft from the password box. It is derived and discarded when settings are saved,
@@ -1116,6 +1137,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var result = await serverConnectionTester.TestAsync(requestedServerAddress);
         lastTestedServerAddress = requestedServerAddress;
         lastServerConnectionTestSucceeded = result.IsSuccessful;
+        ServerVersionLabel = result.IsSuccessful && !string.IsNullOrWhiteSpace(result.ServerVersion)
+            ? $"Server version {result.ServerVersion}"
+            : string.Empty;
         if (!result.IsSuccessful)
         {
             IsServerAddressVerified = false;
@@ -1245,6 +1269,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ResetSettingsDraft();
         IsServerAddressVerified = false;
         ServerConnectionTestMessage = string.Empty;
+        ServerVersionLabel = string.Empty;
         IsSettingsOpen = true;
     }
 
@@ -1337,6 +1362,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         ServerAddressInput = RemoveHttpsPrefix(clientSettings?.Server.BaseUrl ?? string.Empty);
         ServerConnectionTestMessage = string.Empty;
+        ServerVersionLabel = string.Empty;
     }
 
     private void RaiseServerAddressCommandState() =>

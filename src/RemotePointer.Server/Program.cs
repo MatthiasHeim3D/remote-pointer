@@ -1,4 +1,6 @@
+using System.Reflection;
 using Microsoft.AspNetCore.SignalR;
+using RemotePointer.Contracts.Messages;
 using RemotePointer.Contracts.Serialization;
 using RemotePointer.Server.Health;
 using RemotePointer.Server.Hubs;
@@ -87,8 +89,35 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.MapHealthChecks("/health");
+app.MapGet("/version", () => new ServerVersionResponse(ServerVersion.Current));
 app.MapHub<PointerHub>("/hubs/pointer");
 
 app.Run();
+
+/// <summary>
+/// The build version this relay advertises. Clients read it to show which server they are
+/// configured against.
+/// </summary>
+internal static class ServerVersion
+{
+    public static string Current { get; } = Read();
+
+    private static string Read()
+    {
+        var informationalVersion = typeof(Program).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        if (string.IsNullOrWhiteSpace(informationalVersion))
+        {
+            return typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
+        }
+
+        // Nerdbank.GitVersioning appends "+<commit>"; the commit adds noise for a client label.
+        var metadataIndex = informationalVersion.IndexOf('+', StringComparison.Ordinal);
+        return metadataIndex < 0
+            ? informationalVersion
+            : informationalVersion[..metadataIndex];
+    }
+}
 
 public partial class Program;

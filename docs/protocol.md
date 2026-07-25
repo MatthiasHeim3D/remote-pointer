@@ -56,6 +56,13 @@ An active receiver publishes its chosen display name, optional profile picture, 
 
 A session that nobody has asked to join is collected once `Sessions:AbandonedSessionLifetimeMinutes` — ten minutes by default — has passed, unless something can still reach it. A connected receiver that chose to be invisible can publish itself again and keeps its session; a hidden, disconnected shell cannot be joined and is collected.
 
+## HTTP surface
+
+Besides the hub, the relay serves two unauthenticated GET endpoints:
+
+- `/health`: the health-check result. The client uses it for the settings-pane connection test.
+- `/version`: `ServerVersionResponse`, the relay's build version without the commit metadata that Nerdbank.GitVersioning appends. The client reads it right after a successful connection test and shows it under the server address field. A relay that predates this endpoint answers 404, and the client then shows no version.
+
 ## SignalR surface
 
 Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a process-scoped `applicationInstanceId`, and an optional approval `displayName`. The process-scoped identity prevents a running client from discovering or joining its own receiver session while still allowing separate client processes on the same machine. Implemented client-to-server methods are:

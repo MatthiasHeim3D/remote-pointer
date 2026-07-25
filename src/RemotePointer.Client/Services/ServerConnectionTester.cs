@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Json;
+using System.Text.Json;
+using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
 
@@ -16,6 +19,12 @@ public sealed class ServerConnectionTester : IServerConnectionTester
         Timeout = Timeout.InfiniteTimeSpan,
     };
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(5);
+    private const int MaximumVersionLength = 40;
+
+    // Deliberately lenient: a newer relay may add fields, and an unreadable version must never
+    // turn a reachable server into a failed test.
+    private static readonly JsonSerializerOptions VersionSerializerOptions =
+        new(JsonSerializerDefaults.Web);
 
     public async Task<ServerConnectionTestResult> TestAsync(
         string serverAddress,
@@ -35,7 +44,12 @@ public sealed class ServerConnectionTester : IServerConnectionTester
                 .ConfigureAwait(false);
             if (response.IsSuccessStatusCode)
             {
-                return new ServerConnectionTestResult(true, "Connection successful.");
+                var serverVersion = await ReadServerVersionAsync(serverAddress, timeout.Token)
+                    .ConfigureAwait(false);
+                return new ServerConnectionTestResult(
+                    true,
+                    "Connection successful.",
+                    serverVersion);
             }
 
             return new ServerConnectionTestResult(
@@ -57,5 +71,64 @@ public sealed class ServerConnectionTester : IServerConnectionTester
         {
             return new ServerConnectionTestResult(false, "The server address is invalid.");
         }
+    }
+
+    /// <summary>
+    /// Reads the advertised server version. Every failure maps to null: the version is a label,
+    /// so a relay that predates the endpoint stays fully usable.
+    /// </summary>
+    private static async Task<string?> ReadServerVersionAsync(
+        string serverAddress,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var versionAddress = $"{serverAddress.TrimEnd('/')}/version";
+            using var response = await HttpClient
+                .GetAsync(versionAddress, cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var payload = await response.Content
+                .ReadFromJsonAsync<ServerVersionResponse>(
+                    VersionSerializerOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return Sanitize(payload?.Version);
+        }
+        catch (Exception exception) when (exception is HttpRequestException
+            or JsonException
+            or NotSupportedException
+            or OperationCanceledException
+            or UriFormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The version is server-controlled text rendered in the settings pane, so it is trimmed,
+    /// stripped of control characters and capped before it reaches the view.
+    /// </summary>
+    private static string? Sanitize(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+        {
+            return null;
+        }
+
+        var sanitized = new string(
+            version.Trim().Where(character => !char.IsControl(character)).ToArray());
+        if (sanitized.Length == 0)
+        {
+            return null;
+        }
+
+        return sanitized.Length <= MaximumVersionLength
+            ? sanitized
+            : sanitized[..MaximumVersionLength];
     }
 }

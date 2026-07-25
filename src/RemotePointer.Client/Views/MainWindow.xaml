@@ -1061,8 +1061,10 @@
                         <TextBlock Margin="7,0,0,0"
                                    VerticalAlignment="Center"
                                    FontSize="11"
-                                   Foreground="#6CCB7F"
-                                   Text="Connection verified" />
+                                   Foreground="#8C8C8C"
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="{Binding ServerVersionLabel}"
+                                   Visibility="{Binding HasServerVersion, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </StackPanel>
                     <TextBlock Style="{StaticResource ValidationMessageStyle}"
                                Text="{Binding ServerConnectionTestMessage}" />
