@@ -19,6 +19,10 @@ internal sealed class PointerVisualRenderer
     private const int MaximumPathPoints = 2_048;
     private const int MaximumTransientVisuals = 20;
 
+    // Each sender draws one gesture at a time and a receiver accepts at most sixteen senders,
+    // so this only bites when a sender opens gestures it never ends.
+    private const int MaximumActiveGestures = 16;
+
     private static readonly Brush AccentBrush =
         new SolidColorBrush(Color.FromRgb(255, 92, 92));
     private static readonly Brush AccentFillBrush =
@@ -300,6 +304,11 @@ internal sealed class PointerVisualRenderer
             canvas.Children.Remove(existing.Element);
         }
 
+        while (activeGestures.Count >= MaximumActiveGestures)
+        {
+            RemoveOldestGesture();
+        }
+
         gesture = new ActiveGesture(gestureId.Value, element, start);
         activeGestures.Add(gesture.Id, gesture);
         canvas.Children.Add(element);
@@ -323,6 +332,18 @@ internal sealed class PointerVisualRenderer
         gesture = null!;
         element = null!;
         return false;
+    }
+
+    private void RemoveOldestGesture()
+    {
+        var oldest = activeGestures.Values.MinBy(gesture => gesture.LastTouchedAt);
+        if (oldest is null)
+        {
+            return;
+        }
+
+        _ = activeGestures.Remove(oldest.Id);
+        canvas.Children.Remove(oldest.Element);
     }
 
     private void CompleteOrTouch(ActiveGesture gesture, bool end)
