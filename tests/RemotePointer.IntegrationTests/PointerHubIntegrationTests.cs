@@ -644,7 +644,9 @@ public sealed class PointerHubIntegrationTests
         await insider.StartAsync();
         await outsider.StartAsync();
 
-        Assert.True(await receiver.InvokeAsync<bool>("IsServerPasswordRequired"));
+        Assert.True(
+            (await receiver.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
+                .ServerPasswordRequired);
         await Assert.ThrowsAsync<HubException>(
             () => receiver.InvokeAsync<CreateSessionResponse>(
                 "CreateReceiverSession",
@@ -679,7 +681,9 @@ public sealed class PointerHubIntegrationTests
         await receiver.StartAsync();
         await presenter.StartAsync();
 
-        Assert.False(await receiver.InvokeAsync<bool>("IsServerPasswordRequired"));
+        Assert.False(
+            (await receiver.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
+                .ServerPasswordRequired);
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
             CreateDisplay());

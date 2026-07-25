@@ -579,8 +579,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 var capabilities = await receiverRelayClient.GetRelayCapabilitiesAsync();
                 ReceiverDiscoveryEnabled = capabilities.ReceiverDiscoveryEnabled;
-                ServerPasswordRequired =
-                    await receiverRelayClient.IsServerPasswordRequiredAsync();
+                ServerPasswordRequired = capabilities.ServerPasswordRequired;
             }
             catch (Exception exception)
             {

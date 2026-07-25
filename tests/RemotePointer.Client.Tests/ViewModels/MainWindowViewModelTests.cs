@@ -35,8 +35,9 @@ public sealed class MainWindowViewModelTests
         using var overlay = new FakeOverlayService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true),
-            ServerPasswordRequired = true,
+            Capabilities = new RelayCapabilities(
+                ReceiverDiscoveryEnabled: true,
+                ServerPasswordRequired: true),
         };
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
@@ -61,7 +62,7 @@ public sealed class MainWindowViewModelTests
     public async Task OpenRelayWithoutPassword_WarnsThatEveryoneCanSeeTheProfile()
     {
         using var overlay = new FakeOverlayService();
-        var relay = new FakeRelayClient { Capabilities = new RelayCapabilities(true) };
+        var relay = new FakeRelayClient { Capabilities = new RelayCapabilities(true, false) };
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
             overlay,
@@ -277,7 +278,7 @@ public sealed class MainWindowViewModelTests
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
         using var overlay = new FakeOverlayService();
         var relay = CreateReceiverRelay();
-        relay.Capabilities = new RelayCapabilities(true);
+        relay.Capabilities = new RelayCapabilities(true, false);
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([monitor]),
             overlay,
@@ -793,7 +794,7 @@ public sealed class MainWindowViewModelTests
             expiresAt);
         return new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true),
+            Capabilities = new RelayCapabilities(true, false),
             CreateResponse = new CreateSessionResponse(
                 "session-1",
                 "AB2D4E",

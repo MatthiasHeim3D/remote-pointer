@@ -186,24 +186,6 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
     }
 
-    public async Task<bool> IsServerPasswordRequiredAsync(
-        CancellationToken cancellationToken = default)
-    {
-        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await connection.InvokeAsync<bool>(
-                    "IsServerPasswordRequired",
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (HubException)
-        {
-            // A relay predating server passwords cannot require one.
-            return false;
-        }
-    }
-
     public void SetServerPasswordKey(string? key)
     {
         lock (stateLock)
@@ -656,19 +638,8 @@ public sealed class SignalRRelayClient : IRelayClient
             return;
         }
 
-        try
-        {
-            await connection.InvokeAsync("EnterRelayGroup", keyToEnter, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (HubException)
-        {
-            // Best effort: a relay predating server passwords has no such method, and a relay
-            // that refuses the key reports it again on the operation the caller actually made,
-            // where the message can be shown.
-            return;
-        }
-
+        await connection.InvokeAsync("EnterRelayGroup", keyToEnter, cancellationToken)
+            .ConfigureAwait(false);
         lock (stateLock)
         {
             if (string.Equals(groupKey, keyToEnter, StringComparison.Ordinal))

@@ -14,7 +14,7 @@ public sealed class PresenterViewModelTests
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true),
+            Capabilities = new RelayCapabilities(true, false),
             AvailableReceivers =
             [
                 new AvailableReceiverDescriptor(
@@ -46,7 +46,7 @@ public sealed class PresenterViewModelTests
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true),
+            Capabilities = new RelayCapabilities(true, false),
             AvailableReceivers = [new AvailableReceiverDescriptor("session-visible", "Receiver PC")],
         };
         using var viewModel = new PresenterViewModel(service, relay);
@@ -69,7 +69,7 @@ public sealed class PresenterViewModelTests
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(false),
+            Capabilities = new RelayCapabilities(false, false),
             AvailableReceivers =
             [
                 new AvailableReceiverDescriptor("session-hidden", "Hidden Receiver"),
@@ -90,7 +90,7 @@ public sealed class PresenterViewModelTests
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            Capabilities = new RelayCapabilities(true),
+            Capabilities = new RelayCapabilities(true, false),
         };
         using var viewModel = new PresenterViewModel(service, relay);
         await viewModel.InitializeAsync();

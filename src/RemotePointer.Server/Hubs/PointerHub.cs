@@ -10,9 +10,7 @@ public sealed class PointerHub(
     ILogger<PointerHub> logger) : Hub<IPointerClient>
 {
     public RelayCapabilities GetRelayCapabilities() =>
-        new(sessionManager.ReceiverDiscoveryEnabled);
-
-    public bool IsServerPasswordRequired() => sessionManager.ServerPasswordRequired;
+        new(sessionManager.ReceiverDiscoveryEnabled, sessionManager.ServerPasswordRequired);
 
     /// <summary>
     /// Places this connection in the group its server password derives to. The argument is the

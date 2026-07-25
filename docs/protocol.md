@@ -35,7 +35,7 @@ The presenter sends each captured pointer event immediately as a `PointerEventMe
 - `DirectJoinRequest`: opaque session identity for an explicitly visible receiver, durable client-instance identity, and version.
 - `ClientProfile`: optional PNG profile thumbnail capped to fit within the relay message limit.
 - `AvailableReceiverDescriptor`: opaque session identity, receiver-selected label, process-scoped application identity, and an optional bounded PNG profile thumbnail; no pairing code, display metadata, or credential.
-- `RelayCapabilities`: server-controlled receiver-discovery availability.
+- `RelayCapabilities`: server-controlled receiver-discovery availability and whether a server password is required.
 - `SessionStateMessage`: session identity, approval state, current receiver display, expiry, discovery state, and receiver-visible connected-presenter names.
 - `SessionCredential`: role-restricted session token, rotating reconnect token, durable client identity, and expiry.
 - `CreateSessionResponse`: pairing information, receiver-only session secret, and receiver credential.
@@ -62,7 +62,6 @@ When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explici
 Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a process-scoped `applicationInstanceId`, and an optional approval `displayName`. The process-scoped identity prevents a running client from discovering or joining its own receiver session while still allowing separate client processes on the same machine. Implemented client-to-server methods are:
 
 - `GetRelayCapabilities()`
-- `IsServerPasswordRequired()`
 - `EnterRelayGroup(groupKey)`
 - `GetAvailableReceivers()`
 - `CreateReceiverSession(DisplayDescriptor)`

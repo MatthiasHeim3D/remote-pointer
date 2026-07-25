@@ -33,8 +33,6 @@ public interface IRelayClient : IAsyncDisposable
     Task<RelayCapabilities> GetRelayCapabilitiesAsync(
         CancellationToken cancellationToken = default);
 
-    Task<bool> IsServerPasswordRequiredAsync(CancellationToken cancellationToken = default);
-
     /// <summary>Sets the derived group key to present on this and every later connection.</summary>
     void SetServerPasswordKey(string? key);
 

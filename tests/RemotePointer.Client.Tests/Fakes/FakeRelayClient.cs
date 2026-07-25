@@ -37,7 +37,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public JoinResponse JoinResponse { get; set; } = new(true, "session-1", null);
 
-    public RelayCapabilities Capabilities { get; set; } = new(false);
+    public RelayCapabilities Capabilities { get; set; } =
+        new(ReceiverDiscoveryEnabled: false, ServerPasswordRequired: false);
 
     public IReadOnlyList<AvailableReceiverDescriptor> AvailableReceivers { get; set; } = [];
 
@@ -80,15 +81,7 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.FromResult(Capabilities);
     }
 
-    public bool ServerPasswordRequired { get; set; }
-
     public string? ServerPasswordKey { get; private set; }
-
-    public Task<bool> IsServerPasswordRequiredAsync(CancellationToken cancellationToken = default)
-    {
-        _ = cancellationToken;
-        return Task.FromResult(ServerPasswordRequired);
-    }
 
     public void SetServerPasswordKey(string? key) => ServerPasswordKey = key;
 
