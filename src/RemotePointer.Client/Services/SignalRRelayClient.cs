@@ -15,6 +15,9 @@ namespace RemotePointer.Client.Services;
 
 public sealed class SignalRRelayClient : IRelayClient
 {
+    private const int TransitionSettleMilliseconds = 5_000;
+    private const int TransitionPollMilliseconds = 50;
+
     private readonly SemaphoreSlim connectionGate = new(1, 1);
     private readonly IClientAuditLog? auditLog;
     private readonly HubConnection connection;
@@ -575,6 +578,7 @@ public sealed class SignalRRelayClient : IRelayClient
         await connectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await WaitForTransitionToSettleAsync(cancellationToken).ConfigureAwait(false);
             if (connection.State == HubConnectionState.Disconnected)
             {
                 await connection.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -584,6 +588,29 @@ public sealed class SignalRRelayClient : IRelayClient
         finally
         {
             connectionGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Automatic reconnect owns the connection while it is retrying, and starting it again in
+    /// that state is not allowed. Waiting briefly lets a call that arrives during a short
+    /// interruption succeed instead of failing with a transport error the caller reports to
+    /// the user. A longer outage still falls through, because the retry schedule can run for
+    /// far longer than a command should block.
+    /// </summary>
+    private async Task WaitForTransitionToSettleAsync(CancellationToken cancellationToken)
+    {
+        var deadline = Environment.TickCount64 + TransitionSettleMilliseconds;
+        while (connection.State
+               is HubConnectionState.Connecting
+               or HubConnectionState.Reconnecting)
+        {
+            if (Environment.TickCount64 >= deadline)
+            {
+                return;
+            }
+
+            await Task.Delay(TransitionPollMilliseconds, cancellationToken).ConfigureAwait(false);
         }
     }
 
