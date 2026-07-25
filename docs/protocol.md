@@ -60,8 +60,10 @@ A session that nobody has asked to join is collected once `Sessions:AbandonedSes
 
 Besides the hub, the relay serves two unauthenticated GET endpoints:
 
-- `/health`: the health-check result. The client uses it for the settings-pane connection test.
-- `/version`: `ServerVersionResponse`, the relay's build version without the commit metadata that Nerdbank.GitVersioning appends. The client reads it right after a successful connection test and shows it under the server address field. A relay that predates this endpoint answers 404, and the client then shows no version.
+- `/health`: the health-check result.
+- `/version`: `ServerVersionResponse` — the constant product id `remote-pointer-relay` and the relay's build version without the commit metadata that Nerdbank.GitVersioning appends.
+
+The settings-pane connection test uses both. `/health` establishes reachability, then `/version` establishes identity: the response must be `application/json`, must be small, and must carry the expected product id. Reachability alone is not enough, because `/health` is a common path that any unrelated host may answer. A host that fails the identity check is reported as "not a Remote Pointer server" and its address is not saved. The advertised version is shown next to the verified checkmark under the server address field.
 
 ## SignalR surface
 

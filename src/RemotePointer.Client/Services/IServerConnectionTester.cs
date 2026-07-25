@@ -8,8 +8,9 @@ public interface IServerConnectionTester
 }
 
 /// <summary>
-/// The outcome of a reachability check. <paramref name="ServerVersion"/> is null when the server
-/// does not advertise a version, which is the case for relays older than this feature.
+/// The outcome of a connection test. A successful result always carries the
+/// <paramref name="ServerVersion"/> the relay advertised: identifying itself as a Remote Pointer
+/// relay is part of passing the test, so a host that cannot is reported as a failure.
 /// </summary>
 public sealed record ServerConnectionTestResult(
     bool IsSuccessful,

@@ -89,7 +89,11 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.MapHealthChecks("/health");
-app.MapGet("/version", () => new ServerVersionResponse(ServerVersion.Current));
+app.MapGet(
+    "/version",
+    () => new ServerVersionResponse(
+        ServerVersionResponse.RelayProductId,
+        ServerVersion.Current));
 app.MapHub<PointerHub>("/hubs/pointer");
 
 app.Run();

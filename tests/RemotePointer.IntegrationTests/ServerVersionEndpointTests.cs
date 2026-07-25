@@ -18,8 +18,13 @@ public sealed class ServerVersionEndpointTests
         using var response = await client.GetAsync(new Uri("/version", UriKind.Relative));
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
         var payload = await response.Content.ReadFromJsonAsync<ServerVersionResponse>();
         Assert.NotNull(payload);
+
+        // The client uses the product id to tell the relay apart from an unrelated host that also
+        // answers /health and /version.
+        Assert.Equal(ServerVersionResponse.RelayProductId, payload.Product);
         Assert.False(string.IsNullOrWhiteSpace(payload.Version));
 
         // The commit metadata Nerdbank.GitVersioning appends is stripped before it is advertised.

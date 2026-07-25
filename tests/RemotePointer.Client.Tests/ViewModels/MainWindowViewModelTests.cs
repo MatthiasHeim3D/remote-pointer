@@ -311,28 +311,6 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task TestServerConnection_ServerWithoutVersionShowsNoLabel()
-    {
-        using var testSettings = new TemporaryClientSettings(string.Empty);
-        using var overlay = new FakeOverlayService();
-        var tester = new FakeServerConnectionTester(
-            new ServerConnectionTestResult(true, "Connection successful."));
-        using var viewModel = new MainWindowViewModel(
-            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
-            overlay,
-            clientSettings: testSettings.Settings,
-            serverConnectionTester: tester);
-        viewModel.ToggleSettingsCommand.Execute(null);
-        viewModel.ServerAddressInput = "relay.example.test";
-
-        await viewModel.TestServerConnectionAsync();
-
-        Assert.True(viewModel.IsServerAddressVerified);
-        Assert.False(viewModel.HasServerVersion);
-        Assert.Empty(viewModel.ServerVersionLabel);
-    }
-
-    [Fact]
     public async Task TestServerConnection_UnreachableServerDropsStaleVersion()
     {
         using var testSettings = new TemporaryClientSettings(string.Empty);
