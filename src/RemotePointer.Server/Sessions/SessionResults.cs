@@ -2,6 +2,8 @@ using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Server.Sessions;
 
+public sealed record RelayGroupChange(string GroupKey, string? PreviousGroupKey);
+
 public sealed record JoinSessionResult(
     JoinResponse Response,
     string? ReceiverConnectionId,

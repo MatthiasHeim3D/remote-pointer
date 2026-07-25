@@ -12,21 +12,62 @@ public sealed class PointerHub(
     public RelayCapabilities GetRelayCapabilities() =>
         new(sessionManager.ReceiverDiscoveryEnabled);
 
-    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers() =>
-        sessionManager.GetAvailableReceivers(GetApplicationInstanceId());
+    public bool IsServerPasswordRequired() => sessionManager.ServerPasswordRequired;
 
-    public override Task OnConnectedAsync()
+    /// <summary>
+    /// Places this connection in the group its server password derives to. The argument is the
+    /// derived key, never the password: the relay cannot recover the password from it and does
+    /// not log it.
+    /// </summary>
+    public async Task EnterRelayGroup(string groupKey)
     {
+        try
+        {
+            var change = sessionManager.SetConnectionGroup(Context.ConnectionId, groupKey);
+            if (change.PreviousGroupKey is not null)
+            {
+                await Groups.RemoveFromGroupAsync(
+                        Context.ConnectionId,
+                        DirectoryGroupName(change.PreviousGroupKey))
+                    .ConfigureAwait(false);
+            }
+
+            await Groups.AddToGroupAsync(
+                    Context.ConnectionId,
+                    DirectoryGroupName(change.GroupKey))
+                .ConfigureAwait(false);
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "EnterRelayGroup");
+        }
+    }
+
+    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers() =>
+        sessionManager.GetAvailableReceivers(GetApplicationInstanceId(), Context.ConnectionId);
+
+    public override async Task OnConnectedAsync()
+    {
+        // Every connection starts in the open pool so that a client which never presents a
+        // password still receives directory notifications on a relay that allows one. Entering
+        // a group moves the connection out of it.
+        await Groups.AddToGroupAsync(
+                Context.ConnectionId,
+                DirectoryGroupName(SessionManager.OpenGroupKey))
+            .ConfigureAwait(false);
         logger.LogInformation(
             AuditEventIds.ClientConnected,
             "Relay client connected. ConnectionId={ConnectionId} ClientInstanceId={ClientInstanceId}",
             Context.ConnectionId,
             GetOptionalQueryValue("clientInstanceId"));
-        return base.OnConnectedAsync();
+        await base.OnConnectedAsync().ConfigureAwait(false);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        // Read before disconnecting: the connection's group is released with it, and the peers
+        // that need to hear about this departure are the ones that shared it.
+        var groupKey = sessionManager.GetConnectionGroup(Context.ConnectionId);
         var disconnect = sessionManager.Disconnect(Context.ConnectionId);
         if (disconnect is not null)
         {
@@ -57,7 +98,7 @@ public sealed class PointerHub(
             }
         }
 
-        await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+        await NotifyDirectoryChangedAsync(groupKey).ConfigureAwait(false);
         if (exception is null)
         {
             logger.LogInformation(
@@ -137,7 +178,7 @@ public sealed class PointerHub(
                 response.SessionId,
                 clientInstanceId,
                 response.Credential.ExpiresAt);
-            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
             return response;
         }
         catch (SessionOperationException exception)
@@ -154,7 +195,7 @@ public sealed class PointerHub(
                 sessionId,
                 Context.ConnectionId,
                 discoverable);
-            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
             return result;
         }
         catch (SessionOperationException exception)
@@ -189,7 +230,7 @@ public sealed class PointerHub(
                 await Clients.Client(result.ReceiverConnectionId)
                     .PresenterJoinRequested(result.Presenter)
                     .ConfigureAwait(false);
-                await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+                await NotifyDirectoryChangedAsync().ConfigureAwait(false);
                 logger.LogInformation(
                     AuditEventIds.PresenterJoinRequested,
                     "Presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
@@ -248,7 +289,7 @@ public sealed class PointerHub(
                 await Clients.Client(result.ReceiverConnectionId)
                     .PresenterJoinRequested(result.Presenter)
                     .ConfigureAwait(false);
-                await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+                await NotifyDirectoryChangedAsync().ConfigureAwait(false);
                 logger.LogInformation(
                     AuditEventIds.PresenterJoinRequested,
                     "Direct presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
@@ -317,7 +358,7 @@ public sealed class PointerHub(
                     .ConfigureAwait(false);
             }
 
-            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -346,7 +387,7 @@ public sealed class PointerHub(
             await Clients.Client(result.ReceiverConnectionId)
                 .SessionApproved(result.State)
                 .ConfigureAwait(false);
-            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.PresenterApproved,
                 "Presenter approved. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
@@ -370,7 +411,7 @@ public sealed class PointerHub(
             await Clients.Client(result.PresenterConnectionId)
                 .SessionEnded("Connection request declined by receiver.")
                 .ConfigureAwait(false);
-            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.PresenterJoinRejected,
                 "Presenter join declined. SessionId={SessionId} PresenterConnectionId={PresenterConnectionId}",
@@ -517,7 +558,7 @@ public sealed class PointerHub(
                 result.SessionId,
                 result.ReceiverPreserved,
                 result.PointerCount);
-            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -555,7 +596,7 @@ public sealed class PointerHub(
                 "Receiver disconnected all presenters. SessionId={SessionId} PointerCount={PointerCount}",
                 result.SessionId,
                 result.PointerCount);
-            await Clients.All.ReceiverDirectoryChanged().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -616,4 +657,17 @@ public sealed class PointerHub(
     }
 
     private static string GroupName(string sessionId) => $"session:{sessionId}";
+
+    /// <summary>
+    /// Directory changes reach only the clients that share the same server password. Nobody
+    /// else can see the affected receivers, and one client's connection churn no longer costs
+    /// a directory read on every other connection.
+    /// </summary>
+    private static string DirectoryGroupName(string groupKey) => $"directory:{groupKey}";
+
+    private Task NotifyDirectoryChangedAsync() =>
+        NotifyDirectoryChangedAsync(sessionManager.GetConnectionGroup(Context.ConnectionId));
+
+    private Task NotifyDirectoryChangedAsync(string groupKey) =>
+        Clients.Group(DirectoryGroupName(groupKey)).ReceiverDirectoryChanged();
 }

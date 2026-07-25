@@ -8,6 +8,12 @@ public interface ISessionManager
 
     bool ReceiverDiscoveryEnabled { get; }
 
+    bool ServerPasswordRequired { get; }
+
+    RelayGroupChange SetConnectionGroup(string connectionId, string? groupKey);
+
+    string GetConnectionGroup(string connectionId);
+
     CreateSessionResponse CreateReceiverSession(
         DisplayDescriptor display,
         string connectionId,
@@ -18,7 +24,8 @@ public interface ISessionManager
         int? maximumPresenterConnections = null);
 
     IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers(
-        string? excludedApplicationInstanceId = null);
+        string? excludedApplicationInstanceId = null,
+        string? connectionId = null);
 
     bool SetReceiverDiscoverable(
         string sessionId,

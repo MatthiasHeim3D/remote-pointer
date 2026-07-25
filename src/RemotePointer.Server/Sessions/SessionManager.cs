@@ -9,6 +9,14 @@ public sealed class SessionManager : ISessionManager
 {
     private const int DefaultPresenterConnections = 2;
 
+    /// <summary>
+    /// The group every client shares when it presents no server password. It only ever holds
+    /// clients on a relay that allows them, because <see cref="SessionOptions.RequireServerPassword"/>
+    /// otherwise rejects an empty key.
+    /// </summary>
+    public const string OpenGroupKey = "";
+
+    private readonly Dictionary<string, string> connectionGroups = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ConnectionMembership> connections = new(StringComparer.Ordinal);
     private readonly object syncRoot = new();
     private readonly Dictionary<string, string> pairingCodeSessions = new(StringComparer.Ordinal);
@@ -48,6 +56,57 @@ public sealed class SessionManager : ISessionManager
 
     public bool ReceiverDiscoveryEnabled => sessionOptions.ReceiverDiscoveryEnabled;
 
+    public bool ServerPasswordRequired => sessionOptions.RequireServerPassword;
+
+    /// <summary>
+    /// Binds a connection to the group derived from its server password. The relay never sees
+    /// the password itself: the client derives a key from it and two clients reach the same
+    /// group only by deriving the same key, so groups need no registry and no cleanup.
+    /// </summary>
+    public RelayGroupChange SetConnectionGroup(string connectionId, string? groupKey)
+    {
+        EnsureIdentifier(connectionId, nameof(connectionId));
+        var normalized = groupKey ?? OpenGroupKey;
+        if (normalized.Length > 128)
+        {
+            throw new SessionOperationException(
+                "invalid_group_key",
+                "The server password key is not valid.");
+        }
+
+        if (normalized.Length == 0 && sessionOptions.RequireServerPassword)
+        {
+            throw new SessionOperationException(
+                "server_password_required",
+                "This relay requires a server password. Set one in Settings.");
+        }
+
+        lock (syncRoot)
+        {
+            // A connection that has not presented a password yet sits in the open pool, so
+            // that is the group it leaves when it presents one.
+            connectionGroups.TryGetValue(connectionId, out var previous);
+            previous ??= OpenGroupKey;
+            connectionGroups[connectionId] = normalized;
+            return new RelayGroupChange(
+                normalized,
+                string.Equals(previous, normalized, StringComparison.Ordinal) ? null : previous);
+        }
+    }
+
+    public string GetConnectionGroup(string connectionId)
+    {
+        if (string.IsNullOrWhiteSpace(connectionId))
+        {
+            return OpenGroupKey;
+        }
+
+        lock (syncRoot)
+        {
+            return GetConnectionGroupNoLock(connectionId);
+        }
+    }
+
     public CreateSessionResponse CreateReceiverSession(
         DisplayDescriptor display,
         string connectionId,
@@ -83,6 +142,7 @@ public sealed class SessionManager : ISessionManager
         lock (syncRoot)
         {
             EnsureConnectionIsUnbound(connectionId);
+            EnsureGroupIsPermittedNoLock(connectionId);
             var now = timeProvider.GetUtcNow();
             var sessionId = GenerateUniqueSessionId();
             var pairingCode = GenerateUniquePairingCode();
@@ -110,7 +170,8 @@ public sealed class SessionManager : ISessionManager
                 profile.PicturePng is null ? null : [.. profile.PicturePng],
                 receiver,
                 sessionOptions.SequenceWindowSize,
-                presenterLimit);
+                presenterLimit,
+                GetConnectionGroupNoLock(connectionId));
             session.IsDiscoverable = sessionOptions.ReceiverDiscoveryEnabled;
 
             sessions.Add(sessionId, session);
@@ -136,7 +197,8 @@ public sealed class SessionManager : ISessionManager
     }
 
     public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers(
-        string? excludedApplicationInstanceId = null)
+        string? excludedApplicationInstanceId = null,
+        string? connectionId = null)
     {
         if (!sessionOptions.ReceiverDiscoveryEnabled)
         {
@@ -145,10 +207,19 @@ public sealed class SessionManager : ISessionManager
 
         lock (syncRoot)
         {
+            var groupKey = connectionId is null
+                ? OpenGroupKey
+                : GetConnectionGroupNoLock(connectionId);
+            if (sessionOptions.RequireServerPassword && groupKey.Length == 0)
+            {
+                return [];
+            }
+
             var now = timeProvider.GetUtcNow();
             return sessions.Values
                 .Where(session =>
                     session.IsDiscoverable
+                    && string.Equals(session.GroupKey, groupKey, StringComparison.Ordinal)
                     && session.ExpiresAt > now
                     && session.Receiver.ConnectionId is not null
                     && session.PendingPresenter is null
@@ -757,6 +828,9 @@ public sealed class SessionManager : ISessionManager
 
         lock (syncRoot)
         {
+            // Group membership belongs to the connection rather than to a session, so it is
+            // released here whether or not the connection ever joined one.
+            connectionGroups.Remove(connectionId);
             if (!connections.TryGetValue(connectionId, out var membership)
                 || !sessions.TryGetValue(membership.SessionId, out var session))
             {
@@ -873,6 +947,17 @@ public sealed class SessionManager : ISessionManager
         applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
             ? clientInstanceId
             : applicationInstanceId;
+        // Sharing a server password is what makes two clients visible and reachable to each
+        // other, so a request that crosses that boundary is refused without confirming whether
+        // the session exists.
+        if (!string.Equals(
+                session.GroupKey,
+                GetConnectionGroupNoLock(connectionId),
+                StringComparison.Ordinal))
+        {
+            return RejectedJoin("The selected receiver is no longer available.");
+        }
+
         if (string.Equals(
                 session.ApplicationInstanceId,
                 applicationInstanceId,
@@ -942,6 +1027,24 @@ public sealed class SessionManager : ISessionManager
     /// at any time, so it keeps its session; a disconnected shell, or any session on a relay
     /// with discovery switched off, can no longer be joined and is collected.
     /// </summary>
+    private string GetConnectionGroupNoLock(string connectionId) =>
+        connectionGroups.TryGetValue(connectionId, out var groupKey) ? groupKey : OpenGroupKey;
+
+    /// <summary>
+    /// Rejects a client that has not presented a server password on a relay that requires one,
+    /// so an unidentified connection can neither publish itself nor see or reach anyone else.
+    /// </summary>
+    private void EnsureGroupIsPermittedNoLock(string connectionId)
+    {
+        if (sessionOptions.RequireServerPassword
+            && GetConnectionGroupNoLock(connectionId).Length == 0)
+        {
+            throw new SessionOperationException(
+                "server_password_required",
+                "This relay requires a server password. Set one in Settings.");
+        }
+    }
+
     private bool IsAbandonedNoLock(SessionRecord session) =>
         !session.IsDiscoverable
         && (session.Receiver.ConnectionId is null || !sessionOptions.ReceiverDiscoveryEnabled);
@@ -1123,7 +1226,8 @@ public sealed class SessionManager : ISessionManager
         byte[]? profilePicturePng,
         Participant receiver,
         int sequenceWindowSize,
-        int maximumPresenterConnections)
+        int maximumPresenterConnections,
+        string groupKey)
     {
         internal string Id { get; } = id;
 
@@ -1148,6 +1252,8 @@ public sealed class SessionManager : ISessionManager
         internal int SequenceWindowSize { get; } = sequenceWindowSize;
 
         internal int MaximumPresenterConnections { get; set; } = maximumPresenterConnections;
+
+        internal string GroupKey { get; } = groupKey;
 
         internal bool PairingCodeConsumed { get; set; }
 

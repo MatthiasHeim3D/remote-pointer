@@ -631,8 +631,67 @@ public sealed class PointerHubIntegrationTests
         Assert.Equal(30, await allPointersReceived.Task.WaitAsync(TestTimeout));
     }
 
+    [Fact]
+    public async Task ServerPassword_ScopesTheDirectoryToClientsThatShareIt()
+    {
+        using var factory = CreateFactory(
+            receiverDiscoveryEnabled: true,
+            requireServerPassword: true);
+        await using var receiver = CreateConnection(factory, "receiver-group", "Receiver");
+        await using var insider = CreateConnection(factory, "insider-group", "Insider");
+        await using var outsider = CreateConnection(factory, "outsider-group", "Outsider");
+        await receiver.StartAsync();
+        await insider.StartAsync();
+        await outsider.StartAsync();
+
+        Assert.True(await receiver.InvokeAsync<bool>("IsServerPasswordRequired"));
+        await Assert.ThrowsAsync<HubException>(
+            () => receiver.InvokeAsync<CreateSessionResponse>(
+                "CreateReceiverSession",
+                CreateDisplay()));
+
+        await receiver.InvokeAsync("EnterRelayGroup", "shared-key");
+        await insider.InvokeAsync("EnterRelayGroup", "shared-key");
+        await outsider.InvokeAsync("EnterRelayGroup", "other-key");
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSession",
+            CreateDisplay());
+
+        var insiderView = await insider.InvokeAsync<AvailableReceiverDescriptor[]>(
+            "GetAvailableReceivers");
+        var outsiderView = await outsider.InvokeAsync<AvailableReceiverDescriptor[]>(
+            "GetAvailableReceivers");
+        var outsiderJoin = await outsider.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "outsider-group", "1.0.0"));
+
+        Assert.Equal(created.SessionId, Assert.Single(insiderView).SessionId);
+        Assert.Empty(outsiderView);
+        Assert.False(outsiderJoin.Accepted);
+    }
+
+    [Fact]
+    public async Task ServerPassword_IsNotRequiredOnAnOpenRelay()
+    {
+        using var factory = CreateFactory(receiverDiscoveryEnabled: true);
+        await using var receiver = CreateConnection(factory, "open-receiver", "Receiver");
+        await using var presenter = CreateConnection(factory, "open-presenter", "Presenter");
+        await receiver.StartAsync();
+        await presenter.StartAsync();
+
+        Assert.False(await receiver.InvokeAsync<bool>("IsServerPasswordRequired"));
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSession",
+            CreateDisplay());
+        var available = await presenter.InvokeAsync<AvailableReceiverDescriptor[]>(
+            "GetAvailableReceivers");
+
+        Assert.Equal(created.SessionId, Assert.Single(available).SessionId);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(
-        bool receiverDiscoveryEnabled = false) =>
+        bool receiverDiscoveryEnabled = false,
+        bool requireServerPassword = false) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(
                 builder =>
@@ -641,6 +700,9 @@ public sealed class PointerHubIntegrationTests
                     builder.UseSetting(
                         "Sessions:ReceiverDiscoveryEnabled",
                         receiverDiscoveryEnabled.ToString());
+                    builder.UseSetting(
+                        "Sessions:RequireServerPassword",
+                        requireServerPassword.ToString());
                 });
 
     private static HubConnection CreateConnection(

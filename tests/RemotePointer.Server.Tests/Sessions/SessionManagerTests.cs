@@ -220,6 +220,71 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void ServerPassword_ScopesTheDirectoryAndJoinsToClientsThatShareIt()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true, requireServerPassword: true);
+        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
+        var created = CreateReceiver(context);
+        context.Manager.SetConnectionGroup("insider-connection", "group-one");
+        context.Manager.SetConnectionGroup("outsider-connection", "group-two");
+
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(context.Manager.GetAvailableReceivers(null, "insider-connection")).SessionId);
+        Assert.Empty(context.Manager.GetAvailableReceivers(null, "outsider-connection"));
+
+        var outsiderJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "outsider-client", "1.0.0"),
+            "outsider-connection",
+            "Outsider");
+        Assert.False(outsiderJoin.Response.Accepted);
+
+        var insiderJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "insider-client", "1.0.0"),
+            "insider-connection",
+            "Insider");
+        Assert.True(insiderJoin.Response.Accepted);
+    }
+
+    [Fact]
+    public void ServerPassword_IsRequiredBeforeAnythingIsPublishedOrListed()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true, requireServerPassword: true);
+
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.SetConnectionGroup("receiver-connection", null));
+        Assert.ThrowsAny<InvalidOperationException>(() => CreateReceiver(context));
+        Assert.Empty(context.Manager.GetAvailableReceivers(null, "receiver-connection"));
+        Assert.True(context.Manager.ServerPasswordRequired);
+    }
+
+    [Fact]
+    public void OpenRelay_KeepsPasswordlessClientsInOneSharedGroup()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+
+        Assert.Equal(SessionManager.OpenGroupKey, context.Manager.GetConnectionGroup("anyone"));
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(context.Manager.GetAvailableReceivers(null, "anyone")).SessionId);
+    }
+
+    [Fact]
+    public void ConnectionGroup_IsReleasedWhenTheConnectionDrops()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true, requireServerPassword: true);
+        context.Manager.SetConnectionGroup("browser-connection", "group-one");
+
+        _ = context.Manager.Disconnect("browser-connection");
+
+        Assert.Equal(
+            SessionManager.OpenGroupKey,
+            context.Manager.GetConnectionGroup("browser-connection"));
+        Assert.Empty(context.Manager.GetAvailableReceivers(null, "browser-connection"));
+    }
+
+    [Fact]
     public void CreateReceiverSession_FitsTheDefaultPresenterCountToTheRelayLimit()
     {
         var context = CreateContext(receiverDiscoveryEnabled: true, maximumPresentersPerReceiver: 1);
@@ -834,7 +899,8 @@ public sealed class SessionManagerTests
 
     private static TestContext CreateContext(
         bool receiverDiscoveryEnabled = false,
-        int maximumPresentersPerReceiver = 16)
+        int maximumPresentersPerReceiver = 16,
+        bool requireServerPassword = false)
     {
         var timeProvider = new ManualTimeProvider(InitialTime);
         var manager = new SessionManager(
@@ -845,6 +911,7 @@ public sealed class SessionManagerTests
                 SequenceWindowSize = 64,
                 MaximumPresentersPerReceiver = maximumPresentersPerReceiver,
                 ReceiverDiscoveryEnabled = receiverDiscoveryEnabled,
+                RequireServerPassword = requireServerPassword,
             }),
             Options.Create(new PointerRateLimitOptions
             {
