@@ -42,8 +42,20 @@ public sealed class TargetRegionCalibrationStore(string? directoryPath = null)
             throw new ArgumentOutOfRangeException(nameof(rectangle));
         }
 
-        Directory.CreateDirectory(directoryPath);
-        File.WriteAllText(GetPath(receiverIdentity), JsonSerializer.Serialize(rectangle));
+        try
+        {
+            Directory.CreateDirectory(directoryPath);
+            File.WriteAllText(GetPath(receiverIdentity), JsonSerializer.Serialize(rectangle));
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or NotSupportedException)
+        {
+            // Remembering the rectangle is a convenience. Load already ignores an unusable
+            // file, and this runs from the Lock button, so a failure here would otherwise
+            // reach the dispatcher handler and close the application mid-calibration.
+        }
     }
 
     private string GetPath(string identity)
