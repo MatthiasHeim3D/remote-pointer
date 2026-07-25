@@ -904,6 +904,61 @@
                                Foreground="#FF8A80"
                                TextWrapping="Wrap"
                                Text="{Binding ServerConnectionTestMessage}" />
+
+                    <TextBlock Margin="0,18,0,6" Text="Server password" />
+                    <TextBlock Margin="0,0,0,6"
+                               FontSize="11"
+                               Foreground="#AFAFAF"
+                               TextWrapping="Wrap"
+                               Text="Clients see each other only when they use the same server password. Share it with your team the way you would share a meeting password." />
+                    <PasswordBox x:Name="ServerPasswordBox"
+                                 PasswordChanged="OnServerPasswordChanged" />
+                    <TextBlock Margin="0,6,0,0"
+                               FontSize="11"
+                               Foreground="#FF8A80"
+                               TextWrapping="Wrap"
+                               Text="{Binding ServerPasswordValidationMessage}" />
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="#AFAFAF"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding ServerPasswordStatus}" />
+                        <Button Grid.Column="1"
+                                Padding="8,2"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                FontSize="11"
+                                Foreground="#60CDFF"
+                                Command="{Binding ClearServerPasswordCommand}"
+                                Content="Remove"
+                                Visibility="{Binding HasServerPassword, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </Grid>
+                    <Border Margin="0,10,0,0"
+                            Padding="10,8"
+                            Background="#3A3222"
+                            BorderBrush="#7A6320"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Visibility="{Binding ShowServerPasswordWarning, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Top"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14"
+                                       Foreground="#FFB900"
+                                       Text="&#xE7BA;" />
+                            <TextBlock Margin="8,0,0,0"
+                                       FontSize="11"
+                                       Foreground="#F0D79A"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding ServerPasswordWarning}" />
+                        </StackPanel>
+                    </Border>
                     <Border Margin="0,24,0,2"
                             Padding="0,12,0,0"
                             BorderBrush="#303030"

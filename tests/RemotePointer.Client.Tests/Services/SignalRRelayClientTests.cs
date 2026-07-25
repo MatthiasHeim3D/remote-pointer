@@ -11,6 +11,10 @@ public sealed class SignalRRelayClientTests
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
+    // The relay requires a server password by default, so the clients under test present the
+    // key derived from a shared one and exercise the group handshake on every connect.
+    private const string SharedGroupKey = "shared-test-group-key";
+
     [Fact]
     public async Task TwoClients_CompleteApprovedPointerAndTerminationWorkflow()
     {
@@ -23,6 +27,7 @@ public sealed class SignalRRelayClientTests
             {
                 BaseUrl = server.BaseAddress.ToString(),
                 ReconnectDelaysSeconds = [0, 1],
+                PasswordKey = SharedGroupKey,
             },
         };
         await using var receiver = new SignalRRelayClient(
@@ -172,6 +177,7 @@ public sealed class SignalRRelayClientTests
         {
             BaseUrl = baseAddress.ToString(),
             ReconnectDelaysSeconds = [0, 1],
+            PasswordKey = SharedGroupKey,
         },
     };
 

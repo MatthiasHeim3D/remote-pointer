@@ -30,6 +30,81 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task NoServerPassword_WarnsAndSaysWhyTheListIsEmpty()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(true),
+            ServerPasswordRequired = true,
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            receiverRelayClient: relay,
+            clientSettings: new ClientSettings());
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(viewModel.HasServerPassword);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Contains(
+            "requires a server password",
+            viewModel.ServerPasswordWarning,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            "Set a server password in Settings to see other clients.",
+            viewModel.EmptyClientListMessage);
+    }
+
+    [Fact]
+    public async Task OpenRelayWithoutPassword_WarnsThatEveryoneCanSeeTheProfile()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient { Capabilities = new RelayCapabilities(true) };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            receiverRelayClient: relay,
+            clientSettings: new ClientSettings());
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(viewModel.ServerPasswordRequired);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Contains(
+            "visible to everyone",
+            viewModel.ServerPasswordWarning,
+            StringComparison.Ordinal);
+        Assert.Equal("No available clients", viewModel.EmptyClientListMessage);
+    }
+
+    [Fact]
+    public void StoredServerPassword_SuppressesTheWarningAndAllowsRemoval()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        settings.Server.PasswordKey = "stored-group-key";
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            receiverRelayClient: relay,
+            clientSettings: settings);
+
+        Assert.True(viewModel.HasServerPassword);
+        Assert.False(viewModel.ShowServerPasswordWarning);
+        Assert.True(viewModel.ClearServerPasswordCommand.CanExecute(null));
+
+        viewModel.ClearServerPassword();
+
+        Assert.False(viewModel.HasServerPassword);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Null(settings.Server.PasswordKey);
+        Assert.Null(relay.ServerPasswordKey);
+    }
+
+    [Fact]
     public void MissingServer_ShowsMainScreenWithSetupGuidance()
     {
         using var overlay = new FakeOverlayService();

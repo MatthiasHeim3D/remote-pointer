@@ -4,6 +4,7 @@ using System.IO;
 using System.Security;
 using System.Windows.Media.Imaging;
 using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using RemotePointer.Client.Configuration;
@@ -31,6 +32,8 @@ public sealed class SignalRRelayClient : IRelayClient
     private readonly object stateLock = new();
     private bool disposed;
     private SessionCredential? credential;
+    private string? groupKey;
+    private bool groupKeyEntered;
     private string? sessionId;
     private RelayConnectionStatus status = RelayConnectionStatus.Disconnected;
 
@@ -83,6 +86,9 @@ public sealed class SignalRRelayClient : IRelayClient
             sessionId = credential?.SessionId;
         }
 
+        groupKey = string.IsNullOrWhiteSpace(settings.Server.PasswordKey)
+            ? null
+            : settings.Server.PasswordKey;
         synchronizationContext = SynchronizationContext.Current;
         displayName = string.IsNullOrWhiteSpace(settings.Profile.UserName)
             ? Environment.MachineName
@@ -178,6 +184,33 @@ public sealed class SignalRRelayClient : IRelayClient
                 "GetRelayCapabilities",
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    public async Task<bool> IsServerPasswordRequiredAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await connection.InvokeAsync<bool>(
+                    "IsServerPasswordRequired",
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (HubException)
+        {
+            // A relay predating server passwords cannot require one.
+            return false;
+        }
+    }
+
+    public void SetServerPasswordKey(string? key)
+    {
+        lock (stateLock)
+        {
+            groupKey = string.IsNullOrWhiteSpace(key) ? null : key;
+            groupKeyEntered = false;
+        }
     }
 
     public async Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
@@ -548,6 +581,13 @@ public sealed class SignalRRelayClient : IRelayClient
 
         connection.Reconnecting += exception =>
         {
+            // The relay tracks the group per connection, so a new connection has to present
+            // the key again before it can see or reach anything.
+            lock (stateLock)
+            {
+                groupKeyEntered = false;
+            }
+
             SetStatus(
                 RelayConnectionStatus.Reconnecting,
                 exception is null ? "Reconnecting to relay." : "Relay connection interrupted; reconnecting.");
@@ -556,6 +596,11 @@ public sealed class SignalRRelayClient : IRelayClient
         connection.Reconnected += OnReconnectedAsync;
         connection.Closed += exception =>
         {
+            lock (stateLock)
+            {
+                groupKeyEntered = false;
+            }
+
             if (!disposed)
             {
                 SetStatus(
@@ -570,7 +615,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        if (connection.State == HubConnectionState.Connected)
+        if (connection.State == HubConnectionState.Connected && IsGroupEntryCurrent())
         {
             return;
         }
@@ -584,10 +629,60 @@ public sealed class SignalRRelayClient : IRelayClient
                 await connection.StartAsync(cancellationToken).ConfigureAwait(false);
                 SetStatus(RelayConnectionStatus.Connected, "Connected to relay.");
             }
+
+            await EnterGroupAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             connectionGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The relay tracks the group per connection, so the key is presented again after every
+    /// connect and reconnect. It is sent as a hub argument rather than a connection query
+    /// parameter to keep it out of proxy access logs.
+    /// </summary>
+    private async Task EnterGroupAsync(CancellationToken cancellationToken)
+    {
+        string? keyToEnter;
+        lock (stateLock)
+        {
+            keyToEnter = groupKeyEntered ? null : groupKey;
+        }
+
+        if (keyToEnter is null || connection.State != HubConnectionState.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.InvokeAsync("EnterRelayGroup", keyToEnter, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (HubException)
+        {
+            // Best effort: a relay predating server passwords has no such method, and a relay
+            // that refuses the key reports it again on the operation the caller actually made,
+            // where the message can be shown.
+            return;
+        }
+
+        lock (stateLock)
+        {
+            if (string.Equals(groupKey, keyToEnter, StringComparison.Ordinal))
+            {
+                groupKeyEntered = true;
+            }
+        }
+    }
+
+    private bool IsGroupEntryCurrent()
+    {
+        lock (stateLock)
+        {
+            return groupKey is null || groupKeyEntered;
         }
     }
 
@@ -617,6 +712,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private async Task OnReconnectedAsync(string? connectionId)
     {
         _ = connectionId;
+        await EnterGroupAsync(CancellationToken.None).ConfigureAwait(false);
         var currentCredential = Credential;
         if (currentCredential is null)
         {

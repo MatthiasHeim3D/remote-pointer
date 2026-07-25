@@ -23,6 +23,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ClientSettings? clientSettings;
     private readonly IStartupRegistrationService? startupRegistrationService;
     private readonly IServerConnectionTester serverConnectionTester;
+    private readonly IServerPasswordStore? serverPasswordStore;
     private readonly ITargetRegionService targetRegionService;
     private readonly RelayCommand decrementMaximumSendersCommand;
     private readonly RelayCommand incrementMaximumSendersCommand;
@@ -48,6 +49,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
     private bool isServerAddressVerified;
+    private bool hasServerPassword;
+    private bool serverPasswordRequired;
+    private string serverPasswordInput = string.Empty;
     private bool pendingRelayReinitialization;
     private string? lastTestedServerAddress;
     private bool lastServerConnectionTestSucceeded;
@@ -67,7 +71,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         int pointerTtlMilliseconds = 2_000,
         ClientSettings? clientSettings = null,
         IStartupRegistrationService? startupRegistrationService = null,
-        IServerConnectionTester? serverConnectionTester = null)
+        IServerConnectionTester? serverConnectionTester = null,
+        IServerPasswordStore? serverPasswordStore = null)
     {
         this.monitorService = monitorService ?? throw new ArgumentNullException(nameof(monitorService));
         this.overlayService = overlayService ?? throw new ArgumentNullException(nameof(overlayService));
@@ -75,6 +80,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         this.clientSettings = clientSettings;
         this.startupRegistrationService = startupRegistrationService;
         this.serverConnectionTester = serverConnectionTester ?? new ServerConnectionTester();
+        this.serverPasswordStore = serverPasswordStore;
+        hasServerPassword = !string.IsNullOrWhiteSpace(clientSettings?.Server.PasswordKey);
         var configuredServerAddress = clientSettings?.Server.BaseUrl
             ?? receiverRelayClient?.ServerUrl
             ?? string.Empty;
@@ -166,6 +173,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             IsAvailabilityMenuOpen = !IsAvailabilityMenuOpen;
         });
+        ClearServerPasswordCommand = new RelayCommand(
+            _ => ClearServerPassword(),
+            _ => HasServerPassword);
         incrementMaximumSendersCommand = new RelayCommand(
             _ => MaximumSenderConnections++,
             _ => MaximumSenderConnections < 16);
@@ -305,7 +315,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public string EmptyClientListMessage => !IsServerAvailable
         ? ServerConnectionGuidance
-        : "No available clients";
+        : ServerPasswordRequired && !HasServerPassword
+            ? "Set a server password in Settings to see other clients."
+            : "No available clients";
 
     public bool IsAvailabilityMenuOpen
     {
@@ -385,6 +397,62 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => serverConnectionTestMessage;
         private set => SetProperty(ref serverConnectionTestMessage, value);
     }
+
+    /// <summary>
+    /// The draft from the password box. It is derived and discarded when settings are saved,
+    /// and is never written to the preferences file or shown back to the user.
+    /// </summary>
+    public string ServerPasswordInput
+    {
+        get => serverPasswordInput;
+        set
+        {
+            if (SetProperty(ref serverPasswordInput, value ?? string.Empty))
+            {
+                RaisePropertyChanged(nameof(ServerPasswordValidationMessage));
+            }
+        }
+    }
+
+    public bool HasServerPassword
+    {
+        get => hasServerPassword;
+        private set
+        {
+            if (SetProperty(ref hasServerPassword, value))
+            {
+                RaiseServerPasswordProperties();
+            }
+        }
+    }
+
+    public bool ServerPasswordRequired
+    {
+        get => serverPasswordRequired;
+        private set
+        {
+            if (SetProperty(ref serverPasswordRequired, value))
+            {
+                RaiseServerPasswordProperties();
+            }
+        }
+    }
+
+    public bool ShowServerPasswordWarning => !HasServerPassword;
+
+    public string ServerPasswordWarning => ServerPasswordRequired
+        ? "This relay requires a server password. Set one to see other clients and be seen by them."
+        : "No server password is set. Your name and picture are visible to everyone who can reach this relay.";
+
+    public string ServerPasswordStatus => HasServerPassword
+        ? "A server password is set. Only clients using the same one can see you."
+        : "Not set";
+
+    public string ServerPasswordValidationMessage =>
+        ServerPasswordInput.Length == 0
+            || ServerPasswordKey.IsValidPassword(ServerPasswordInput)
+            ? string.Empty
+            : $"Use at least {ServerPasswordKey.MinimumPasswordLength} characters.";
 
     public string UserName
     {
@@ -483,6 +551,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public ICommand ToggleAvailabilityMenuCommand { get; }
 
+    public ICommand ClearServerPasswordCommand { get; }
+
     public ICommand IncrementMaximumSendersCommand => incrementMaximumSendersCommand;
 
     public ICommand DecrementMaximumSendersCommand => decrementMaximumSendersCommand;
@@ -509,6 +579,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 var capabilities = await receiverRelayClient.GetRelayCapabilitiesAsync();
                 ReceiverDiscoveryEnabled = capabilities.ReceiverDiscoveryEnabled;
+                ServerPasswordRequired =
+                    await receiverRelayClient.IsServerPasswordRequiredAsync();
             }
             catch (Exception exception)
             {
@@ -1077,6 +1149,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
+            await ApplyServerPasswordDraftAsync();
             if (HasServerAddressChanged)
             {
                 if (!TryGetRequestedServerAddress(out var requestedServerAddress))
@@ -1136,6 +1209,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OpenSettings()
     {
+        ServerPasswordInput = string.Empty;
         ResetSettingsDraft();
         IsServerAddressVerified = false;
         ServerConnectionTestMessage = string.Empty;
@@ -1388,6 +1462,59 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var cancellation = availabilityRetryCancellation;
         availabilityRetryCancellation = null;
         cancellation?.Cancel();
+    }
+
+    /// <summary>
+    /// Derives the group key from the draft password, stores it protected, and hands it to both
+    /// relay connections. The password is used here and nowhere else.
+    /// </summary>
+    private async Task ApplyServerPasswordDraftAsync()
+    {
+        var draft = ServerPasswordInput;
+        if (draft.Length == 0)
+        {
+            return;
+        }
+
+        if (!ServerPasswordKey.IsValidPassword(draft))
+        {
+            SetStatus(ServerPasswordValidationMessage, true);
+            return;
+        }
+
+        var key = await Task.Run(() => ServerPasswordKey.Derive(draft));
+        ServerPasswordInput = string.Empty;
+        ApplyServerPasswordKey(key);
+        serverPasswordStore?.Save(key);
+        HasServerPassword = true;
+    }
+
+    public void ClearServerPassword()
+    {
+        ServerPasswordInput = string.Empty;
+        ApplyServerPasswordKey(null);
+        serverPasswordStore?.Clear();
+        HasServerPassword = false;
+    }
+
+    private void ApplyServerPasswordKey(string? key)
+    {
+        if (clientSettings is not null)
+        {
+            clientSettings.Server.PasswordKey = key;
+        }
+
+        receiverRelayClient?.SetServerPasswordKey(key);
+        Presenter.SetServerPasswordKey(key);
+    }
+
+    private void RaiseServerPasswordProperties()
+    {
+        RaisePropertyChanged(nameof(ShowServerPasswordWarning));
+        RaisePropertyChanged(nameof(ServerPasswordWarning));
+        RaisePropertyChanged(nameof(ServerPasswordStatus));
+        RaisePropertyChanged(nameof(EmptyClientListMessage));
+        (ClearServerPasswordCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 
     private void RaiseAvailabilityProperties()

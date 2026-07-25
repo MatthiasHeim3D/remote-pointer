@@ -385,6 +385,12 @@ public sealed class ServerSettings
     public string BaseUrl { get; set; } = string.Empty;
 
     public int[] ReconnectDelaysSeconds { get; init; } = [0, 2, 5, 10, 30];
+
+    /// <summary>
+    /// The key derived from the server password. It is loaded from and written to the protected
+    /// store rather than the preferences file, so it is never serialised alongside the settings.
+    /// </summary>
+    public string? PasswordKey { get; set; }
 }
 
 public sealed class PointerSettings

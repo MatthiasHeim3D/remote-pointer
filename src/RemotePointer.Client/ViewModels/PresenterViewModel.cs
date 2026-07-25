@@ -305,6 +305,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
+    public void SetServerPasswordKey(string? key) => relayClient?.SetServerPasswordKey(key);
+
     public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints) =>
         targetRegionService.SetUsageHintsState(showUsageHints, hasShownUsageHints);
 

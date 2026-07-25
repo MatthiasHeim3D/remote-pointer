@@ -41,9 +41,11 @@ public partial class MainWindow : Window
         var targetRegionService = new TargetRegionService();
         var settings = ClientSettings.Load();
         var clientInstanceIdProvider = new ClientInstanceIdProvider();
-        var protectedSessionStore = new ProtectedSessionStore(
-            new DpapiDataProtector(),
-            auditLog);
+        var dataProtector = new DpapiDataProtector();
+        var protectedSessionStore = new ProtectedSessionStore(dataProtector, auditLog);
+        var serverPasswordStore = new ProtectedServerPasswordStore(dataProtector, auditLog);
+        // Loaded before the connections are built so the first connect already presents it.
+        settings.Server.PasswordKey = serverPasswordStore.Load();
         IRelayClient? receiverRelayClient = null;
         IRelayClient? presenterRelayClient = null;
         if (!string.IsNullOrWhiteSpace(settings.Server.BaseUrl))
@@ -69,7 +71,9 @@ public partial class MainWindow : Window
             presenterRelayClient,
             settings.Pointer.DefaultTtlMilliseconds,
             settings,
-            new StartupRegistrationService());
+            new StartupRegistrationService(),
+            serverConnectionTester: null,
+            serverPasswordStore: serverPasswordStore);
         DataContext = viewModel;
 
         trayIcon = new SystemTrayIcon(ShowFromTray, ExitFromTray);
@@ -185,6 +189,14 @@ public partial class MainWindow : Window
             {
                 approvalWindow?.Close();
             }
+        }
+
+        if (ReferenceEquals(sender, viewModel)
+            && e.PropertyName == nameof(MainWindowViewModel.ServerPasswordInput)
+            && viewModel.ServerPasswordInput.Length == 0
+            && ServerPasswordBox.Password.Length > 0)
+        {
+            ServerPasswordBox.Clear();
         }
 
         if ((ReferenceEquals(sender, viewModel)
@@ -359,6 +371,17 @@ public partial class MainWindow : Window
             suppressAutoHide = false;
             Activate();
         }
+    }
+
+    /// <summary>
+    /// PasswordBox deliberately does not expose its value as a bindable property, so the draft
+    /// is pushed to the view model here. It is cleared as soon as settings are saved.
+    /// </summary>
+    private void OnServerPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        viewModel.ServerPasswordInput = ServerPasswordBox.Password;
     }
 
     private void OnOpenRepository(object sender, RoutedEventArgs e)
