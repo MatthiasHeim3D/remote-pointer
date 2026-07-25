@@ -12,51 +12,51 @@ public interface ISessionManager
 
     string GetConnectionGroup(string connectionId);
 
-    CreateSessionResponse CreateReceiverSession(
+    CreateSessionResponse CreateHostSession(
         DisplayDescriptor display,
         string connectionId,
         string clientInstanceId,
-        string receiverDisplayName,
+        string hostDisplayName,
         string? applicationInstanceId = null,
         ClientProfile? profile = null,
-        int? maximumPresenterConnections = null);
+        int? maximumAnnotatorConnections = null);
 
-    IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers(
+    IReadOnlyList<AvailableHostDescriptor> GetAvailableHosts(
         string? excludedApplicationInstanceId = null,
         string? connectionId = null);
 
-    bool SetReceiverDiscoverable(
+    bool SetHostDiscoverable(
         string sessionId,
-        string receiverConnectionId,
+        string hostConnectionId,
         bool discoverable);
 
-    JoinSessionResult RequestToJoinReceiver(
+    JoinSessionResult RequestToJoinHost(
         DirectJoinRequest request,
         string connectionId,
         string displayName,
         string? applicationInstanceId = null);
 
-    ReceiverDisplayUpdateResult UpdateReceiverDisplay(
+    HostDisplayUpdateResult UpdateHostDisplay(
         string sessionId,
-        string receiverConnectionId,
+        string hostConnectionId,
         DisplayDescriptor display);
 
-    ReceiverClientSettingsUpdateResult UpdateReceiverClientSettings(
+    HostClientSettingsUpdateResult UpdateHostClientSettings(
         string sessionId,
-        string receiverConnectionId,
-        string receiverDisplayName,
+        string hostConnectionId,
+        string hostDisplayName,
         ClientProfile profile,
-        int maximumPresenterConnections);
+        int maximumAnnotatorConnections);
 
-    ApprovePresenterResult ApprovePresenter(
+    ApproveAnnotatorResult ApproveAnnotator(
         string sessionId,
-        string presenterConnectionId,
-        string receiverConnectionId);
+        string annotatorConnectionId,
+        string hostConnectionId);
 
-    RejectPresenterResult RejectPresenter(
+    RejectAnnotatorResult RejectAnnotator(
         string sessionId,
-        string presenterConnectionId,
-        string receiverConnectionId);
+        string annotatorConnectionId,
+        string hostConnectionId);
 
     PointerRelayResult AcceptPointer(string connectionId, PointerEventMessage pointerEvent);
 
@@ -69,9 +69,9 @@ public interface ISessionManager
         SessionResumeRequest request,
         string? applicationInstanceId = null);
 
-    SessionTerminationResult DisconnectPresenters(
+    SessionTerminationResult DisconnectAnnotators(
         string sessionId,
-        string receiverConnectionId);
+        string hostConnectionId);
 
     SessionTerminationResult EndSession(string sessionId, string connectionId);
 

@@ -7,12 +7,12 @@ using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.ViewModels;
 
-public sealed class PresenterViewModel : ObservableObject, IDisposable
+public sealed class AnnotatorViewModel : ObservableObject, IDisposable
 {
     private readonly RelayCommand calibrateCommand;
     private readonly AsyncRelayCommand endSessionCommand;
-    private readonly AsyncRelayCommand joinDiscoveredReceiverCommand;
-    private readonly AsyncRelayCommand refreshReceiversCommand;
+    private readonly AsyncRelayCommand joinDiscoveredHostCommand;
+    private readonly AsyncRelayCommand refreshHostsCommand;
     private readonly Dictionary<Guid, long> pendingAcknowledgements = [];
     private readonly int pointerTtlMilliseconds;
     private readonly IRelayClient? relayClient;
@@ -22,8 +22,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private bool directoryReadPending;
     private bool disposed;
     private bool isReadingDirectory;
-    private DisplayDescriptor? receiverDisplay;
-    private AvailableReceiverDescriptor? selectedReceiver;
+    private DisplayDescriptor? hostDisplay;
+    private AvailableHostDescriptor? selectedHost;
     private bool isError;
     private bool isJoinPending;
     private bool isSessionApproved;
@@ -34,10 +34,10 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private TargetRegionState state = TargetRegionState.Inactive;
     private string statusMessage;
     private string connectionMessage;
-    private string currentReceiverName = "Connected receiver";
-    private byte[]? currentReceiverProfilePicturePng;
+    private string currentHostName = "Connected host";
+    private byte[]? currentHostProfilePicturePng;
 
-    public PresenterViewModel(
+    public AnnotatorViewModel(
         ITargetRegionService targetRegionService,
         IRelayClient? relayClient = null,
         int pointerTtlMilliseconds = 2_000)
@@ -55,17 +55,17 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         this.targetRegionService.PointerCaptured += OnPointerCaptured;
         statusMessage = relayClient is null
             ? "Calibrate the target area to begin."
-            : "Choose a visible receiver to request access.";
+            : "Choose a visible host to request access.";
         connectionMessage = relayClient is null ? "Networking is not configured." : "Disconnected.";
 
         if (relayClient is not null)
         {
             relayClient.ConnectionStatusChanged += OnConnectionStatusChanged;
             relayClient.SessionApproved += OnSessionApproved;
-            relayClient.ReceiverDisplayChanged += OnReceiverDisplayChanged;
+            relayClient.HostDisplayChanged += OnHostDisplayChanged;
             relayClient.PointerDisplayed += OnPointerDisplayed;
             relayClient.SessionEnded += OnSessionEnded;
-            relayClient.ReceiverDirectoryChanged += OnReceiverDirectoryChanged;
+            relayClient.HostDirectoryChanged += OnHostDirectoryChanged;
         }
 
         calibrateCommand = new RelayCommand(
@@ -76,16 +76,16 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             _ => State != TargetRegionState.Calibrating
                 && (relayClient is null || IsSessionApproved));
         ExitPointingCommand = new RelayCommand(_ => targetRegionService.ExitPointingMode());
-        refreshReceiversCommand = new AsyncRelayCommand(
-            _ => RefreshAvailableReceiversAsync(),
+        refreshHostsCommand = new AsyncRelayCommand(
+            _ => RefreshAvailableHostsAsync(),
             _ => relayClient is not null
-                && SenderRoleEnabled
+                && RoleEnabled
                 && !IsSessionApproved);
-        joinDiscoveredReceiverCommand = new AsyncRelayCommand(
-            receiver => JoinDiscoveredReceiverAsync(receiver as AvailableReceiverDescriptor),
-            receiver => relayClient is not null
-                && SenderRoleEnabled
-                && (receiver is AvailableReceiverDescriptor || SelectedReceiver is not null)
+        joinDiscoveredHostCommand = new AsyncRelayCommand(
+            host => JoinDiscoveredHostAsync(host as AvailableHostDescriptor),
+            host => relayClient is not null
+                && RoleEnabled
+                && (host is AvailableHostDescriptor || SelectedHost is not null)
                 && !IsJoinPending
                 && !IsSessionApproved);
         endSessionCommand = new AsyncRelayCommand(
@@ -93,21 +93,21 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             _ => relayClient is not null && (IsSessionApproved || IsJoinPending));
     }
 
-    public ObservableCollection<AvailableReceiverDescriptor> AvailableReceivers { get; } = [];
+    public ObservableCollection<AvailableHostDescriptor> AvailableHosts { get; } = [];
 
-    public AvailableReceiverDescriptor? SelectedReceiver
+    public AvailableHostDescriptor? SelectedHost
     {
-        get => selectedReceiver;
+        get => selectedHost;
         set
         {
-            if (SetProperty(ref selectedReceiver, value))
+            if (SetProperty(ref selectedHost, value))
             {
-                joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
+                joinDiscoveredHostCommand.RaiseCanExecuteChanged();
             }
         }
     }
 
-    public bool SenderRoleEnabled
+    public bool RoleEnabled
     {
         get => senderRoleEnabled;
         private set
@@ -119,15 +119,15 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string ReceiverDiscoveryMessage => AvailableReceivers.Count == 0
-        ? "No visible receivers are currently available."
-        : $"{AvailableReceivers.Count} visible receiver{(AvailableReceivers.Count == 1 ? string.Empty : "s")} available.";
+    public string HostDiscoveryMessage => AvailableHosts.Count == 0
+        ? "No visible hosts are currently available."
+        : $"{AvailableHosts.Count} visible host{(AvailableHosts.Count == 1 ? string.Empty : "s")} available.";
 
-    public string ReceiverDisplayShape => receiverDisplay is null
-        ? "Available after receiver approval."
+    public string HostDisplayShape => hostDisplay is null
+        ? "Available after host approval."
         : string.Create(
             CultureInfo.InvariantCulture,
-            $"{receiverDisplay.WidthPixels} × {receiverDisplay.HeightPixels} ({receiverDisplay.AspectRatio:0.###}:1)");
+            $"{hostDisplay.WidthPixels} × {hostDisplay.HeightPixels} ({hostDisplay.AspectRatio:0.###}:1)");
 
     public TargetRegionState State
     {
@@ -151,12 +151,12 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public string PointingActionIcon => IsPointing ? "\uE71A" : "\uE768";
 
-    public string SenderConnectionStatusLabel => IsSessionApproved
+    public string ConnectionStatusLabel => IsSessionApproved
         ? "Connected"
         : "Request sent. Waiting for approval.";
 
     public string EndSessionActionLabel => IsSessionApproved
-        ? "Disconnect from receiver"
+        ? "Disconnect from host"
         : "Cancel connection request";
 
     public string StateLabel => State.ToString();
@@ -175,7 +175,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public string ServerUrl => relayClient?.ServerUrl ?? "Not configured";
 
-    public bool HasRecoverableSession => relayClient?.Credential?.Role == ClientRole.Presenter;
+    public bool HasRecoverableSession => relayClient?.Credential?.Role == ClientRole.Annotator;
 
     public bool IsError
     {
@@ -191,7 +191,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             if (SetProperty(ref isJoinPending, value))
             {
                 RaiseNetworkCommandStates();
-                RaisePropertyChanged(nameof(SenderConnectionStatusLabel));
+                RaisePropertyChanged(nameof(ConnectionStatusLabel));
                 RaisePropertyChanged(nameof(EndSessionActionLabel));
             }
         }
@@ -207,22 +207,22 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
                 RaiseNetworkCommandStates();
                 calibrateCommand.RaiseCanExecuteChanged();
                 togglePointingCommand.RaiseCanExecuteChanged();
-                RaisePropertyChanged(nameof(SenderConnectionStatusLabel));
+                RaisePropertyChanged(nameof(ConnectionStatusLabel));
                 RaisePropertyChanged(nameof(EndSessionActionLabel));
             }
         }
     }
 
-    public string CurrentReceiverName
+    public string CurrentHostName
     {
-        get => currentReceiverName;
-        private set => SetProperty(ref currentReceiverName, value);
+        get => currentHostName;
+        private set => SetProperty(ref currentHostName, value);
     }
 
-    public byte[]? CurrentReceiverProfilePicturePng
+    public byte[]? CurrentHostProfilePicturePng
     {
-        get => currentReceiverProfilePicturePng;
-        private set => SetProperty(ref currentReceiverProfilePicturePng, value);
+        get => currentHostProfilePicturePng;
+        private set => SetProperty(ref currentHostProfilePicturePng, value);
     }
 
     public int CapturedPointerCount
@@ -249,33 +249,33 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     public ICommand ExitPointingCommand { get; }
 
-    public ICommand RefreshReceiversCommand => refreshReceiversCommand;
+    public ICommand RefreshHostsCommand => refreshHostsCommand;
 
-    public ICommand JoinDiscoveredReceiverCommand => joinDiscoveredReceiverCommand;
+    public ICommand JoinDiscoveredHostCommand => joinDiscoveredHostCommand;
 
     public ICommand EndSessionCommand => endSessionCommand;
 
     // The directory is the only thing this view model ever read from relay capabilities, so it
     // goes straight to the listing and skips the extra round trip on every start.
     public Task InitializeAsync() =>
-        relayClient is null || !SenderRoleEnabled
+        relayClient is null || !RoleEnabled
             ? Task.CompletedTask
-            : RefreshAvailableReceiversAsync();
+            : RefreshAvailableHostsAsync();
 
     /// <summary>
-    /// Follows the receiver role: this client cannot send while it is receiving, so the listing
-    /// is dropped while the sender role is off and read again as soon as it comes back. Without
-    /// that read the listing would stay empty after the last sender disconnects, because the
+    /// Follows the host role: this client cannot send while it is receiving, so the listing
+    /// is dropped while the annotator role is off and read again as soon as it comes back. Without
+    /// that read the listing would stay empty after the last annotator disconnects, because the
     /// relay only announces what changed in the directory and nothing there did.
     /// </summary>
-    public void SetSenderRoleEnabled(bool enabled)
+    public void SetRoleEnabled(bool enabled)
     {
-        SenderRoleEnabled = enabled;
+        RoleEnabled = enabled;
         if (!enabled)
         {
-            AvailableReceivers.Clear();
-            SelectedReceiver = null;
-            RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+            AvailableHosts.Clear();
+            SelectedHost = null;
+            RaisePropertyChanged(nameof(HostDiscoveryMessage));
             return;
         }
 
@@ -294,7 +294,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
 
         await relayClient.SetServerPasswordKeyAsync(key);
-        await RefreshAvailableReceiversAsync();
+        await RefreshAvailableHostsAsync();
     }
 
     public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints) =>
@@ -306,11 +306,11 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     public Task ApplyClientSettingsAsync(
         string displayName,
         string? profilePicturePath,
-        int maximumPresenterConnections) =>
+        int maximumAnnotatorConnections) =>
         relayClient?.ApplyClientSettingsAsync(
             displayName,
             profilePicturePath,
-            maximumPresenterConnections)
+            maximumAnnotatorConnections)
         ?? Task.CompletedTask;
 
     public async Task RestoreSessionAsync()
@@ -325,7 +325,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         if (relayClient is not null && !IsSessionApproved)
         {
-            SetStatus("Wait for receiver approval before enabling pointing.", isError: true);
+            SetStatus("Wait for host approval before enabling pointing.", isError: true);
             return;
         }
 
@@ -338,8 +338,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     public void ReportSharedProfileRecoverySkipped()
     {
         ConnectionMessage =
-            "Saved receiver and presenter roles share this Windows profile; automatic recovery was skipped.";
-        SetStatus("Request access to an available receiver in this client window.", false);
+            "Saved host and annotator roles share this Windows profile; automatic recovery was skipped.";
+        SetStatus("Request access to an available host in this client window.", false);
     }
 
     public void Dispose()
@@ -355,10 +355,10 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         {
             relayClient.ConnectionStatusChanged -= OnConnectionStatusChanged;
             relayClient.SessionApproved -= OnSessionApproved;
-            relayClient.ReceiverDisplayChanged -= OnReceiverDisplayChanged;
+            relayClient.HostDisplayChanged -= OnHostDisplayChanged;
             relayClient.PointerDisplayed -= OnPointerDisplayed;
             relayClient.SessionEnded -= OnSessionEnded;
-            relayClient.ReceiverDirectoryChanged -= OnReceiverDirectoryChanged;
+            relayClient.HostDirectoryChanged -= OnHostDirectoryChanged;
             RelayClientShutdown.Complete(relayClient);
         }
 
@@ -369,12 +369,12 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// True while this client both wants a listing and is allowed one. A session owns the panel
-    /// while it lasts, and the receiver role turns the sender off entirely, so a read is
+    /// while it lasts, and the host role turns the annotator off entirely, so a read is
     /// pointless in either state — but the directory keeps moving underneath, which is why a
     /// read that cannot run now is remembered rather than skipped.
     /// </summary>
     private bool CanReadDirectory =>
-        relayClient is not null && SenderRoleEnabled && !IsSessionApproved && !IsJoinPending;
+        relayClient is not null && RoleEnabled && !IsSessionApproved && !IsJoinPending;
 
     /// <summary>
     /// Records that the listing is stale and reads it when that is possible. Every notification
@@ -388,7 +388,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         _ = ReadDirectoryAsync();
     }
 
-    private Task RefreshAvailableReceiversAsync()
+    private Task RefreshAvailableHostsAsync()
     {
         directoryReadPending = true;
         return ReadDirectoryAsync();
@@ -412,7 +412,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             while (directoryReadPending && CanReadDirectory)
             {
                 directoryReadPending = false;
-                await ReadAvailableReceiversAsync();
+                await ReadAvailableHostsAsync();
             }
         }
         finally
@@ -421,71 +421,71 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task ReadAvailableReceiversAsync()
+    private async Task ReadAvailableHostsAsync()
     {
         try
         {
-            var receivers = await relayClient!.GetAvailableReceiversAsync();
-            var selectedSessionId = SelectedReceiver?.SessionId;
-            AvailableReceivers.Clear();
-            foreach (var receiver in receivers)
+            var hosts = await relayClient!.GetAvailableHostsAsync();
+            var selectedSessionId = SelectedHost?.SessionId;
+            AvailableHosts.Clear();
+            foreach (var host in hosts)
             {
-                AvailableReceivers.Add(receiver);
+                AvailableHosts.Add(host);
             }
 
-            SelectedReceiver = AvailableReceivers.FirstOrDefault(
-                receiver => string.Equals(
-                    receiver.SessionId,
+            SelectedHost = AvailableHosts.FirstOrDefault(
+                host => string.Equals(
+                    host.SessionId,
                     selectedSessionId,
                     StringComparison.Ordinal))
-                ?? AvailableReceivers.FirstOrDefault();
-            RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+                ?? AvailableHosts.FirstOrDefault();
+            RaisePropertyChanged(nameof(HostDiscoveryMessage));
         }
         catch (Exception exception)
         {
-            SetStatus($"Visible receivers could not be loaded: {exception.Message}", true);
+            SetStatus($"Visible hosts could not be loaded: {exception.Message}", true);
         }
     }
 
-    private void OnReceiverDirectoryChanged(object? sender, EventArgs e)
+    private void OnHostDirectoryChanged(object? sender, EventArgs e)
     {
         _ = sender;
         _ = e;
         RequestDirectoryRead();
     }
 
-    private async Task JoinDiscoveredReceiverAsync(AvailableReceiverDescriptor? receiver)
+    private async Task JoinDiscoveredHostAsync(AvailableHostDescriptor? host)
     {
-        if (receiver is not null)
+        if (host is not null)
         {
-            SelectedReceiver = receiver;
+            SelectedHost = host;
         }
 
-        if (relayClient is null || SelectedReceiver is null)
+        if (relayClient is null || SelectedHost is null)
         {
             return;
         }
 
         try
         {
-            var requestedReceiver = SelectedReceiver;
-            var response = await relayClient.RequestToJoinReceiverAsync(
-                requestedReceiver.SessionId);
+            var requestedHost = SelectedHost;
+            var response = await relayClient.RequestToJoinHostAsync(
+                requestedHost.SessionId);
             if (response.Accepted)
             {
-                CurrentReceiverName = requestedReceiver.DisplayName;
-                CurrentReceiverProfilePicturePng = requestedReceiver.ProfilePicturePng is null
+                CurrentHostName = requestedHost.DisplayName;
+                CurrentHostProfilePicturePng = requestedHost.ProfilePicturePng is null
                     ? null
-                    : [.. requestedReceiver.ProfilePicturePng];
-                AvailableReceivers.Remove(requestedReceiver);
-                SelectedReceiver = AvailableReceivers.FirstOrDefault();
-                RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+                    : [.. requestedHost.ProfilePicturePng];
+                AvailableHosts.Remove(requestedHost);
+                SelectedHost = AvailableHosts.FirstOrDefault();
+                RaisePropertyChanged(nameof(HostDiscoveryMessage));
             }
             HandleJoinResponse(response);
         }
         catch (Exception exception)
         {
-            SetStatus($"The selected receiver could not be joined: {exception.Message}", true);
+            SetStatus($"The selected host could not be joined: {exception.Message}", true);
         }
     }
 
@@ -494,14 +494,14 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         if (!response.Accepted)
         {
             // A refused request usually means the listing was already out of date — the
-            // receiver went invisible, filled up, or took another request first.
+            // host went invisible, filled up, or took another request first.
             RequestDirectoryRead();
             SetStatus(response.Reason ?? "The join request was rejected.", true);
             return;
         }
 
         IsJoinPending = true;
-        SetStatus("Join request sent. Waiting for receiver approval.", false);
+        SetStatus("Join request sent. Waiting for host approval.", false);
     }
 
     private async Task EndSessionAsync()
@@ -519,7 +519,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             ClearSessionState();
             SetStatus(
                 wasApproved
-                    ? "Disconnected from the receiver."
+                    ? "Disconnected from the host."
                     : "Connection request cancelled.",
                 false);
         }
@@ -537,17 +537,17 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         if (relayClient is not null && !IsSessionApproved)
         {
-            SetStatus("Wait for receiver approval before calibrating.", true);
+            SetStatus("Wait for host approval before calibrating.", true);
             return;
         }
 
-        if (relayClient is not null && receiverDisplay is null)
+        if (relayClient is not null && hostDisplay is null)
         {
-            SetStatus("Wait for the receiver display shape before calibrating.", isError: true);
+            SetStatus("Wait for the host display shape before calibrating.", isError: true);
             return;
         }
 
-        targetRegionService.BeginCalibration(receiverDisplay?.AspectRatio ?? (16d / 9d));
+        targetRegionService.BeginCalibration(hostDisplay?.AspectRatio ?? (16d / 9d));
     }
 
     private void OnStateChanged(object? sender, TargetRegionStateChangedEventArgs e)
@@ -576,7 +576,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         var sessionId = relayClient.SessionId;
         if (!IsSessionApproved || sessionId is null)
         {
-            SetStatus("Pointer dropped because there is no approved receiver connection.", true);
+            SetStatus("Pointer dropped because there is no approved host connection.", true);
             return;
         }
 
@@ -632,35 +632,35 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
         IsJoinPending = false;
         IsSessionApproved = true;
-        CurrentReceiverName = e.State.ReceiverDisplayName ?? CurrentReceiverName;
-        CurrentReceiverProfilePicturePng = e.State.ReceiverProfilePicturePng
-            is null ? null : [.. e.State.ReceiverProfilePicturePng];
+        CurrentHostName = e.State.HostDisplayName ?? CurrentHostName;
+        CurrentHostProfilePicturePng = e.State.HostProfilePicturePng
+            is null ? null : [.. e.State.HostProfilePicturePng];
         targetRegionService.SetCalibrationIdentity(
-            e.State.ReceiverClientInstanceId ?? CurrentReceiverName);
-        if (e.State.ReceiverDisplay is not null)
+            e.State.HostClientInstanceId ?? CurrentHostName);
+        if (e.State.HostDisplay is not null)
         {
-            ApplyReceiverDisplay(e.State.ReceiverDisplay);
+            ApplyHostDisplay(e.State.HostDisplay);
         }
 
-        SetStatus("Receiver approved this presenter. Calibrate the target area.", false);
+        SetStatus("Host approved this annotator. Calibrate the target area.", false);
     }
 
-    private void OnReceiverDisplayChanged(
+    private void OnHostDisplayChanged(
         object? sender,
-        RelayReceiverDisplayChangedEventArgs e)
+        RelayHostDisplayChangedEventArgs e)
     {
-        ApplyReceiverDisplay(e.Display);
-        SetStatus("The receiver display changed. Review or repeat calibration.", false);
+        ApplyHostDisplay(e.Display);
+        SetStatus("The host display changed. Review or repeat calibration.", false);
     }
 
     public void HandleLocalDisplayConfigurationChanged() =>
         targetRegionService.InvalidateCalibration(
             "The local display configuration changed. Recalibrate the target area.");
 
-    private void ApplyReceiverDisplay(DisplayDescriptor display)
+    private void ApplyHostDisplay(DisplayDescriptor display)
     {
-        receiverDisplay = display;
-        RaisePropertyChanged(nameof(ReceiverDisplayShape));
+        hostDisplay = display;
+        RaisePropertyChanged(nameof(HostDisplayShape));
         targetRegionService.UpdateExpectedAspectRatio(display.AspectRatio);
     }
 
@@ -674,7 +674,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         var latency = Math.Max(0, e.Acknowledgement.DisplayedAtUnixMilliseconds - sentAt);
         LastAcknowledgement = string.Create(
             CultureInfo.InvariantCulture,
-            $"Receiver displayed the marker in {latency} ms.");
+            $"Host displayed the marker in {latency} ms.");
     }
 
     private void OnSessionEnded(object? sender, RelaySessionEndedEventArgs e)
@@ -689,10 +689,10 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         IsJoinPending = false;
         IsSessionApproved = false;
         targetRegionService.SetCalibrationIdentity(null);
-        receiverDisplay = null;
-        CurrentReceiverName = "Connected receiver";
-        CurrentReceiverProfilePicturePng = null;
-        RaisePropertyChanged(nameof(ReceiverDisplayShape));
+        hostDisplay = null;
+        CurrentHostName = "Connected host";
+        CurrentHostProfilePicturePng = null;
+        RaisePropertyChanged(nameof(HostDisplayShape));
         pendingAcknowledgements.Clear();
         sequenceNumber = Math.Max(sequenceNumber, CreateSequenceBase());
         // The panel shows the listing again from here, and it went unread for the whole
@@ -702,8 +702,8 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
 
     private void RaiseNetworkCommandStates()
     {
-        refreshReceiversCommand.RaiseCanExecuteChanged();
-        joinDiscoveredReceiverCommand.RaiseCanExecuteChanged();
+        refreshHostsCommand.RaiseCanExecuteChanged();
+        joinDiscoveredHostCommand.RaiseCanExecuteChanged();
         endSessionCommand.RaiseCanExecuteChanged();
     }
 

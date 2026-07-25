@@ -10,7 +10,7 @@ public interface IServerConnectionTester
 /// <summary>
 /// The outcome of a connection test. A successful result always carries the
 /// <paramref name="ServerVersion"/> the relay advertised: identifying itself as a Remote Pointer
-/// relay is part of passing the test, so a host that cannot is reported as a failure.
+/// relay is part of passing the test, so a server that cannot is reported as a failure.
 /// </summary>
 public sealed record ServerConnectionTestResult(
     bool IsSuccessful,

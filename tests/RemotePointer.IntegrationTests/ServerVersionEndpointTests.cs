@@ -22,8 +22,8 @@ public sealed class ServerVersionEndpointTests
         var payload = await response.Content.ReadFromJsonAsync<ServerVersionResponse>();
         Assert.NotNull(payload);
 
-        // The client uses the product id to tell the relay apart from an unrelated host that also
-        // answers /health and /version.
+        // The client uses the product id to tell the relay apart from an unrelated server that
+        // also answers /health and /version.
         Assert.Equal(ServerVersionResponse.RelayProductId, payload.Product);
         Assert.False(string.IsNullOrWhiteSpace(payload.Version));
 

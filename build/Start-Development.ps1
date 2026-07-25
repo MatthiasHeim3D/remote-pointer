@@ -8,7 +8,7 @@
     saved credentials. Nothing is shared with each other or with an installed release.
 
     Every client is seeded with the same relay address and server password, which is what makes
-    them visible to one another in the receiver directory. The directories are deleted when the
+    them visible to one another in the host directory. The directories are deleted when the
     session ends unless -KeepClientData is given.
 
 .PARAMETER ClientCount
@@ -180,15 +180,15 @@ function New-ClientDataDirectory {
     New-Item -ItemType Directory -Path $sessionDirectory -Force | Out-Null
 
     $preferences = [ordered]@{
-        serverAddress            = $developmentServerUrl
-        userName                 = $UserName
-        profilePicturePath       = ''
-        maximumSenderConnections = 2
-        launchAtStartup          = $false
-        selectedDisplayId        = ''
-        showUsageHints           = $false
-        receiverAvailable        = $false
-        hasShownUsageHints       = $true
+        serverAddress               = $developmentServerUrl
+        userName                    = $UserName
+        profilePicturePath          = ''
+        maximumAnnotatorConnections = 2
+        launchAtStartup             = $false
+        selectedDisplayId           = ''
+        showUsageHints              = $false
+        hostAvailable               = $false
+        hasShownUsageHints          = $true
     }
     $preferencesJson = $preferences | ConvertTo-Json -Compress
     [System.IO.File]::WriteAllText(

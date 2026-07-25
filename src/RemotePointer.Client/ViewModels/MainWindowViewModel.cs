@@ -13,39 +13,39 @@ namespace RemotePointer.Client.ViewModels;
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly AsyncRelayCommand applyServerPasswordCommand;
-    private readonly AsyncRelayCommand approvePresenterCommand;
+    private readonly AsyncRelayCommand approveAnnotatorCommand;
     private readonly SemaphoreSlim availabilityUpdateGate = new(1, 1);
     private readonly RelayCommand changeServerPasswordCommand;
     private readonly AsyncRelayCommand disconnectAllConnectionsCommand;
-    private readonly AsyncRelayCommand setReceiverAvailabilityCommand;
+    private readonly AsyncRelayCommand setHostAvailabilityCommand;
     private readonly AsyncRelayCommand testServerConnectionCommand;
     private readonly IMonitorService monitorService;
-    private readonly IReceiverOverlayService overlayService;
-    private readonly IRelayClient? receiverRelayClient;
+    private readonly IHostOverlayService overlayService;
+    private readonly IRelayClient? hostRelayClient;
     private readonly ClientSettings? clientSettings;
     private readonly IStartupRegistrationService? startupRegistrationService;
     private readonly IServerConnectionTester serverConnectionTester;
     private readonly IServerPasswordStore? serverPasswordStore;
     private readonly ITargetRegionService targetRegionService;
-    private readonly RelayCommand decrementMaximumSendersCommand;
-    private readonly RelayCommand incrementMaximumSendersCommand;
+    private readonly RelayCommand decrementMaximumAnnotatorsCommand;
+    private readonly RelayCommand incrementMaximumAnnotatorsCommand;
     private CancellationTokenSource? availabilityRetryCancellation;
     private bool disposed;
     private bool isError;
     private bool isOverlayVisible;
-    private bool hasConnectedPresenter;
-    private ReceiverAvailability receiverAvailability;
-    private PresenterDescriptor? pendingPresenter;
-    private string receiverConnectionMessage;
+    private bool hasConnectedAnnotator;
+    private HostAvailability hostAvailability;
+    private AnnotatorDescriptor? pendingAnnotator;
+    private string hostConnectionMessage;
     private MonitorDescriptor? selectedMonitor;
-    private string? receiverSessionId;
+    private string? hostSessionId;
     private string statusMessage = "Select a monitor to begin.";
     private bool isAvailabilityMenuOpen;
     private bool isSettingsOpen;
     private string profilePicturePath;
     private string serverAddressInput;
     private string userName;
-    private int maximumSenderConnections;
+    private int maximumAnnotatorConnections;
     private bool isLaunchAtStartup;
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
@@ -68,10 +68,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public MainWindowViewModel(
         IMonitorService monitorService,
-        IReceiverOverlayService overlayService,
+        IHostOverlayService overlayService,
         ITargetRegionService? targetRegionService = null,
-        IRelayClient? receiverRelayClient = null,
-        IRelayClient? presenterRelayClient = null,
+        IRelayClient? hostRelayClient = null,
+        IRelayClient? annotatorRelayClient = null,
         int pointerTtlMilliseconds = 2_000,
         ClientSettings? clientSettings = null,
         IStartupRegistrationService? startupRegistrationService = null,
@@ -80,23 +80,23 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         this.monitorService = monitorService ?? throw new ArgumentNullException(nameof(monitorService));
         this.overlayService = overlayService ?? throw new ArgumentNullException(nameof(overlayService));
-        this.receiverRelayClient = receiverRelayClient;
+        this.hostRelayClient = hostRelayClient;
         this.clientSettings = clientSettings;
         this.startupRegistrationService = startupRegistrationService;
         this.serverConnectionTester = serverConnectionTester ?? new ServerConnectionTester();
         this.serverPasswordStore = serverPasswordStore;
         hasServerPassword = !string.IsNullOrWhiteSpace(clientSettings?.Server.PasswordKey);
         var configuredServerAddress = clientSettings?.Server.BaseUrl
-            ?? receiverRelayClient?.ServerUrl
+            ?? hostRelayClient?.ServerUrl
             ?? string.Empty;
         activeServerAddress = configuredServerAddress;
         serverAddressInput = RemoveHttpsPrefix(configuredServerAddress);
         userName = clientSettings?.Profile.UserName ?? Environment.UserName;
         profilePicturePath = clientSettings?.Profile.PicturePath ?? string.Empty;
-        maximumSenderConnections = clientSettings?.Receiver.MaximumSenderConnections ?? 2;
-        receiverAvailability = clientSettings?.Receiver.IsAvailable == true
-            ? ReceiverAvailability.Available
-            : ReceiverAvailability.Invisible;
+        maximumAnnotatorConnections = clientSettings?.Host.MaximumAnnotatorConnections ?? 2;
+        hostAvailability = clientSettings?.Host.IsAvailable == true
+            ? HostAvailability.Available
+            : HostAvailability.Invisible;
         isLaunchAtStartup = startupRegistrationService?.IsEnabled
             ?? clientSettings?.Startup.LaunchAtStartup
             ?? false;
@@ -108,48 +108,48 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         this.overlayService.StateChanged += OnOverlayStateChanged;
         this.targetRegionService = targetRegionService ?? new TargetRegionService();
         this.targetRegionService.UsageHintsShown += OnUsageHintsShown;
-        Presenter = new PresenterViewModel(
+        Annotator = new AnnotatorViewModel(
             this.targetRegionService,
-            presenterRelayClient,
+            annotatorRelayClient,
             pointerTtlMilliseconds);
-        Presenter.SetUsageHintsState(showUsageHints, hasShownUsageHints);
-        Presenter.SetDrawingOpacityPercent(drawingOpacityPercent);
-        Presenter.PropertyChanged += OnPresenterPropertyChanged;
+        Annotator.SetUsageHintsState(showUsageHints, hasShownUsageHints);
+        Annotator.SetDrawingOpacityPercent(drawingOpacityPercent);
+        Annotator.PropertyChanged += OnAnnotatorPropertyChanged;
 
-        receiverConnectionMessage = receiverRelayClient is null
+        hostConnectionMessage = hostRelayClient is null
             ? "Networking is not configured."
             : "Disconnected.";
 
-        if (receiverRelayClient is not null)
+        if (hostRelayClient is not null)
         {
-            receiverRelayClient.ConnectionStatusChanged += OnReceiverConnectionStatusChanged;
-            receiverRelayClient.PresenterJoinRequested += OnPresenterJoinRequested;
-            receiverRelayClient.PresenterJoinCancelled += OnPresenterJoinCancelled;
-            receiverRelayClient.SessionApproved += OnReceiverSessionApproved;
-            receiverRelayClient.PointerReceived += OnPointerReceived;
-            receiverRelayClient.SessionEnded += OnReceiverSessionEnded;
+            hostRelayClient.ConnectionStatusChanged += OnHostConnectionStatusChanged;
+            hostRelayClient.AnnotatorJoinRequested += OnAnnotatorJoinRequested;
+            hostRelayClient.AnnotatorJoinCancelled += OnAnnotatorJoinCancelled;
+            hostRelayClient.SessionApproved += OnHostSessionApproved;
+            hostRelayClient.PointerReceived += OnPointerReceived;
+            hostRelayClient.SessionEnded += OnHostSessionEnded;
         }
 
         RefreshMonitorsCommand = new RelayCommand(_ => RefreshMonitors());
-        approvePresenterCommand = new AsyncRelayCommand(
-            _ => ApprovePendingPresenterAsync(),
-            _ => receiverRelayClient is not null
-                && pendingPresenter is not null
-                && HasReceiverSession
-                && !Presenter.IsSessionApproved
-                && !Presenter.IsJoinPending);
+        approveAnnotatorCommand = new AsyncRelayCommand(
+            _ => ApprovePendingAnnotatorAsync(),
+            _ => hostRelayClient is not null
+                && pendingAnnotator is not null
+                && HasHostSession
+                && !Annotator.IsSessionApproved
+                && !Annotator.IsJoinPending);
         disconnectAllConnectionsCommand = new AsyncRelayCommand(
             _ => DisconnectAllConnectionsAsync(),
-            _ => receiverRelayClient is not null && HasConnectedPresenter && HasReceiverSession);
-        setReceiverAvailabilityCommand = new AsyncRelayCommand(
+            _ => hostRelayClient is not null && HasConnectedAnnotator && HasHostSession);
+        setHostAvailabilityCommand = new AsyncRelayCommand(
             async availability =>
             {
-                if (availability is ReceiverAvailability requestedAvailability)
+                if (availability is HostAvailability requestedAvailability)
                 {
-                    await SetReceiverAvailabilityAsync(requestedAvailability);
+                    await SetHostAvailabilityAsync(requestedAvailability);
                 }
             },
-            _ => receiverRelayClient is not null);
+            _ => hostRelayClient is not null);
         ToggleSettingsCommand = new AsyncRelayCommand(async _ =>
         {
             IsAvailabilityMenuOpen = false;
@@ -194,21 +194,21 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 && string.IsNullOrEmpty(ServerPasswordValidationMessage));
         CancelServerPasswordChangeCommand = new RelayCommand(
             _ => CancelServerPasswordChange());
-        incrementMaximumSendersCommand = new RelayCommand(
-            _ => MaximumSenderConnections++,
-            _ => MaximumSenderConnections < 16);
-        decrementMaximumSendersCommand = new RelayCommand(
-            _ => MaximumSenderConnections--,
-            _ => MaximumSenderConnections > 1);
+        incrementMaximumAnnotatorsCommand = new RelayCommand(
+            _ => MaximumAnnotatorConnections++,
+            _ => MaximumAnnotatorConnections < 16);
+        decrementMaximumAnnotatorsCommand = new RelayCommand(
+            _ => MaximumAnnotatorConnections--,
+            _ => MaximumAnnotatorConnections > 1);
 
         RefreshMonitors();
     }
 
     public ObservableCollection<MonitorDescriptor> Monitors { get; } = [];
 
-    public ObservableCollection<ConnectedPresenterDescriptor> ConnectedPresenters { get; } = [];
+    public ObservableCollection<ConnectedAnnotatorDescriptor> ConnectedAnnotators { get; } = [];
 
-    public PresenterViewModel Presenter { get; }
+    public AnnotatorViewModel Annotator { get; }
 
     public string ApplicationVersion { get; } =
         global::ThisAssembly.AssemblyInformationalVersion.Split('+', 2)[0];
@@ -220,8 +220,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref selectedMonitor, value))
             {
-                RaisePropertyChanged(nameof(CanSetReceiverAvailability));
-                setReceiverAvailabilityCommand.RaiseCanExecuteChanged();
+                RaisePropertyChanged(nameof(CanSetHostAvailability));
+                setHostAvailabilityCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -244,74 +244,76 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref isOverlayVisible, value);
     }
 
-    public string ReceiverConnectionMessage
+    public string HostConnectionMessage
     {
-        get => receiverConnectionMessage;
-        private set => SetProperty(ref receiverConnectionMessage, value);
+        get => hostConnectionMessage;
+        private set => SetProperty(ref hostConnectionMessage, value);
     }
 
-    public string ReceiverServerUrl => receiverRelayClient?.ServerUrl ?? "Not configured";
+    // "Relay" rather than "Server" in the name: this is the relay address the Host role's
+    // connection uses, not an address belonging to the Host.
+    public string HostRelayUrl => hostRelayClient?.ServerUrl ?? "Not configured";
 
-    public string PendingPresenterName => pendingPresenter?.DisplayName ?? "No presenter waiting for approval.";
+    public string PendingAnnotatorName => pendingAnnotator?.DisplayName ?? "No annotator waiting for approval.";
 
-    public byte[]? PendingPresenterProfilePicturePng => pendingPresenter?.ProfilePicturePng;
+    public byte[]? PendingAnnotatorProfilePicturePng => pendingAnnotator?.ProfilePicturePng;
 
-    public bool HasPendingPresenter => pendingPresenter is not null;
+    public bool HasPendingAnnotator => pendingAnnotator is not null;
 
-    public bool HasConnectedPresenter
+    public bool HasConnectedAnnotator
     {
-        get => hasConnectedPresenter;
+        get => hasConnectedAnnotator;
         private set
         {
-            if (SetProperty(ref hasConnectedPresenter, value))
+            if (SetProperty(ref hasConnectedAnnotator, value))
             {
                 disconnectAllConnectionsCommand.RaiseCanExecuteChanged();
-                Presenter.SetSenderRoleEnabled(!value);
+                Annotator.SetRoleEnabled(!value);
                 RaiseAvailabilityProperties();
                 RaisePropertyChanged(nameof(FlyoutConnectionMessage));
             }
         }
     }
 
-    public bool HasReceiverSession => receiverSessionId is not null;
+    public bool HasHostSession => hostSessionId is not null;
 
     public bool CanSelectMonitor => Monitors.Count > 0;
 
-    public IReadOnlyList<ReceiverAvailability> ReceiverAvailabilityOptions { get; } =
-        [ReceiverAvailability.Available, ReceiverAvailability.Invisible];
+    public IReadOnlyList<HostAvailability> HostAvailabilityOptions { get; } =
+        [HostAvailability.Available, HostAvailability.Invisible];
 
-    public ReceiverAvailability ReceiverAvailability
+    public HostAvailability HostAvailability
     {
-        get => receiverAvailability;
+        get => hostAvailability;
         set
         {
-            SetProperty(ref receiverAvailability, value);
+            SetProperty(ref hostAvailability, value);
             RaiseAvailabilityProperties();
         }
     }
 
-    public string AvailabilityLabel => ReceiverAvailability == ReceiverAvailability.Invisible
+    public string AvailabilityLabel => HostAvailability == HostAvailability.Invisible
         ? IsServerAvailable ? "Invisible" : "Server unavailable"
         : !IsServerAvailable
             ? "Server unavailable"
-            : HasConnectedPresenter
+            : HasConnectedAnnotator
                 ? "Available and connected"
                 : "Available";
 
     public string AvailabilityColor => !IsServerAvailable
         ? "#8B8B8B"
-        : ReceiverAvailability == ReceiverAvailability.Invisible
+        : HostAvailability == HostAvailability.Invisible
             ? "#8B8B8B"
-            : HasConnectedPresenter
+            : HasConnectedAnnotator
                 ? "#63C5DA"
                 : "#6CCB7F";
 
     public bool IsServerAvailable =>
-        receiverRelayClient?.Status is RelayConnectionStatus.Connected
+        hostRelayClient?.Status is RelayConnectionStatus.Connected
             or RelayConnectionStatus.SessionExpired;
 
     public bool IsServerConfigurationMissing =>
-        string.IsNullOrWhiteSpace(clientSettings?.Server.BaseUrl ?? receiverRelayClient?.ServerUrl);
+        string.IsNullOrWhiteSpace(clientSettings?.Server.BaseUrl ?? hostRelayClient?.ServerUrl);
 
     public string ServerConnectionGuidance => IsServerConfigurationMissing
         ? "Set the server address in Settings."
@@ -521,15 +523,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         set => SetProperty(ref profilePicturePath, value);
     }
 
-    public int MaximumSenderConnections
+    public int MaximumAnnotatorConnections
     {
-        get => maximumSenderConnections;
+        get => maximumAnnotatorConnections;
         set
         {
-            if (SetProperty(ref maximumSenderConnections, Math.Clamp(value, 1, 16)))
+            if (SetProperty(ref maximumAnnotatorConnections, Math.Clamp(value, 1, 16)))
             {
-                incrementMaximumSendersCommand.RaiseCanExecuteChanged();
-                decrementMaximumSendersCommand.RaiseCanExecuteChanged();
+                incrementMaximumAnnotatorsCommand.RaiseCanExecuteChanged();
+                decrementMaximumAnnotatorsCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -567,12 +569,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public int MaximumDrawingOpacityPercent => PointerSettings.MaximumDrawingOpacityPercent;
 
-    public string ConnectedPresenterCountLabel =>
-        $"{ConnectedPresenters.Count} sender{(ConnectedPresenters.Count == 1 ? string.Empty : "s")} connected";
+    public string ConnectedAnnotatorCountLabel =>
+        $"{ConnectedAnnotators.Count} annotator{(ConnectedAnnotators.Count == 1 ? string.Empty : "s")} connected";
 
-    public string FlyoutConnectionMessage => HasConnectedPresenter
-        ? ConnectedPresenterCountLabel
-        : Presenter.ConnectionMessage;
+    public string FlyoutConnectionMessage => HasConnectedAnnotator
+        ? ConnectedAnnotatorCountLabel
+        : Annotator.ConnectionMessage;
 
     public string ProfileInitials
     {
@@ -599,15 +601,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ? element
             : "?").ToUpperInvariant();
 
-    public bool CanSetReceiverAvailability => receiverRelayClient is not null;
+    public bool CanSetHostAvailability => hostRelayClient is not null;
 
     public ICommand RefreshMonitorsCommand { get; }
 
-    public ICommand ApprovePresenterCommand => approvePresenterCommand;
+    public ICommand ApproveAnnotatorCommand => approveAnnotatorCommand;
 
     public ICommand DisconnectAllConnectionsCommand => disconnectAllConnectionsCommand;
 
-    public ICommand SetReceiverAvailabilityCommand => setReceiverAvailabilityCommand;
+    public ICommand SetHostAvailabilityCommand => setHostAvailabilityCommand;
 
     public ICommand ToggleSettingsCommand { get; }
 
@@ -625,31 +627,31 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public ICommand CancelServerPasswordChangeCommand { get; }
 
-    public ICommand IncrementMaximumSendersCommand => incrementMaximumSendersCommand;
+    public ICommand IncrementMaximumAnnotatorsCommand => incrementMaximumAnnotatorsCommand;
 
-    public ICommand DecrementMaximumSendersCommand => decrementMaximumSendersCommand;
+    public ICommand DecrementMaximumAnnotatorsCommand => decrementMaximumAnnotatorsCommand;
 
-    public async Task SetReceiverAvailabilityAsync(ReceiverAvailability availability)
+    public async Task SetHostAvailabilityAsync(HostAvailability availability)
     {
-        var previousAvailability = ReceiverAvailability;
+        var previousAvailability = HostAvailability;
         if (previousAvailability != availability)
         {
             CancelAvailabilityRetry();
         }
 
-        SetReceiverAvailabilitySilently(availability);
-        SaveReceiverAvailabilityPreference(availability);
-        await UpdateReceiverAvailabilityAsync(availability, previousAvailability);
+        SetHostAvailabilitySilently(availability);
+        SaveHostAvailabilityPreference(availability);
+        await UpdateHostAvailabilityAsync(availability, previousAvailability);
     }
 
     public async Task InitializeAsync()
     {
-        var presenterInitialization = Presenter.InitializeAsync();
-        if (receiverRelayClient is not null)
+        var annotatorInitialization = Annotator.InitializeAsync();
+        if (hostRelayClient is not null)
         {
             try
             {
-                var capabilities = await receiverRelayClient.GetRelayCapabilitiesAsync();
+                var capabilities = await hostRelayClient.GetRelayCapabilitiesAsync();
                 ServerPasswordRequired = capabilities.ServerPasswordRequired;
             }
             catch (Exception exception)
@@ -658,42 +660,42 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
         }
 
-        await presenterInitialization;
-        if (ReceiverAvailability == ReceiverAvailability.Available && !HasReceiverSession)
+        await annotatorInitialization;
+        if (HostAvailability == HostAvailability.Available && !HasHostSession)
         {
-            await UpdateReceiverAvailabilityAsync(
-                ReceiverAvailability.Available,
-                ReceiverAvailability.Invisible);
+            await UpdateHostAvailabilityAsync(
+                HostAvailability.Available,
+                HostAvailability.Invisible);
         }
     }
 
     public async Task RestoreSessionsAsync()
     {
-        var canRestoreReceiver = receiverRelayClient?.Credential?.Role == ClientRole.Receiver;
-        var canRestorePresenter = Presenter.HasRecoverableSession;
-        if (canRestoreReceiver && canRestorePresenter)
+        var canRestoreHost = hostRelayClient?.Credential?.Role == ClientRole.Host;
+        var canRestoreAnnotator = Annotator.HasRecoverableSession;
+        if (canRestoreHost && canRestoreAnnotator)
         {
-            ReceiverConnectionMessage =
-                "Saved receiver and presenter roles share this Windows profile; automatic recovery was skipped.";
-            Presenter.ReportSharedProfileRecoverySkipped();
+            HostConnectionMessage =
+                "Saved host and annotator roles share this Windows profile; automatic recovery was skipped.";
+            Annotator.ReportSharedProfileRecoverySkipped();
             return;
         }
 
-        if (canRestoreReceiver && receiverRelayClient is not null)
+        if (canRestoreHost && hostRelayClient is not null)
         {
-            _ = await receiverRelayClient.TryResumeSessionAsync();
+            _ = await hostRelayClient.TryResumeSessionAsync();
         }
 
-        if (canRestorePresenter)
+        if (canRestoreAnnotator)
         {
-            await Presenter.RestoreSessionAsync();
+            await Annotator.RestoreSessionAsync();
         }
     }
 
     public void RefreshMonitors()
     {
         var previousDisplayId = SelectedMonitor?.Display.DisplayId
-            ?? clientSettings?.Receiver.SelectedDisplayId;
+            ?? clientSettings?.Host.SelectedDisplayId;
 
         IReadOnlyList<MonitorDescriptor> refreshedMonitors;
         try
@@ -748,10 +750,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         var selectedDisplayId = SelectedMonitor?.Display.DisplayId;
         RefreshMonitors();
-        Presenter.HandleLocalDisplayConfigurationChanged();
+        Annotator.HandleLocalDisplayConfigurationChanged();
 
-        if (receiverSessionId is null
-            || receiverRelayClient is null
+        if (hostSessionId is null
+            || hostRelayClient is null
             || SelectedMonitor is null
             || !string.Equals(
                 selectedDisplayId,
@@ -763,18 +765,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            await receiverRelayClient.UpdateReceiverDisplayAsync(SelectedMonitor.Display);
-            SetStatus("Receiver display information updated.", false);
+            await hostRelayClient.UpdateHostDisplayAsync(SelectedMonitor.Display);
+            SetStatus("Host display information updated.", false);
         }
         catch (Exception exception)
         {
-            SetStatus($"Receiver display information could not be updated: {exception.Message}", true);
+            SetStatus($"Host display information could not be updated: {exception.Message}", true);
         }
     }
 
     public async Task ApplySelectedMonitorAsync()
     {
-        if (receiverSessionId is null || receiverRelayClient is null || SelectedMonitor is null)
+        if (hostSessionId is null || hostRelayClient is null || SelectedMonitor is null)
         {
             return;
         }
@@ -782,7 +784,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             overlayService.Show(SelectedMonitor);
-            await receiverRelayClient.UpdateReceiverDisplayAsync(SelectedMonitor.Display);
+            await hostRelayClient.UpdateHostDisplayAsync(SelectedMonitor.Display);
             SetStatus("Receiving screen updated.", false);
         }
         catch (Exception exception)
@@ -801,27 +803,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         disposed = true;
         CancelAvailabilityRetry();
         overlayService.StateChanged -= OnOverlayStateChanged;
-        if (receiverRelayClient is not null)
+        if (hostRelayClient is not null)
         {
-            receiverRelayClient.ConnectionStatusChanged -= OnReceiverConnectionStatusChanged;
-            receiverRelayClient.PresenterJoinRequested -= OnPresenterJoinRequested;
-            receiverRelayClient.PresenterJoinCancelled -= OnPresenterJoinCancelled;
-            receiverRelayClient.SessionApproved -= OnReceiverSessionApproved;
-            receiverRelayClient.PointerReceived -= OnPointerReceived;
-            receiverRelayClient.SessionEnded -= OnReceiverSessionEnded;
-            RelayClientShutdown.Complete(receiverRelayClient);
+            hostRelayClient.ConnectionStatusChanged -= OnHostConnectionStatusChanged;
+            hostRelayClient.AnnotatorJoinRequested -= OnAnnotatorJoinRequested;
+            hostRelayClient.AnnotatorJoinCancelled -= OnAnnotatorJoinCancelled;
+            hostRelayClient.SessionApproved -= OnHostSessionApproved;
+            hostRelayClient.PointerReceived -= OnPointerReceived;
+            hostRelayClient.SessionEnded -= OnHostSessionEnded;
+            RelayClientShutdown.Complete(hostRelayClient);
         }
 
         overlayService.Dispose();
         targetRegionService.UsageHintsShown -= OnUsageHintsShown;
-        Presenter.PropertyChanged -= OnPresenterPropertyChanged;
-        Presenter.Dispose();
+        Annotator.PropertyChanged -= OnAnnotatorPropertyChanged;
+        Annotator.Dispose();
         GC.SuppressFinalize(this);
     }
 
-    private async Task CreateReceiverSessionAsync()
+    private async Task CreateHostSessionAsync()
     {
-        if (SelectedMonitor is null || receiverRelayClient is null)
+        if (SelectedMonitor is null || hostRelayClient is null)
         {
             SetStatus("Select a connected monitor before becoming available.", isError: true);
             return;
@@ -830,91 +832,91 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         try
         {
             overlayService.Show(SelectedMonitor);
-            var response = await receiverRelayClient.CreateReceiverSessionAsync(SelectedMonitor.Display);
-            receiverSessionId = response.SessionId;
-            SetReceiverAvailabilitySilently(ReceiverAvailability.Available);
-            SetPendingPresenter(null);
-            RaiseReceiverSessionProperties();
-            SetStatus("This receiver is available for access requests.", false);
+            var response = await hostRelayClient.CreateHostSessionAsync(SelectedMonitor.Display);
+            hostSessionId = response.SessionId;
+            SetHostAvailabilitySilently(HostAvailability.Available);
+            SetPendingAnnotator(null);
+            RaiseHostSessionProperties();
+            SetStatus("This host is available for access requests.", false);
         }
         catch (Exception exception)
         {
             overlayService.Hide();
-            ClearReceiverSession(preserveAvailability: true);
-            SetStatus($"The receiver could not become available: {exception.Message}", true);
+            ClearHostSession(preserveAvailability: true);
+            SetStatus($"The host could not become available: {exception.Message}", true);
         }
     }
 
-    public async Task ApprovePendingPresenterAsync()
+    public async Task ApprovePendingAnnotatorAsync()
     {
-        if (receiverRelayClient is null || receiverSessionId is null || pendingPresenter is null)
+        if (hostRelayClient is null || hostSessionId is null || pendingAnnotator is null)
         {
             return;
         }
 
         try
         {
-            await receiverRelayClient.ApprovePresenterAsync(
-                receiverSessionId,
-                pendingPresenter.ConnectionId);
-            SetStatus($"Approved {pendingPresenter.DisplayName}.", false);
-            SetPendingPresenter(null);
+            await hostRelayClient.ApproveAnnotatorAsync(
+                hostSessionId,
+                pendingAnnotator.ConnectionId);
+            SetStatus($"Approved {pendingAnnotator.DisplayName}.", false);
+            SetPendingAnnotator(null);
         }
         catch (Exception exception)
         {
-            SetStatus($"The presenter could not be approved: {exception.Message}", true);
+            SetStatus($"The annotator could not be approved: {exception.Message}", true);
         }
     }
 
-    public async Task RejectPendingPresenterAsync()
+    public async Task RejectPendingAnnotatorAsync()
     {
-        if (receiverRelayClient is null || receiverSessionId is null || pendingPresenter is null)
+        if (hostRelayClient is null || hostSessionId is null || pendingAnnotator is null)
         {
             return;
         }
 
         try
         {
-            await receiverRelayClient.RejectPresenterAsync(
-                receiverSessionId,
-                pendingPresenter.ConnectionId);
-            SetStatus($"Declined {pendingPresenter.DisplayName}.", false);
-            SetPendingPresenter(null);
+            await hostRelayClient.RejectAnnotatorAsync(
+                hostSessionId,
+                pendingAnnotator.ConnectionId);
+            SetStatus($"Declined {pendingAnnotator.DisplayName}.", false);
+            SetPendingAnnotator(null);
         }
         catch (Exception exception)
         {
-            SetStatus($"The presenter request could not be declined: {exception.Message}", true);
+            SetStatus($"The annotator request could not be declined: {exception.Message}", true);
             throw;
         }
     }
 
     private async Task DisconnectAllConnectionsAsync()
     {
-        if (receiverRelayClient is null || !HasConnectedPresenter)
+        if (hostRelayClient is null || !HasConnectedAnnotator)
         {
             return;
         }
 
         try
         {
-            await receiverRelayClient.DisconnectAllConnectionsAsync();
-            SetPendingPresenter(null);
-            SetStatus("Disconnected all presenter connections.", false);
+            await hostRelayClient.DisconnectAllConnectionsAsync();
+            SetPendingAnnotator(null);
+            SetStatus("Disconnected all annotator connections.", false);
         }
         catch (Exception exception)
         {
-            SetStatus($"Presenter connections could not be disconnected: {exception.Message}", true);
+            SetStatus($"Annotator connections could not be disconnected: {exception.Message}", true);
         }
     }
 
-    private async Task UpdateReceiverAvailabilityAsync(
-        ReceiverAvailability requestedAvailability,
-        ReceiverAvailability previousAvailability)
+    private async Task UpdateHostAvailabilityAsync(
+        HostAvailability requestedAvailability,
+        HostAvailability previousAvailability)
     {
         await availabilityUpdateGate.WaitAsync();
         try
         {
-            await UpdateReceiverAvailabilityCoreAsync(
+            await UpdateHostAvailabilityCoreAsync(
                 requestedAvailability,
                 previousAvailability);
         }
@@ -924,35 +926,35 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task UpdateReceiverAvailabilityCoreAsync(
-        ReceiverAvailability requestedAvailability,
-        ReceiverAvailability previousAvailability)
+    private async Task UpdateHostAvailabilityCoreAsync(
+        HostAvailability requestedAvailability,
+        HostAvailability previousAvailability)
     {
         IsAvailabilityMenuOpen = false;
-        if (receiverRelayClient is null)
+        if (hostRelayClient is null)
         {
-            SetReceiverAvailabilitySilently(previousAvailability);
+            SetHostAvailabilitySilently(previousAvailability);
             return;
         }
 
         try
         {
-            if (requestedAvailability == ReceiverAvailability.Invisible
-                && !HasReceiverSession)
+            if (requestedAvailability == HostAvailability.Invisible
+                && !HasHostSession)
             {
-                SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
+                SetHostAvailabilitySilently(HostAvailability.Invisible);
                 CancelAvailabilityRetry();
-                SetStatus("This receiver is invisible to presenters.", false);
+                SetStatus("This host is invisible to annotators.", false);
                 return;
             }
 
-            if (requestedAvailability == ReceiverAvailability.Available
-                && !HasReceiverSession)
+            if (requestedAvailability == HostAvailability.Available
+                && !HasHostSession)
             {
-                await CreateReceiverSessionAsync();
-                if (!HasReceiverSession)
+                await CreateHostSessionAsync();
+                if (!HasHostSession)
                 {
-                    SetReceiverAvailabilitySilently(ReceiverAvailability.Available);
+                    SetHostAvailabilitySilently(HostAvailability.Available);
                     ScheduleAvailabilityRetry();
                 }
                 else
@@ -962,22 +964,22 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            var isAvailable = await receiverRelayClient.SetReceiverDiscoverableAsync(
-                requestedAvailability == ReceiverAvailability.Available);
-            SetReceiverAvailabilitySilently(
-                isAvailable ? ReceiverAvailability.Available : ReceiverAvailability.Invisible);
+            var isAvailable = await hostRelayClient.SetHostDiscoverableAsync(
+                requestedAvailability == HostAvailability.Available);
+            SetHostAvailabilitySilently(
+                isAvailable ? HostAvailability.Available : HostAvailability.Invisible);
             CancelAvailabilityRetry();
             SetStatus(
                 isAvailable
-                    ? "This receiver is available for access requests."
-                    : "This receiver is invisible to presenters.",
+                    ? "This host is available for access requests."
+                    : "This host is invisible to annotators.",
                 false);
         }
         catch (Exception exception)
         {
-            SetReceiverAvailabilitySilently(requestedAvailability);
+            SetHostAvailabilitySilently(requestedAvailability);
             ScheduleAvailabilityRetry();
-            SetStatus($"Receiver availability could not be changed: {exception.Message}", true);
+            SetStatus($"Host availability could not be changed: {exception.Message}", true);
         }
     }
 
@@ -987,74 +989,74 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         SetStatus(e.Message, e.IsError);
     }
 
-    private void OnReceiverConnectionStatusChanged(
+    private void OnHostConnectionStatusChanged(
         object? sender,
         RelayConnectionStatusChangedEventArgs e)
     {
-        ReceiverConnectionMessage = e.Message;
+        HostConnectionMessage = e.Message;
         RaisePropertyChanged(nameof(IsServerAvailable));
         RaisePropertyChanged(nameof(ServerConnectionGuidance));
         RaisePropertyChanged(nameof(EmptyClientListMessage));
         RaiseAvailabilityProperties();
     }
 
-    private void OnPresenterPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnAnnotatorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         _ = sender;
-        if (e.PropertyName is nameof(PresenterViewModel.IsSessionApproved)
-            or nameof(PresenterViewModel.IsJoinPending))
+        if (e.PropertyName is nameof(AnnotatorViewModel.IsSessionApproved)
+            or nameof(AnnotatorViewModel.IsJoinPending))
         {
-            approvePresenterCommand.RaiseCanExecuteChanged();
+            approveAnnotatorCommand.RaiseCanExecuteChanged();
         }
 
-        if (e.PropertyName == nameof(PresenterViewModel.ConnectionMessage))
+        if (e.PropertyName == nameof(AnnotatorViewModel.ConnectionMessage))
         {
             RaisePropertyChanged(nameof(FlyoutConnectionMessage));
         }
     }
 
-    private void OnPresenterJoinRequested(object? sender, PresenterJoinRequestedEventArgs e)
+    private void OnAnnotatorJoinRequested(object? sender, AnnotatorJoinRequestedEventArgs e)
     {
-        SetPendingPresenter(e.Presenter);
-        SetStatus($"{e.Presenter.DisplayName} is waiting for approval.", false);
+        SetPendingAnnotator(e.Annotator);
+        SetStatus($"{e.Annotator.DisplayName} is waiting for approval.", false);
     }
 
-    private void OnReceiverSessionApproved(object? sender, RelaySessionStateEventArgs e)
+    private void OnHostSessionApproved(object? sender, RelaySessionStateEventArgs e)
     {
-        var presenterDisconnected = HasConnectedPresenter && !e.State.Approved;
-        ConnectedPresenters.Clear();
-        foreach (var presenter in e.State.ConnectedPresenters ?? [])
+        var annotatorDisconnected = HasConnectedAnnotator && !e.State.Approved;
+        ConnectedAnnotators.Clear();
+        foreach (var annotator in e.State.ConnectedAnnotators ?? [])
         {
-            ConnectedPresenters.Add(presenter);
+            ConnectedAnnotators.Add(annotator);
         }
 
-        if (e.State.Approved && ConnectedPresenters.Count == 0)
+        if (e.State.Approved && ConnectedAnnotators.Count == 0)
         {
-            ConnectedPresenters.Add(new ConnectedPresenterDescriptor("Connected sender"));
+            ConnectedAnnotators.Add(new ConnectedAnnotatorDescriptor("Connected annotator"));
         }
 
-        RaisePropertyChanged(nameof(ConnectedPresenterCountLabel));
+        RaisePropertyChanged(nameof(ConnectedAnnotatorCountLabel));
         RaisePropertyChanged(nameof(FlyoutConnectionMessage));
-        HasConnectedPresenter = ConnectedPresenters.Count > 0;
-        if (receiverRelayClient?.Credential?.Role == ClientRole.Receiver)
+        HasConnectedAnnotator = ConnectedAnnotators.Count > 0;
+        if (hostRelayClient?.Credential?.Role == ClientRole.Host)
         {
-            receiverSessionId = e.State.SessionId;
-            SetReceiverAvailabilitySilently(
-                e.State.ReceiverDiscoverable
-                    ? ReceiverAvailability.Available
-                    : ReceiverAvailability.Invisible);
-            if (e.State.ReceiverDisplay is not null)
+            hostSessionId = e.State.SessionId;
+            SetHostAvailabilitySilently(
+                e.State.HostDiscoverable
+                    ? HostAvailability.Available
+                    : HostAvailability.Invisible);
+            if (e.State.HostDisplay is not null)
             {
                 var restoredMonitor = Monitors.FirstOrDefault(
                     monitor => string.Equals(
                         monitor.Display.DisplayId,
-                        e.State.ReceiverDisplay.DisplayId,
+                        e.State.HostDisplay.DisplayId,
                         StringComparison.OrdinalIgnoreCase));
                 if (restoredMonitor is null)
                 {
-                    RaiseReceiverSessionProperties();
+                    RaiseHostSessionProperties();
                     SetStatus(
-                        "Receiver presence resumed, but its monitor is not connected.",
+                        "Host presence resumed, but its monitor is not connected.",
                         true);
                     return;
                 }
@@ -1063,19 +1065,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 overlayService.Show(restoredMonitor);
             }
 
-            RaiseReceiverSessionProperties();
+            RaiseHostSessionProperties();
         }
 
         SetStatus(
-            HasConnectedPresenter
-                ? $"Receiving pointers from {ConnectedPresenters.Count} connected sender{(ConnectedPresenters.Count == 1 ? string.Empty : "s")}."
-                : presenterDisconnected && ReceiverAvailability == ReceiverAvailability.Available
-                    ? "Presenter disconnected. This receiver remains available."
-                    : presenterDisconnected
-                        ? "Presenter disconnected. This receiver remains invisible."
-                        : ReceiverAvailability == ReceiverAvailability.Available
-                            ? "This receiver is available for access requests."
-                            : "This receiver is invisible to presenters.",
+            HasConnectedAnnotator
+                ? $"Receiving pointers from {ConnectedAnnotators.Count} connected annotator{(ConnectedAnnotators.Count == 1 ? string.Empty : "s")}."
+                : annotatorDisconnected && HostAvailability == HostAvailability.Available
+                    ? "Annotator disconnected. This host remains available."
+                    : annotatorDisconnected
+                        ? "Annotator disconnected. This host remains invisible."
+                        : HostAvailability == HostAvailability.Available
+                            ? "This host is available for access requests."
+                            : "This host is invisible to annotators.",
             false);
     }
 
@@ -1083,7 +1085,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var activeSessionId = receiverSessionId;
+            var activeSessionId = hostSessionId;
             if (activeSessionId is null
                 || !string.Equals(
                     e.PointerEvent.SessionId,
@@ -1100,7 +1102,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             if (!string.Equals(
-                    receiverSessionId,
+                    hostSessionId,
                     activeSessionId,
                     StringComparison.Ordinal))
             {
@@ -1108,9 +1110,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             var displayed = overlayService.ShowPointer(e.PointerEvent);
-            if (displayed && receiverRelayClient is not null)
+            if (displayed && hostRelayClient is not null)
             {
-                await receiverRelayClient.AcknowledgePointerAsync(
+                await hostRelayClient.AcknowledgePointerAsync(
                     new PointerAcknowledgement(
                         e.PointerEvent.EventId,
                         DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
@@ -1122,11 +1124,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnReceiverSessionEnded(object? sender, RelaySessionEndedEventArgs e)
+    private void OnHostSessionEnded(object? sender, RelaySessionEndedEventArgs e)
     {
-        var retryAvailability = ReceiverAvailability == ReceiverAvailability.Available;
+        var retryAvailability = HostAvailability == HostAvailability.Available;
         overlayService.Hide();
-        ClearReceiverSession(preserveAvailability: retryAvailability);
+        ClearHostSession(preserveAvailability: retryAvailability);
         if (retryAvailability)
         {
             ScheduleAvailabilityRetry();
@@ -1134,13 +1136,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         SetStatus(e.Reason, e.Expired);
     }
 
-    private void SetPendingPresenter(PresenterDescriptor? presenter)
+    private void SetPendingAnnotator(AnnotatorDescriptor? annotator)
     {
-        pendingPresenter = presenter;
-        RaisePropertyChanged(nameof(PendingPresenterName));
-        RaisePropertyChanged(nameof(PendingPresenterProfilePicturePng));
-        RaisePropertyChanged(nameof(HasPendingPresenter));
-        approvePresenterCommand.RaiseCanExecuteChanged();
+        pendingAnnotator = annotator;
+        RaisePropertyChanged(nameof(PendingAnnotatorName));
+        RaisePropertyChanged(nameof(PendingAnnotatorProfilePicturePng));
+        RaisePropertyChanged(nameof(HasPendingAnnotator));
+        approveAnnotatorCommand.RaiseCanExecuteChanged();
     }
 
     internal async Task TestServerConnectionAsync()
@@ -1206,18 +1208,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnPresenterJoinCancelled(object? sender, PresenterJoinCancelledEventArgs e)
+    private void OnAnnotatorJoinCancelled(object? sender, AnnotatorJoinCancelledEventArgs e)
     {
         if (!string.Equals(
-                pendingPresenter?.ConnectionId,
-                e.PresenterConnectionId,
+                pendingAnnotator?.ConnectionId,
+                e.AnnotatorConnectionId,
                 StringComparison.Ordinal))
         {
             return;
         }
 
-        SetPendingPresenter(null);
-        SetStatus("The sender withdrew its connection request.", false);
+        SetPendingAnnotator(null);
+        SetStatus("The annotator withdrew its connection request.", false);
     }
 
     internal async Task CloseSettingsAsync()
@@ -1342,10 +1344,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return true;
         }
 
-        var hasActiveConnections = HasConnectedPresenter
-            || HasPendingPresenter
-            || Presenter.IsSessionApproved
-            || Presenter.IsJoinPending;
+        var hasActiveConnections = HasConnectedAnnotator
+            || HasPendingAnnotator
+            || Annotator.IsSessionApproved
+            || Annotator.IsJoinPending;
         if (!hasActiveConnections)
         {
             return true;
@@ -1364,27 +1366,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             serverAddress,
             UserName,
             ProfilePicturePath,
-            MaximumSenderConnections,
+            MaximumAnnotatorConnections,
             IsLaunchAtStartup,
             SelectedMonitor?.Display.DisplayId,
             ShowUsageHints,
-            ReceiverAvailability == ReceiverAvailability.Available,
+            HostAvailability == HostAvailability.Available,
             DrawingOpacityPercent);
-        Presenter.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
-        Presenter.SetDrawingOpacityPercent(DrawingOpacityPercent);
+        Annotator.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
+        Annotator.SetDrawingOpacityPercent(DrawingOpacityPercent);
         startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
         RaiseServerAddressCommandState();
     }
 
     private Task ApplyActiveClientSettingsAsync() => Task.WhenAll(
-        receiverRelayClient?.ApplyClientSettingsAsync(
+        hostRelayClient?.ApplyClientSettingsAsync(
             UserName,
             ProfilePicturePath,
-            MaximumSenderConnections) ?? Task.CompletedTask,
-        Presenter.ApplyClientSettingsAsync(
+            MaximumAnnotatorConnections) ?? Task.CompletedTask,
+        Annotator.ApplyClientSettingsAsync(
             UserName,
             ProfilePicturePath,
-            MaximumSenderConnections));
+            MaximumAnnotatorConnections));
 
     private void ResetServerAddressDraft()
     {
@@ -1406,7 +1408,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ServerAddressInput = RemoveHttpsPrefix(clientSettings.Server.BaseUrl);
         UserName = clientSettings.Profile.UserName;
         ProfilePicturePath = clientSettings.Profile.PicturePath;
-        MaximumSenderConnections = clientSettings.Receiver.MaximumSenderConnections;
+        MaximumAnnotatorConnections = clientSettings.Host.MaximumAnnotatorConnections;
         IsLaunchAtStartup = startupRegistrationService?.IsEnabled
             ?? clientSettings.Startup.LaunchAtStartup;
         ShowUsageHints = clientSettings.Pointer.ShowUsageHints;
@@ -1415,7 +1417,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var savedMonitor = Monitors.FirstOrDefault(
             monitor => string.Equals(
                 monitor.Display.DisplayId,
-                clientSettings.Receiver.SelectedDisplayId,
+                clientSettings.Host.SelectedDisplayId,
                 StringComparison.OrdinalIgnoreCase));
         if (savedMonitor is not null)
         {
@@ -1428,27 +1430,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ? address.TrimStart()["https://".Length..]
             : address;
 
-    private void ClearReceiverSession(bool preserveAvailability = false)
+    private void ClearHostSession(bool preserveAvailability = false)
     {
-        receiverSessionId = null;
-        ConnectedPresenters.Clear();
-        RaisePropertyChanged(nameof(ConnectedPresenterCountLabel));
+        hostSessionId = null;
+        ConnectedAnnotators.Clear();
+        RaisePropertyChanged(nameof(ConnectedAnnotatorCountLabel));
         RaisePropertyChanged(nameof(FlyoutConnectionMessage));
-        HasConnectedPresenter = false;
+        HasConnectedAnnotator = false;
         if (!preserveAvailability)
         {
-            SetReceiverAvailabilitySilently(ReceiverAvailability.Invisible);
+            SetHostAvailabilitySilently(HostAvailability.Invisible);
         }
-        SetPendingPresenter(null);
-        RaiseReceiverSessionProperties();
+        SetPendingAnnotator(null);
+        RaiseHostSessionProperties();
     }
 
-    private void SetReceiverAvailabilitySilently(ReceiverAvailability availability)
+    private void SetHostAvailabilitySilently(HostAvailability availability)
     {
-        ReceiverAvailability = availability;
+        HostAvailability = availability;
     }
 
-    private void SaveReceiverAvailabilityPreference(ReceiverAvailability availability)
+    private void SaveHostAvailabilityPreference(HostAvailability availability)
     {
         if (clientSettings is null)
         {
@@ -1457,12 +1459,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            clientSettings.SaveReceiverAvailability(
-                availability == ReceiverAvailability.Available);
+            clientSettings.SaveHostAvailability(
+                availability == HostAvailability.Available);
         }
         catch (Exception exception)
         {
-            SetStatus($"Receiver availability preference could not be saved: {exception.Message}", true);
+            SetStatus($"Host availability preference could not be saved: {exception.Message}", true);
         }
     }
 
@@ -1488,10 +1490,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void ScheduleAvailabilityRetry()
     {
-        var selectedAvailability = ReceiverAvailability;
-        var updateNeeded = selectedAvailability == ReceiverAvailability.Available
-            ? !HasReceiverSession
-            : HasReceiverSession;
+        var selectedAvailability = HostAvailability;
+        var updateNeeded = selectedAvailability == HostAvailability.Available
+            ? !HasHostSession
+            : HasHostSession;
         if (disposed
             || !updateNeeded
             || availabilityRetryCancellation is not null)
@@ -1506,22 +1508,22 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task RetryAvailabilityAsync(
         CancellationTokenSource cancellation,
-        ReceiverAvailability availability)
+        HostAvailability availability)
     {
         var cancellationToken = cancellation.Token;
         try
         {
             while (!cancellationToken.IsCancellationRequested
-                   && ReceiverAvailability == availability)
+                   && HostAvailability == availability)
             {
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                 if (cancellationToken.IsCancellationRequested
-                    || ReceiverAvailability != availability)
+                    || HostAvailability != availability)
                 {
                     return;
                 }
 
-                await UpdateReceiverAvailabilityAsync(
+                await UpdateHostAvailabilityAsync(
                     availability,
                     availability);
             }
@@ -1613,12 +1615,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RaisePropertyChanged(nameof(HasServerPasswordCheckCode));
         try
         {
-            if (receiverRelayClient is not null)
+            if (hostRelayClient is not null)
             {
-                await receiverRelayClient.SetServerPasswordKeyAsync(key);
+                await hostRelayClient.SetServerPasswordKeyAsync(key);
             }
 
-            await Presenter.SetServerPasswordKeyAsync(key);
+            await Annotator.SetServerPasswordKeyAsync(key);
         }
         catch (Exception exception)
         {
@@ -1647,14 +1649,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RaisePropertyChanged(nameof(AvailabilityColor));
     }
 
-    private void RaiseReceiverSessionProperties()
+    private void RaiseHostSessionProperties()
     {
-        RaisePropertyChanged(nameof(HasReceiverSession));
+        RaisePropertyChanged(nameof(HasHostSession));
         RaisePropertyChanged(nameof(CanSelectMonitor));
-        RaisePropertyChanged(nameof(CanSetReceiverAvailability));
-        approvePresenterCommand.RaiseCanExecuteChanged();
+        RaisePropertyChanged(nameof(CanSetHostAvailability));
+        approveAnnotatorCommand.RaiseCanExecuteChanged();
         disconnectAllConnectionsCommand.RaiseCanExecuteChanged();
-        setReceiverAvailabilityCommand.RaiseCanExecuteChanged();
+        setHostAvailabilityCommand.RaiseCanExecuteChanged();
     }
 
     private void SetStatus(string message, bool isError)
@@ -1664,7 +1666,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 }
 
-public enum ReceiverAvailability
+public enum HostAvailability
 {
     Available,
     Invisible,

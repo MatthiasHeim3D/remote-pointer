@@ -42,7 +42,7 @@ public sealed class PointerHub(
             if (change.PreviousGroupKey is not null)
             {
                 // Both directories change when a client moves between them: the one it left
-                // can no longer see the receiver it published, and the one it joined can. The
+                // can no longer see the host it published, and the one it joined can. The
                 // caller is already in the new group, so this is also what refreshes its own
                 // listing after a password change.
                 await NotifyDirectoryChangedAsync(change.PreviousGroupKey).ConfigureAwait(false);
@@ -55,8 +55,8 @@ public sealed class PointerHub(
         }
     }
 
-    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers() =>
-        sessionManager.GetAvailableReceivers(GetApplicationInstanceId(), Context.ConnectionId);
+    public IReadOnlyList<AvailableHostDescriptor> GetAvailableHosts() =>
+        sessionManager.GetAvailableHosts(GetApplicationInstanceId(), Context.ConnectionId);
 
     public override async Task OnConnectedAsync()
     {
@@ -83,28 +83,28 @@ public sealed class PointerHub(
         var disconnect = sessionManager.Disconnect(Context.ConnectionId);
         if (disconnect is not null)
         {
-            foreach (var presenterConnectionId in disconnect.PresenterConnectionIdsToEnd)
+            foreach (var annotatorConnectionId in disconnect.AnnotatorConnectionIdsToEnd)
             {
                 await Groups.RemoveFromGroupAsync(
-                        presenterConnectionId,
+                        annotatorConnectionId,
                         GroupName(disconnect.SessionId))
                     .ConfigureAwait(false);
-                await Clients.Client(presenterConnectionId)
-                    .SessionEnded("The receiver connection ended. Request access again after it reconnects.")
+                await Clients.Client(annotatorConnectionId)
+                    .SessionEnded("The host connection ended. Request access again after it reconnects.")
                     .ConfigureAwait(false);
             }
 
-            if (disconnect.ReceiverConnectionId is not null && disconnect.State is not null)
+            if (disconnect.HostConnectionId is not null && disconnect.State is not null)
             {
-                if (disconnect.CancelledPresenterRequestConnectionId is not null)
+                if (disconnect.CancelledAnnotatorRequestConnectionId is not null)
                 {
-                    await Clients.Client(disconnect.ReceiverConnectionId)
-                        .PresenterJoinCancelled(
-                            disconnect.CancelledPresenterRequestConnectionId)
+                    await Clients.Client(disconnect.HostConnectionId)
+                        .AnnotatorJoinCancelled(
+                            disconnect.CancelledAnnotatorRequestConnectionId)
                         .ConfigureAwait(false);
                 }
 
-                await Clients.Client(disconnect.ReceiverConnectionId)
+                await Clients.Client(disconnect.HostConnectionId)
                     .SessionApproved(disconnect.State)
                     .ConfigureAwait(false);
             }
@@ -130,16 +130,16 @@ public sealed class PointerHub(
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
     }
 
-    public async Task<CreateSessionResponse> CreateReceiverSession(
+    public async Task<CreateSessionResponse> CreateHostSession(
         DisplayDescriptor display,
         ClientProfile profile,
-        int maximumPresenterConnections,
+        int maximumAnnotatorConnections,
         string displayName)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         try
         {
-            var response = sessionManager.CreateReceiverSession(
+            var response = sessionManager.CreateHostSession(
                 display,
                 Context.ConnectionId,
                 clientInstanceId,
@@ -148,14 +148,14 @@ public sealed class PointerHub(
                     : displayName.Trim(),
                 GetApplicationInstanceId(),
                 profile,
-                maximumPresenterConnections);
+                maximumAnnotatorConnections);
             await Groups.AddToGroupAsync(
                     Context.ConnectionId,
                     GroupName(response.SessionId))
                 .ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.SessionCreated,
-                "Receiver session created. SessionId={SessionId} ClientInstanceId={ClientInstanceId} ExpiresAt={ExpiresAt}",
+                "Host session created. SessionId={SessionId} ClientInstanceId={ClientInstanceId} ExpiresAt={ExpiresAt}",
                 response.SessionId,
                 clientInstanceId,
                 response.Credential.ExpiresAt);
@@ -164,15 +164,15 @@ public sealed class PointerHub(
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "CreateReceiverSession");
+            throw ToHubException(exception, "CreateHostSession");
         }
     }
 
-    public async Task<bool> SetReceiverDiscoverable(string sessionId, bool discoverable)
+    public async Task<bool> SetHostDiscoverable(string sessionId, bool discoverable)
     {
         try
         {
-            var result = sessionManager.SetReceiverDiscoverable(
+            var result = sessionManager.SetHostDiscoverable(
                 sessionId,
                 Context.ConnectionId,
                 discoverable);
@@ -181,24 +181,24 @@ public sealed class PointerHub(
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "SetReceiverDiscoverable");
+            throw ToHubException(exception, "SetHostDiscoverable");
         }
     }
 
-    public async Task<JoinResponse> RequestToJoinReceiver(
+    public async Task<JoinResponse> RequestToJoinHost(
         DirectJoinRequest request,
         string displayName)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         if (!string.Equals(request.ClientInstanceId, clientInstanceId, StringComparison.Ordinal))
         {
-            LogValidationFailure("client_identity_mismatch", "RequestToJoinReceiver");
+            LogValidationFailure("client_identity_mismatch", "RequestToJoinHost");
             return new JoinResponse(false, null, "The join request identity is invalid.");
         }
 
         try
         {
-            var result = sessionManager.RequestToJoinReceiver(
+            var result = sessionManager.RequestToJoinHost(
                 request,
                 Context.ConnectionId,
                 string.IsNullOrWhiteSpace(displayName)
@@ -206,24 +206,24 @@ public sealed class PointerHub(
                     : displayName.Trim(),
                 GetApplicationInstanceId());
             if (result.Response.Accepted
-                && result.ReceiverConnectionId is not null
-                && result.Presenter is not null)
+                && result.HostConnectionId is not null
+                && result.Annotator is not null)
             {
-                await Clients.Client(result.ReceiverConnectionId)
-                    .PresenterJoinRequested(result.Presenter)
+                await Clients.Client(result.HostConnectionId)
+                    .AnnotatorJoinRequested(result.Annotator)
                     .ConfigureAwait(false);
                 await NotifyDirectoryChangedAsync().ConfigureAwait(false);
                 logger.LogInformation(
-                    AuditEventIds.PresenterJoinRequested,
-                    "Direct presenter join requested. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
+                    AuditEventIds.AnnotatorJoinRequested,
+                    "Direct annotator join requested. SessionId={SessionId} AnnotatorClientInstanceId={ClientInstanceId}",
                     result.Response.SessionId,
                     request.ClientInstanceId);
             }
             else
             {
                 logger.LogWarning(
-                    AuditEventIds.PresenterJoinRejected,
-                    "Direct presenter join rejected. ClientInstanceId={ClientInstanceId} Reason={Reason}",
+                    AuditEventIds.AnnotatorJoinRejected,
+                    "Direct annotator join rejected. ClientInstanceId={ClientInstanceId} Reason={Reason}",
                     request.ClientInstanceId,
                     result.Response.Reason);
             }
@@ -232,51 +232,51 @@ public sealed class PointerHub(
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "RequestToJoinReceiver");
+            throw ToHubException(exception, "RequestToJoinHost");
         }
     }
 
-    public async Task UpdateReceiverDisplay(string sessionId, DisplayDescriptor display)
+    public async Task UpdateHostDisplay(string sessionId, DisplayDescriptor display)
     {
         try
         {
-            var result = sessionManager.UpdateReceiverDisplay(
+            var result = sessionManager.UpdateHostDisplay(
                 sessionId,
                 Context.ConnectionId,
                 display);
-            foreach (var presenterConnectionId in result.PresenterConnectionIds)
+            foreach (var annotatorConnectionId in result.AnnotatorConnectionIds)
             {
-                await Clients.Client(presenterConnectionId)
-                    .ReceiverDisplayChanged(result.Display)
+                await Clients.Client(annotatorConnectionId)
+                    .HostDisplayChanged(result.Display)
                     .ConfigureAwait(false);
             }
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "UpdateReceiverDisplay");
+            throw ToHubException(exception, "UpdateHostDisplay");
         }
     }
 
-    public async Task UpdateReceiverClientSettings(
+    public async Task UpdateHostClientSettings(
         string sessionId,
         string displayName,
         ClientProfile profile,
-        int maximumPresenterConnections)
+        int maximumAnnotatorConnections)
     {
         try
         {
-            var result = sessionManager.UpdateReceiverClientSettings(
+            var result = sessionManager.UpdateHostClientSettings(
                 sessionId,
                 Context.ConnectionId,
                 displayName,
                 profile,
-                maximumPresenterConnections);
-            await Clients.Client(result.ReceiverConnectionId)
+                maximumAnnotatorConnections);
+            await Clients.Client(result.HostConnectionId)
                 .SessionApproved(result.State)
                 .ConfigureAwait(false);
-            foreach (var presenterConnectionId in result.PresenterConnectionIds)
+            foreach (var annotatorConnectionId in result.AnnotatorConnectionIds)
             {
-                await Clients.Client(presenterConnectionId)
+                await Clients.Client(annotatorConnectionId)
                     .SessionApproved(result.State)
                     .ConfigureAwait(false);
             }
@@ -285,65 +285,65 @@ public sealed class PointerHub(
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "UpdateReceiverClientSettings");
+            throw ToHubException(exception, "UpdateHostClientSettings");
         }
     }
 
-    public async Task ApprovePresenter(string sessionId, string presenterConnectionId)
+    public async Task ApproveAnnotator(string sessionId, string annotatorConnectionId)
     {
         try
         {
-            var result = sessionManager.ApprovePresenter(
+            var result = sessionManager.ApproveAnnotator(
                 sessionId,
-                presenterConnectionId,
+                annotatorConnectionId,
                 Context.ConnectionId);
             await Groups.AddToGroupAsync(
-                    result.PresenterConnectionId,
+                    result.AnnotatorConnectionId,
                     GroupName(result.SessionId))
                 .ConfigureAwait(false);
-            await Clients.Client(result.PresenterConnectionId)
-                .SessionCredentialIssued(result.PresenterCredential)
+            await Clients.Client(result.AnnotatorConnectionId)
+                .SessionCredentialIssued(result.AnnotatorCredential)
                 .ConfigureAwait(false);
-            await Clients.Client(result.PresenterConnectionId)
+            await Clients.Client(result.AnnotatorConnectionId)
                 .SessionApproved(result.State)
                 .ConfigureAwait(false);
-            await Clients.Client(result.ReceiverConnectionId)
+            await Clients.Client(result.HostConnectionId)
                 .SessionApproved(result.State)
                 .ConfigureAwait(false);
             await NotifyDirectoryChangedAsync().ConfigureAwait(false);
             logger.LogInformation(
-                AuditEventIds.PresenterApproved,
-                "Presenter approved. SessionId={SessionId} PresenterClientInstanceId={ClientInstanceId}",
+                AuditEventIds.AnnotatorApproved,
+                "Annotator approved. SessionId={SessionId} AnnotatorClientInstanceId={ClientInstanceId}",
                 result.SessionId,
-                result.PresenterCredential.ClientInstanceId);
+                result.AnnotatorCredential.ClientInstanceId);
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "ApprovePresenter");
+            throw ToHubException(exception, "ApproveAnnotator");
         }
     }
 
-    public async Task RejectPresenter(string sessionId, string presenterConnectionId)
+    public async Task RejectAnnotator(string sessionId, string annotatorConnectionId)
     {
         try
         {
-            var result = sessionManager.RejectPresenter(
+            var result = sessionManager.RejectAnnotator(
                 sessionId,
-                presenterConnectionId,
+                annotatorConnectionId,
                 Context.ConnectionId);
-            await Clients.Client(result.PresenterConnectionId)
-                .SessionEnded("Connection request declined by receiver.")
+            await Clients.Client(result.AnnotatorConnectionId)
+                .SessionEnded("Connection request declined by host.")
                 .ConfigureAwait(false);
             await NotifyDirectoryChangedAsync().ConfigureAwait(false);
             logger.LogInformation(
-                AuditEventIds.PresenterJoinRejected,
-                "Presenter join declined. SessionId={SessionId} PresenterConnectionId={PresenterConnectionId}",
+                AuditEventIds.AnnotatorJoinRejected,
+                "Annotator join declined. SessionId={SessionId} AnnotatorConnectionId={AnnotatorConnectionId}",
                 result.SessionId,
-                result.PresenterConnectionId);
+                result.AnnotatorConnectionId);
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "RejectPresenter");
+            throw ToHubException(exception, "RejectAnnotator");
         }
     }
 
@@ -353,9 +353,9 @@ public sealed class PointerHub(
         {
             var result = sessionManager.AcceptPointer(Context.ConnectionId, pointerEvent);
             if (result.Disposition == PointerRelayDisposition.Accepted
-                && result.ReceiverConnectionId is not null)
+                && result.HostConnectionId is not null)
             {
-                await Clients.Client(result.ReceiverConnectionId)
+                await Clients.Client(result.HostConnectionId)
                     .PointerReceived(pointerEvent)
                     .ConfigureAwait(false);
             }
@@ -373,9 +373,9 @@ public sealed class PointerHub(
             var result = sessionManager.AcceptAcknowledgement(
                 Context.ConnectionId,
                 acknowledgement);
-            if (result.PresenterConnectionId is not null)
+            if (result.AnnotatorConnectionId is not null)
             {
-                await Clients.Client(result.PresenterConnectionId)
+                await Clients.Client(result.AnnotatorConnectionId)
                     .PointerDisplayed(acknowledgement)
                     .ConfigureAwait(false);
             }
@@ -433,38 +433,38 @@ public sealed class PointerHub(
         try
         {
             var result = sessionManager.EndSession(sessionId, Context.ConnectionId);
-            if (result.ReceiverPreserved && result.State is not null)
+            if (result.HostPreserved && result.State is not null)
             {
                 var cancelledRequestConnectionId =
-                    result.CancelledPresenterRequestConnectionId;
+                    result.CancelledAnnotatorRequestConnectionId;
                 if (cancelledRequestConnectionId is not null
-                    && result.ReceiverConnectionId is not null)
+                    && result.HostConnectionId is not null)
                 {
-                    await Clients.Client(result.ReceiverConnectionId)
-                        .PresenterJoinCancelled(cancelledRequestConnectionId)
+                    await Clients.Client(result.HostConnectionId)
+                        .AnnotatorJoinCancelled(cancelledRequestConnectionId)
                         .ConfigureAwait(false);
                 }
 
-                foreach (var presenterConnectionId in GetPresenterConnectionIds(result))
+                foreach (var annotatorConnectionId in GetAnnotatorConnectionIds(result))
                 {
                     await Groups.RemoveFromGroupAsync(
-                            presenterConnectionId,
+                            annotatorConnectionId,
                             GroupName(sessionId))
                         .ConfigureAwait(false);
-                    await Clients.Client(presenterConnectionId)
+                    await Clients.Client(annotatorConnectionId)
                         .SessionEnded(
                             string.Equals(
-                                presenterConnectionId,
+                                annotatorConnectionId,
                                 cancelledRequestConnectionId,
                                 StringComparison.Ordinal)
                                 ? "Connection request cancelled."
-                                : "Disconnected from the receiver.")
+                                : "Disconnected from the host.")
                         .ConfigureAwait(false);
                 }
 
-                if (result.ReceiverConnectionId is not null)
+                if (result.HostConnectionId is not null)
                 {
-                    await Clients.Client(result.ReceiverConnectionId)
+                    await Clients.Client(result.HostConnectionId)
                         .SessionApproved(result.State)
                         .ConfigureAwait(false);
                 }
@@ -472,14 +472,14 @@ public sealed class PointerHub(
             else
             {
                 await Clients.Group(GroupName(sessionId))
-                    .SessionEnded("The receiver connection ended and is no longer available.")
+                    .SessionEnded("The host connection ended and is no longer available.")
                     .ConfigureAwait(false);
             }
             logger.LogInformation(
                 AuditEventIds.SessionEnded,
-                "Connection ended. SessionId={SessionId} ReceiverPreserved={ReceiverPreserved} PointerCount={PointerCount}",
+                "Connection ended. SessionId={SessionId} HostPreserved={HostPreserved} PointerCount={PointerCount}",
                 result.SessionId,
-                result.ReceiverPreserved,
+                result.HostPreserved,
                 result.PointerCount);
             await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
         }
@@ -493,30 +493,30 @@ public sealed class PointerHub(
     {
         try
         {
-            var result = sessionManager.DisconnectPresenters(
+            var result = sessionManager.DisconnectAnnotators(
                 sessionId,
                 Context.ConnectionId);
-            foreach (var presenterConnectionId in GetPresenterConnectionIds(result))
+            foreach (var annotatorConnectionId in GetAnnotatorConnectionIds(result))
             {
                 await Groups.RemoveFromGroupAsync(
-                        presenterConnectionId,
+                        annotatorConnectionId,
                         GroupName(sessionId))
                     .ConfigureAwait(false);
-                await Clients.Client(presenterConnectionId)
-                    .SessionEnded("Disconnected by the receiver.")
+                await Clients.Client(annotatorConnectionId)
+                    .SessionEnded("Disconnected by the host.")
                     .ConfigureAwait(false);
             }
 
-            if (result.ReceiverConnectionId is not null && result.State is not null)
+            if (result.HostConnectionId is not null && result.State is not null)
             {
-                await Clients.Client(result.ReceiverConnectionId)
+                await Clients.Client(result.HostConnectionId)
                     .SessionApproved(result.State)
                     .ConfigureAwait(false);
             }
 
             logger.LogInformation(
                 AuditEventIds.SessionEnded,
-                "Receiver disconnected all presenters. SessionId={SessionId} PointerCount={PointerCount}",
+                "Host disconnected all annotators. SessionId={SessionId} PointerCount={PointerCount}",
                 result.SessionId,
                 result.PointerCount);
             await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
@@ -529,27 +529,27 @@ public sealed class PointerHub(
 
     private async Task CancelJoinRequestAsync(SessionTerminationResult cancellation)
     {
-        var presenterConnectionId = cancellation.CancelledPresenterRequestConnectionId;
-        if (presenterConnectionId is null)
+        var annotatorConnectionId = cancellation.CancelledAnnotatorRequestConnectionId;
+        if (annotatorConnectionId is null)
         {
             return;
         }
 
-        await Clients.Client(presenterConnectionId)
+        await Clients.Client(annotatorConnectionId)
             .SessionEnded("The server password changed, so the connection request was cancelled.")
             .ConfigureAwait(false);
-        if (cancellation.ReceiverConnectionId is not null)
+        if (cancellation.HostConnectionId is not null)
         {
-            await Clients.Client(cancellation.ReceiverConnectionId)
-                .PresenterJoinCancelled(presenterConnectionId)
+            await Clients.Client(cancellation.HostConnectionId)
+                .AnnotatorJoinCancelled(annotatorConnectionId)
                 .ConfigureAwait(false);
         }
 
         logger.LogInformation(
             AuditEventIds.SessionEnded,
-            "Join request cancelled across a server password change. SessionId={SessionId} PresenterConnectionId={PresenterConnectionId}",
+            "Join request cancelled across a server password change. SessionId={SessionId} AnnotatorConnectionId={AnnotatorConnectionId}",
             cancellation.SessionId,
-            presenterConnectionId);
+            annotatorConnectionId);
     }
 
     private HubException ToHubException(SessionOperationException exception, string operation)
@@ -558,10 +558,10 @@ public sealed class PointerHub(
         return new HubException(exception.Message);
     }
 
-    private static IReadOnlyList<string> GetPresenterConnectionIds(
+    private static IReadOnlyList<string> GetAnnotatorConnectionIds(
         SessionTerminationResult result) =>
-        result.PresenterConnectionIds
-        ?? (result.PresenterConnectionId is null ? [] : [result.PresenterConnectionId]);
+        result.AnnotatorConnectionIds
+        ?? (result.AnnotatorConnectionId is null ? [] : [result.AnnotatorConnectionId]);
 
     private void LogValidationFailure(string code, string operation) =>
         logger.LogWarning(
@@ -608,7 +608,7 @@ public sealed class PointerHub(
 
     /// <summary>
     /// Directory changes reach only the clients that share the same server password. Nobody
-    /// else can see the affected receivers, and one client's connection churn no longer costs
+    /// else can see the affected hosts, and one client's connection churn no longer costs
     /// a directory read on every other connection.
     /// </summary>
     internal static string DirectoryGroupName(string groupKey) => $"directory:{groupKey}";
@@ -617,12 +617,12 @@ public sealed class PointerHub(
         NotifyDirectoryChangedAsync(sessionManager.GetConnectionGroup(Context.ConnectionId));
 
     private Task NotifyDirectoryChangedAsync(string groupKey) =>
-        Clients.Group(DirectoryGroupName(groupKey)).ReceiverDirectoryChanged();
+        Clients.Group(DirectoryGroupName(groupKey)).HostDirectoryChanged();
 
     /// <summary>
     /// Notifies both directories a change touched, skipping the second when it is the same one.
     /// A connection normally ends in the group its session was published under, but an approved
-    /// presenter that changed its server password does not, and the free slot it leaves behind
+    /// annotator that changed its server password does not, and the free slot it leaves behind
     /// belongs to the session's group rather than to the one it walked off with.
     /// </summary>
     private async Task NotifyDirectoryChangedAsync(string groupKey, string? sessionGroupKey)

@@ -7,13 +7,13 @@ internal sealed class FakeRelayClient : IRelayClient
 {
     public event EventHandler<RelayConnectionStatusChangedEventArgs>? ConnectionStatusChanged;
 
-    public event EventHandler<PresenterJoinRequestedEventArgs>? PresenterJoinRequested;
+    public event EventHandler<AnnotatorJoinRequestedEventArgs>? AnnotatorJoinRequested;
 
-    public event EventHandler<PresenterJoinCancelledEventArgs>? PresenterJoinCancelled;
+    public event EventHandler<AnnotatorJoinCancelledEventArgs>? AnnotatorJoinCancelled;
 
     public event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
-    public event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
+    public event EventHandler<RelayHostDisplayChangedEventArgs>? HostDisplayChanged;
 
     public event EventHandler<RelayPointerEventArgs>? PointerReceived;
 
@@ -21,7 +21,7 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public event EventHandler<RelaySessionEndedEventArgs>? SessionEnded;
 
-    public event EventHandler? ReceiverDirectoryChanged;
+    public event EventHandler? HostDirectoryChanged;
 
     public string ServerUrl { get; init; } = "https://relay.example";
 
@@ -40,7 +40,7 @@ internal sealed class FakeRelayClient : IRelayClient
     public RelayCapabilities Capabilities { get; set; } =
         new(ServerPasswordRequired: false);
 
-    public IReadOnlyList<AvailableReceiverDescriptor> AvailableReceivers { get; set; } = [];
+    public IReadOnlyList<AvailableHostDescriptor> AvailableHosts { get; set; } = [];
 
     public bool IsDiscoverable { get; private set; }
 
@@ -48,15 +48,15 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public Exception? DiscoverabilityException { get; set; }
 
-    public DisplayDescriptor? UpdatedReceiverDisplay { get; private set; }
+    public DisplayDescriptor? UpdatedHostDisplay { get; private set; }
 
-    public string? RequestedReceiverSessionId { get; private set; }
+    public string? RequestedHostSessionId { get; private set; }
 
     public int CreateCount { get; private set; }
 
-    public PresenterDescriptor? ApprovedPresenter { get; private set; }
+    public AnnotatorDescriptor? ApprovedAnnotator { get; private set; }
 
-    public PresenterDescriptor? RejectedPresenter { get; private set; }
+    public AnnotatorDescriptor? RejectedAnnotator { get; private set; }
 
     public int DisconnectAllConnectionsCount { get; private set; }
 
@@ -95,11 +95,11 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
+    public Task<IReadOnlyList<AvailableHostDescriptor>> GetAvailableHostsAsync(
         CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
-        return Task.FromResult(AvailableReceivers);
+        return Task.FromResult(AvailableHosts);
     }
 
     public Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default)
@@ -109,7 +109,7 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.FromResult(ResumeResult);
     }
 
-    public Task<CreateSessionResponse> CreateReceiverSessionAsync(
+    public Task<CreateSessionResponse> CreateHostSessionAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default)
     {
@@ -133,7 +133,7 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.FromResult(response);
     }
 
-    public Task<bool> SetReceiverDiscoverableAsync(
+    public Task<bool> SetHostDiscoverableAsync(
         bool discoverable,
         CancellationToken cancellationToken = default)
     {
@@ -148,64 +148,64 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.FromResult(discoverable);
     }
 
-    public Task<JoinResponse> RequestToJoinReceiverAsync(
+    public Task<JoinResponse> RequestToJoinHostAsync(
         string sessionId,
         CancellationToken cancellationToken = default)
     {
-        RequestedReceiverSessionId = sessionId;
+        RequestedHostSessionId = sessionId;
         _ = cancellationToken;
         SessionId = JoinResponse.SessionId;
         return Task.FromResult(JoinResponse);
     }
 
-    public Task UpdateReceiverDisplayAsync(
+    public Task UpdateHostDisplayAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
-        UpdatedReceiverDisplay = display;
+        UpdatedHostDisplay = display;
         return Task.CompletedTask;
     }
 
     public Task ApplyClientSettingsAsync(
         string displayName,
         string? profilePicturePath,
-        int maximumPresenterConnections,
+        int maximumAnnotatorConnections,
         CancellationToken cancellationToken = default)
     {
         _ = displayName;
         _ = profilePicturePath;
-        _ = maximumPresenterConnections;
+        _ = maximumAnnotatorConnections;
         _ = cancellationToken;
         return Task.CompletedTask;
     }
 
-    public Task ApprovePresenterAsync(
+    public Task ApproveAnnotatorAsync(
         string sessionId,
-        string presenterConnectionId,
+        string annotatorConnectionId,
         CancellationToken cancellationToken = default)
     {
         _ = sessionId;
         _ = cancellationToken;
-        ApprovedPresenter = new PresenterDescriptor(
-            presenterConnectionId,
-            "presenter-id",
-            "Presenter",
+        ApprovedAnnotator = new AnnotatorDescriptor(
+            annotatorConnectionId,
+            "annotator-id",
+            "Annotator",
             "1.0.0");
         return Task.CompletedTask;
     }
 
-    public Task RejectPresenterAsync(
+    public Task RejectAnnotatorAsync(
         string sessionId,
-        string presenterConnectionId,
+        string annotatorConnectionId,
         CancellationToken cancellationToken = default)
     {
         _ = sessionId;
         _ = cancellationToken;
-        RejectedPresenter = new PresenterDescriptor(
-            presenterConnectionId,
-            "presenter-id",
-            "Presenter",
+        RejectedAnnotator = new AnnotatorDescriptor(
+            annotatorConnectionId,
+            "annotator-id",
+            "Annotator",
             "1.0.0");
         return Task.CompletedTask;
     }
@@ -264,34 +264,34 @@ internal sealed class FakeRelayClient : IRelayClient
             new RelayConnectionStatusChangedEventArgs(status, message));
     }
 
-    public void RaiseReceiverDirectoryChanged() =>
-        ReceiverDirectoryChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseHostDirectoryChanged() =>
+        HostDirectoryChanged?.Invoke(this, EventArgs.Empty);
 
-    public void RaiseJoinRequest(PresenterDescriptor presenter) =>
-        PresenterJoinRequested?.Invoke(this, new PresenterJoinRequestedEventArgs(presenter));
+    public void RaiseJoinRequest(AnnotatorDescriptor annotator) =>
+        AnnotatorJoinRequested?.Invoke(this, new AnnotatorJoinRequestedEventArgs(annotator));
 
-    public void RaiseJoinRequestCancelled(string presenterConnectionId) =>
-        PresenterJoinCancelled?.Invoke(
+    public void RaiseJoinRequestCancelled(string annotatorConnectionId) =>
+        AnnotatorJoinCancelled?.Invoke(
             this,
-            new PresenterJoinCancelledEventArgs(presenterConnectionId));
+            new AnnotatorJoinCancelledEventArgs(annotatorConnectionId));
 
     public void RaiseApproved(SessionStateMessage state)
     {
         SessionId = state.SessionId;
         Credential ??= new SessionCredential(
             state.SessionId,
-            ClientRole.Presenter,
-            "presenter-id",
+            ClientRole.Annotator,
+            "annotator-id",
             new string('s', 32),
             new string('r', 32),
             state.ExpiresAt);
         SessionApproved?.Invoke(this, new RelaySessionStateEventArgs(state));
     }
 
-    public void RaiseReceiverDisplayChanged(DisplayDescriptor display) =>
-        ReceiverDisplayChanged?.Invoke(
+    public void RaiseHostDisplayChanged(DisplayDescriptor display) =>
+        HostDisplayChanged?.Invoke(
             this,
-            new RelayReceiverDisplayChangedEventArgs(display));
+            new RelayHostDisplayChangedEventArgs(display));
 
     public void RaisePointer(PointerEventMessage pointerEvent) =>
         PointerReceived?.Invoke(this, new RelayPointerEventArgs(pointerEvent));

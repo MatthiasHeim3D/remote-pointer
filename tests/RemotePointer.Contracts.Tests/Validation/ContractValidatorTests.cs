@@ -66,7 +66,7 @@ public sealed class ContractValidatorTests
     }
 
     [Fact]
-    public void Validate_ValidatesNestedReceiverDisplay()
+    public void Validate_ValidatesNestedHostDisplay()
     {
         var display = new DisplayDescriptor("display", "Display", -1, 1_080, 1d, 0);
         var state = new SessionStateMessage("session", true, display, DateTimeOffset.UtcNow.AddHours(1));

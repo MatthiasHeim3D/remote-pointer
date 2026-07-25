@@ -1,6 +1,6 @@
 namespace RemotePointer.Contracts.Messages;
 
-public sealed record AvailableReceiverDescriptor(
+public sealed record AvailableHostDescriptor(
     string SessionId,
     string DisplayName,
     string ApplicationInstanceId = "",

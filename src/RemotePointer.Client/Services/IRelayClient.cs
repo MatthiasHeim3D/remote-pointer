@@ -6,13 +6,13 @@ public interface IRelayClient : IAsyncDisposable
 {
     event EventHandler<RelayConnectionStatusChangedEventArgs>? ConnectionStatusChanged;
 
-    event EventHandler<PresenterJoinRequestedEventArgs>? PresenterJoinRequested;
+    event EventHandler<AnnotatorJoinRequestedEventArgs>? AnnotatorJoinRequested;
 
-    event EventHandler<PresenterJoinCancelledEventArgs>? PresenterJoinCancelled;
+    event EventHandler<AnnotatorJoinCancelledEventArgs>? AnnotatorJoinCancelled;
 
     event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
-    event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
+    event EventHandler<RelayHostDisplayChangedEventArgs>? HostDisplayChanged;
 
     event EventHandler<RelayPointerEventArgs>? PointerReceived;
 
@@ -20,7 +20,7 @@ public interface IRelayClient : IAsyncDisposable
 
     event EventHandler<RelaySessionEndedEventArgs>? SessionEnded;
 
-    event EventHandler? ReceiverDirectoryChanged;
+    event EventHandler? HostDirectoryChanged;
 
     string ServerUrl { get; }
 
@@ -41,41 +41,41 @@ public interface IRelayClient : IAsyncDisposable
     /// </summary>
     Task SetServerPasswordKeyAsync(string? key, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
+    Task<IReadOnlyList<AvailableHostDescriptor>> GetAvailableHostsAsync(
         CancellationToken cancellationToken = default);
 
     Task<bool> TryResumeSessionAsync(CancellationToken cancellationToken = default);
 
-    Task<CreateSessionResponse> CreateReceiverSessionAsync(
+    Task<CreateSessionResponse> CreateHostSessionAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default);
 
-    Task<bool> SetReceiverDiscoverableAsync(
+    Task<bool> SetHostDiscoverableAsync(
         bool discoverable,
         CancellationToken cancellationToken = default);
 
-    Task<JoinResponse> RequestToJoinReceiverAsync(
+    Task<JoinResponse> RequestToJoinHostAsync(
         string sessionId,
         CancellationToken cancellationToken = default);
 
-    Task UpdateReceiverDisplayAsync(
+    Task UpdateHostDisplayAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default);
 
     Task ApplyClientSettingsAsync(
         string displayName,
         string? profilePicturePath,
-        int maximumPresenterConnections,
+        int maximumAnnotatorConnections,
         CancellationToken cancellationToken = default);
 
-    Task ApprovePresenterAsync(
+    Task ApproveAnnotatorAsync(
         string sessionId,
-        string presenterConnectionId,
+        string annotatorConnectionId,
         CancellationToken cancellationToken = default);
 
-    Task RejectPresenterAsync(
+    Task RejectAnnotatorAsync(
         string sessionId,
-        string presenterConnectionId,
+        string annotatorConnectionId,
         CancellationToken cancellationToken = default);
 
     Task DisconnectAllConnectionsAsync(CancellationToken cancellationToken = default);

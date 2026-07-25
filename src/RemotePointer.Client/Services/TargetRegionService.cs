@@ -32,10 +32,10 @@ public sealed class TargetRegionService : ITargetRegionService
         this.calibrationStore = calibrationStore ?? new TargetRegionCalibrationStore();
     }
 
-    public void SetCalibrationIdentity(string? receiverIdentity)
+    public void SetCalibrationIdentity(string? hostIdentity)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        calibrationIdentity = string.IsNullOrWhiteSpace(receiverIdentity) ? null : receiverIdentity;
+        calibrationIdentity = string.IsNullOrWhiteSpace(hostIdentity) ? null : hostIdentity;
         calibratedRectangle = calibrationIdentity is null
             ? null
             : calibrationStore.Load(calibrationIdentity);
@@ -100,7 +100,7 @@ public sealed class TargetRegionService : ITargetRegionService
 
         expectedAspectRatio = newExpectedAspectRatio;
         InvalidateCalibration(
-            "The receiver display shape changed. Recalibrate the target area.");
+            "The host display shape changed. Recalibrate the target area.");
     }
 
     public void InvalidateCalibration(string message)

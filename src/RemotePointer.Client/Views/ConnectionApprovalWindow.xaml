@@ -48,11 +48,11 @@
                                    FontFamily="Segoe MDL2 Assets"
                                    FontSize="15"
                                    Foreground="#60CDFF"
-                                   Visibility="{Binding PresenterProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                   Visibility="{Binding AnnotatorProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
                                    Text="&#xE77B;" />
                         <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
                             <Ellipse.Fill>
-                                <ImageBrush ImageSource="{Binding PresenterProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                <ImageBrush ImageSource="{Binding AnnotatorProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
                                             Stretch="UniformToFill" />
                             </Ellipse.Fill>
                         </Ellipse>
@@ -64,7 +64,7 @@
                                FontWeight="SemiBold"
                                Foreground="#F5F5F5"
                                Text="Connection request" />
-                    <TextBlock x:Name="PresenterNameText"
+                    <TextBlock x:Name="AnnotatorNameText"
                                Margin="0,3,0,0"
                                FontFamily="Segoe UI"
                                FontSize="12"

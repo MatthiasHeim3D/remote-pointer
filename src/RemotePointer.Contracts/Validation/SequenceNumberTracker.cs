@@ -3,10 +3,10 @@ namespace RemotePointer.Contracts.Validation;
 public sealed class SequenceNumberTracker
 {
     /// <summary>
-    /// How far ahead of the highest accepted number a sender may jump. A sender increments by
+    /// How far ahead of the highest accepted number an annotator may jump. An annotator increments by
     /// one per event within a session, so this only rejects implausible values - including one
     /// close to <see cref="long.MaxValue"/>, which would move the window past every number the
-    /// sender could go on to use and stall its own stream until it is approved again.
+    /// annotator could go on to use and stall its own stream until it is approved again.
     /// </summary>
     public const long MaximumForwardGap = 1L << 20;
 

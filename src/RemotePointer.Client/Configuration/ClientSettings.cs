@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows.Media.Imaging;
 namespace RemotePointer.Client.Configuration;
 
@@ -16,7 +17,7 @@ public sealed class ClientSettings
 
     public UserProfileSettings Profile { get; init; } = new();
 
-    public ReceiverSettings Receiver { get; init; } = new();
+    public HostSettings Host { get; init; } = new();
 
     public StartupSettings Startup { get; init; } = new();
 
@@ -73,42 +74,42 @@ public sealed class ClientSettings
         string serverAddress,
         string userName,
         string? profilePicturePath,
-        int? maximumSenderConnections = null,
+        int? maximumAnnotatorConnections = null,
         bool? launchAtStartup = null,
         string? selectedDisplayId = null,
         bool? showUsageHints = null,
-        bool? receiverAvailable = null,
+        bool? hostAvailable = null,
         int? drawingOpacityPercent = null)
     {
         var normalizedServerAddress = NormalizeServerAddress(serverAddress);
         var normalizedUserName = userName.Trim();
-        var requestedMaximumSenderConnections = maximumSenderConnections
-            ?? Receiver.MaximumSenderConnections;
+        var requestedMaximumAnnotatorConnections = maximumAnnotatorConnections
+            ?? Host.MaximumAnnotatorConnections;
 
         ValidateValues(
             normalizedServerAddress,
             normalizedUserName,
-            requestedMaximumSenderConnections);
+            requestedMaximumAnnotatorConnections);
 
         Server.BaseUrl = normalizedServerAddress;
         Profile.UserName = normalizedUserName;
         Profile.PicturePath = profilePicturePath?.Trim() ?? string.Empty;
-        if (maximumSenderConnections.HasValue)
+        if (maximumAnnotatorConnections.HasValue)
         {
-            Receiver.MaximumSenderConnections = maximumSenderConnections.Value;
+            Host.MaximumAnnotatorConnections = maximumAnnotatorConnections.Value;
         }
         if (launchAtStartup.HasValue)
         {
             Startup.LaunchAtStartup = launchAtStartup.Value;
         }
-        Receiver.SelectedDisplayId = selectedDisplayId?.Trim() ?? string.Empty;
+        Host.SelectedDisplayId = selectedDisplayId?.Trim() ?? string.Empty;
         if (showUsageHints.HasValue)
         {
             Pointer.ShowUsageHints = showUsageHints.Value;
         }
-        if (receiverAvailable.HasValue)
+        if (hostAvailable.HasValue)
         {
-            Receiver.IsAvailable = receiverAvailable.Value;
+            Host.IsAvailable = hostAvailable.Value;
         }
         if (drawingOpacityPercent.HasValue)
         {
@@ -118,9 +119,9 @@ public sealed class ClientSettings
         WriteUserPreferences();
     }
 
-    public void SaveReceiverAvailability(bool isAvailable)
+    public void SaveHostAvailability(bool isAvailable)
     {
-        Receiver.IsAvailable = isAvailable;
+        Host.IsAvailable = isAvailable;
         WriteUserPreferences();
     }
 
@@ -143,11 +144,11 @@ public sealed class ClientSettings
                 Server.BaseUrl,
                 Profile.UserName,
                 Profile.PicturePath,
-                Receiver.MaximumSenderConnections,
+                Host.MaximumAnnotatorConnections,
                 Startup.LaunchAtStartup,
-                Receiver.SelectedDisplayId,
+                Host.SelectedDisplayId,
                 Pointer.ShowUsageHints,
-                Receiver.IsAvailable,
+                Host.IsAvailable,
                 Pointer.HasShownUsageHints,
                 Pointer.DrawingOpacityPercent),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
@@ -182,7 +183,7 @@ public sealed class ClientSettings
         }
 
         Server.BaseUrl = NormalizeServerAddress(Server.BaseUrl);
-        ValidateValues(Server.BaseUrl, Profile.UserName, Receiver.MaximumSenderConnections);
+        ValidateValues(Server.BaseUrl, Profile.UserName, Host.MaximumAnnotatorConnections);
     }
 
     public static bool TryNormalizeServerAddress(
@@ -231,7 +232,7 @@ public sealed class ClientSettings
     private static void ValidateValues(
         string serverAddress,
         string userName,
-        int maximumSenderConnections)
+        int maximumAnnotatorConnections)
     {
         _ = NormalizeServerAddress(serverAddress);
 
@@ -240,10 +241,10 @@ public sealed class ClientSettings
             throw new InvalidOperationException("Username is required and must be 128 characters or fewer.");
         }
 
-        if (maximumSenderConnections is < 1 or > 16)
+        if (maximumAnnotatorConnections is < 1 or > 16)
         {
             throw new InvalidOperationException(
-                "Maximum connected senders must be between 1 and 16.");
+                "Maximum connected annotators must be between 1 and 16.");
         }
     }
 
@@ -289,12 +290,13 @@ public sealed class ClientSettings
             ? preferences.UserName
             : string.Empty;
         Profile.PicturePath = preferences.ProfilePicturePath ?? string.Empty;
-        Receiver.MaximumSenderConnections = Math.Clamp(
-            preferences.MaximumSenderConnections <= 0 ? 2 : preferences.MaximumSenderConnections,
+        var maximumAnnotatorConnections = preferences.EffectiveMaximumAnnotatorConnections;
+        Host.MaximumAnnotatorConnections = Math.Clamp(
+            maximumAnnotatorConnections <= 0 ? 2 : maximumAnnotatorConnections,
             1,
             16);
-        Receiver.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
-        Receiver.IsAvailable = preferences.ReceiverAvailable;
+        Host.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
+        Host.IsAvailable = preferences.EffectiveHostAvailable;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
         Pointer.ShowUsageHints = preferences.ShowUsageHints;
         Pointer.HasShownUsageHints = preferences.HasShownUsageHints;
@@ -379,13 +381,37 @@ public sealed class ClientSettings
         string ServerAddress,
         string UserName,
         string ProfilePicturePath,
-        int MaximumSenderConnections = 2,
+        int? MaximumAnnotatorConnections = null,
         bool LaunchAtStartup = false,
         string SelectedDisplayId = "",
         bool ShowUsageHints = true,
-        bool ReceiverAvailable = false,
+        bool? HostAvailable = null,
         bool HasShownUsageHints = false,
-        int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent);
+        int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent)
+    {
+        /// <summary>
+        /// The annotator limit under the name it had before the sender/annotator rename. A file
+        /// written by an older client still uses it, and without reading it here an upgrade
+        /// would silently drop the user's choice back to the default.
+        /// </summary>
+        [JsonPropertyName("maximumSenderConnections")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? MaximumSenderConnections { get; init; }
+
+        /// <summary>
+        /// Host availability under the name it had before the receiver/host rename.
+        /// </summary>
+        [JsonPropertyName("receiverAvailable")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? ReceiverAvailable { get; init; }
+
+        // The current name wins when both are present, so the first save after an upgrade
+        // settles the file on the new spelling and the legacy value stops being consulted.
+        public int EffectiveMaximumAnnotatorConnections =>
+            MaximumAnnotatorConnections ?? MaximumSenderConnections ?? 2;
+
+        public bool EffectiveHostAvailable => HostAvailable ?? ReceiverAvailable ?? false;
+    }
 }
 
 public sealed class ServerSettings
@@ -420,7 +446,7 @@ public sealed class PointerSettings
     public bool HasShownUsageHints { get; set; }
 
     /// <summary>
-    /// How opaque the sender's own shapes are drawn inside the input area. The receiver always
+    /// How opaque the annotator's own shapes are drawn inside the input area. The host always
     /// renders at full opacity; this only softens the local copy so it competes less with the
     /// same drawing coming back through the shared video feed.
     /// </summary>
@@ -444,9 +470,9 @@ public sealed class UserProfileSettings
     public string PicturePath { get; set; } = string.Empty;
 }
 
-public sealed class ReceiverSettings
+public sealed class HostSettings
 {
-    public int MaximumSenderConnections { get; set; } = 2;
+    public int MaximumAnnotatorConnections { get; set; } = 2;
 
     public string SelectedDisplayId { get; set; } = string.Empty;
 

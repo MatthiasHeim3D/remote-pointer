@@ -10,7 +10,7 @@ public interface ITargetRegionService : IDisposable
 
     TargetRegionState State { get; }
 
-    void SetCalibrationIdentity(string? receiverIdentity);
+    void SetCalibrationIdentity(string? hostIdentity);
 
     void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints);
 

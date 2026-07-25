@@ -7,7 +7,7 @@ namespace RemotePointer.Server.Sessions;
 
 public sealed class SessionManager : ISessionManager
 {
-    private const int DefaultPresenterConnections = 2;
+    private const int DefaultAnnotatorConnections = 2;
 
     /// <summary>
     /// The group every client shares when it presents no server password. It only ever holds
@@ -110,14 +110,14 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public CreateSessionResponse CreateReceiverSession(
+    public CreateSessionResponse CreateHostSession(
         DisplayDescriptor display,
         string connectionId,
         string clientInstanceId,
-        string receiverDisplayName,
+        string hostDisplayName,
         string? applicationInstanceId = null,
         ClientProfile? profile = null,
-        int? maximumPresenterConnections = null)
+        int? maximumAnnotatorConnections = null)
     {
         applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
             ? clientInstanceId
@@ -126,20 +126,20 @@ public sealed class SessionManager : ISessionManager
         EnsureIdentifier(connectionId, nameof(connectionId));
         EnsureIdentifier(clientInstanceId, nameof(clientInstanceId));
         EnsureIdentifier(applicationInstanceId, nameof(applicationInstanceId));
-        EnsureIdentifier(receiverDisplayName, nameof(receiverDisplayName));
+        EnsureIdentifier(hostDisplayName, nameof(hostDisplayName));
         EnsureValid(ContractValidator.Validate(display), "invalid_display");
         EnsureValid(ContractValidator.Validate(profile), "invalid_profile");
 
         // Callers that do not choose a limit get the client default, kept within whatever the
-        // relay allows, so a relay configured for a single presenter still accepts them.
-        var presenterLimit = maximumPresenterConnections
-            ?? Math.Min(DefaultPresenterConnections, sessionOptions.MaximumPresentersPerReceiver);
-        if (presenterLimit < 1
-            || presenterLimit > sessionOptions.MaximumPresentersPerReceiver)
+        // relay allows, so a relay configured for a single annotator still accepts them.
+        var annotatorLimit = maximumAnnotatorConnections
+            ?? Math.Min(DefaultAnnotatorConnections, sessionOptions.MaximumAnnotatorsPerHost);
+        if (annotatorLimit < 1
+            || annotatorLimit > sessionOptions.MaximumAnnotatorsPerHost)
         {
             throw new SessionOperationException(
-                "invalid_presenter_limit",
-                $"Maximum presenter connections must be between 1 and {sessionOptions.MaximumPresentersPerReceiver}.");
+                "invalid_annotator_limit",
+                $"Maximum annotator connections must be between 1 and {sessionOptions.MaximumAnnotatorsPerHost}.");
         }
 
         lock (syncRoot)
@@ -153,8 +153,8 @@ public sealed class SessionManager : ISessionManager
             var reconnectToken = secretGenerator.GenerateSecret();
             var expiresAt = now.AddHours(sessionOptions.MaximumSessionHours);
 
-            var receiver = new Participant(
-                ClientRole.Receiver,
+            var host = new Participant(
+                ClientRole.Host,
                 clientInstanceId,
                 connectionId,
                 secretGenerator.HashSecret(sessionToken),
@@ -165,23 +165,23 @@ public sealed class SessionManager : ISessionManager
                 expiresAt,
                 secretGenerator.HashSecret(sessionSecret),
                 display,
-                receiverDisplayName,
+                hostDisplayName,
                 applicationInstanceId,
                 profile.PicturePng is null ? null : [.. profile.PicturePng],
-                receiver,
+                host,
                 sessionOptions.SequenceWindowSize,
-                presenterLimit,
+                annotatorLimit,
                 GetConnectionGroupNoLock(connectionId));
             session.IsDiscoverable = true;
 
             sessions.Add(sessionId, session);
             connections.Add(
                 connectionId,
-                new ConnectionMembership(sessionId, ClientRole.Receiver, Approved: true));
+                new ConnectionMembership(sessionId, ClientRole.Host, Approved: true));
 
             var credential = new SessionCredential(
                 sessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 clientInstanceId,
                 sessionToken,
                 reconnectToken,
@@ -190,7 +190,7 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public IReadOnlyList<AvailableReceiverDescriptor> GetAvailableReceivers(
+    public IReadOnlyList<AvailableHostDescriptor> GetAvailableHosts(
         string? excludedApplicationInstanceId = null,
         string? connectionId = null)
     {
@@ -210,17 +210,17 @@ public sealed class SessionManager : ISessionManager
                     session.IsDiscoverable
                     && string.Equals(session.GroupKey, groupKey, StringComparison.Ordinal)
                     && session.ExpiresAt > now
-                    && session.Receiver.ConnectionId is not null
-                    && session.PendingPresenter is null
-                    && session.Presenters.Count < session.MaximumPresenterConnections
+                    && session.Host.ConnectionId is not null
+                    && session.PendingAnnotator is null
+                    && session.Annotators.Count < session.MaximumAnnotatorConnections
                     && !string.Equals(
                         session.ApplicationInstanceId,
                         excludedApplicationInstanceId,
                         StringComparison.Ordinal))
-                .OrderBy(session => session.ReceiverDisplayName, StringComparer.OrdinalIgnoreCase)
-                .Select(session => new AvailableReceiverDescriptor(
+                .OrderBy(session => session.HostDisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(session => new AvailableHostDescriptor(
                     session.Id,
-                    session.ReceiverDisplayName,
+                    session.HostDisplayName,
                     session.ApplicationInstanceId,
                     session.ProfilePicturePng is null
                         ? null
@@ -229,28 +229,28 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public bool SetReceiverDiscoverable(
+    public bool SetHostDiscoverable(
         string sessionId,
-        string receiverConnectionId,
+        string hostConnectionId,
         bool discoverable)
     {
         EnsureIdentifier(sessionId, nameof(sessionId));
-        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
 
         lock (syncRoot)
         {
             var session = GetActiveSession(sessionId);
             EnsureMembership(
-                receiverConnectionId,
+                hostConnectionId,
                 sessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 requireApproved: true);
             session.IsDiscoverable = discoverable;
             return session.IsDiscoverable;
         }
     }
 
-    public JoinSessionResult RequestToJoinReceiver(
+    public JoinSessionResult RequestToJoinHost(
         DirectJoinRequest request,
         string connectionId,
         string displayName,
@@ -274,12 +274,12 @@ public sealed class SessionManager : ISessionManager
             if (!sessions.TryGetValue(request.SessionId, out var session)
                 || !session.IsDiscoverable
                 || session.ExpiresAt <= timeProvider.GetUtcNow()
-                || session.Receiver.ConnectionId is null)
+                || session.Host.ConnectionId is null)
             {
-                return RejectedJoin("The selected receiver is no longer available.");
+                return RejectedJoin("The selected host is no longer available.");
             }
 
-            return BindPendingPresenterNoLock(
+            return BindPendingAnnotatorNoLock(
                 session,
                 connectionId,
                 request.ClientInstanceId,
@@ -290,117 +290,117 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public ReceiverDisplayUpdateResult UpdateReceiverDisplay(
+    public HostDisplayUpdateResult UpdateHostDisplay(
         string sessionId,
-        string receiverConnectionId,
+        string hostConnectionId,
         DisplayDescriptor display)
     {
         EnsureIdentifier(sessionId, nameof(sessionId));
-        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
         EnsureValid(ContractValidator.Validate(display), "invalid_display");
 
         lock (syncRoot)
         {
             var session = GetActiveSession(sessionId);
             EnsureMembership(
-                receiverConnectionId,
+                hostConnectionId,
                 sessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 requireApproved: true);
-            session.ReceiverDisplay = display;
-            return new ReceiverDisplayUpdateResult(
+            session.HostDisplay = display;
+            return new HostDisplayUpdateResult(
                 session.Id,
-                session.Presenters.Values
-                    .Select(presenter => presenter.Participant.ConnectionId)
+                session.Annotators.Values
+                    .Select(annotator => annotator.Participant.ConnectionId)
                     .OfType<string>()
                     .ToArray(),
                 display);
         }
     }
 
-    public ReceiverClientSettingsUpdateResult UpdateReceiverClientSettings(
+    public HostClientSettingsUpdateResult UpdateHostClientSettings(
         string sessionId,
-        string receiverConnectionId,
-        string receiverDisplayName,
+        string hostConnectionId,
+        string hostDisplayName,
         ClientProfile profile,
-        int maximumPresenterConnections)
+        int maximumAnnotatorConnections)
     {
         EnsureIdentifier(sessionId, nameof(sessionId));
-        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
-        EnsureIdentifier(receiverDisplayName, nameof(receiverDisplayName));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
+        EnsureIdentifier(hostDisplayName, nameof(hostDisplayName));
         EnsureValid(ContractValidator.Validate(profile), "invalid_profile");
-        if (maximumPresenterConnections < 1
-            || maximumPresenterConnections > sessionOptions.MaximumPresentersPerReceiver)
+        if (maximumAnnotatorConnections < 1
+            || maximumAnnotatorConnections > sessionOptions.MaximumAnnotatorsPerHost)
         {
             throw new SessionOperationException(
-                "invalid_presenter_limit",
-                $"Maximum presenter connections must be between 1 and {sessionOptions.MaximumPresentersPerReceiver}.");
+                "invalid_annotator_limit",
+                $"Maximum annotator connections must be between 1 and {sessionOptions.MaximumAnnotatorsPerHost}.");
         }
 
         lock (syncRoot)
         {
             var session = GetActiveSession(sessionId);
             EnsureMembership(
-                receiverConnectionId,
+                hostConnectionId,
                 sessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 requireApproved: true);
-            session.ReceiverDisplayName = receiverDisplayName;
+            session.HostDisplayName = hostDisplayName;
             session.ProfilePicturePng = profile.PicturePng is null
                 ? null
                 : [.. profile.PicturePng];
-            session.MaximumPresenterConnections = maximumPresenterConnections;
-            return new ReceiverClientSettingsUpdateResult(
-                receiverConnectionId,
-                session.Presenters.Values
-                    .Select(presenter => presenter.Participant.ConnectionId)
+            session.MaximumAnnotatorConnections = maximumAnnotatorConnections;
+            return new HostClientSettingsUpdateResult(
+                hostConnectionId,
+                session.Annotators.Values
+                    .Select(annotator => annotator.Participant.ConnectionId)
                     .OfType<string>()
                     .ToArray(),
                 CreateState(session));
         }
     }
 
-    public ApprovePresenterResult ApprovePresenter(
+    public ApproveAnnotatorResult ApproveAnnotator(
         string sessionId,
-        string presenterConnectionId,
-        string receiverConnectionId)
+        string annotatorConnectionId,
+        string hostConnectionId)
     {
         EnsureIdentifier(sessionId, nameof(sessionId));
-        EnsureIdentifier(presenterConnectionId, nameof(presenterConnectionId));
-        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        EnsureIdentifier(annotatorConnectionId, nameof(annotatorConnectionId));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
 
         lock (syncRoot)
         {
             var session = GetActiveSession(sessionId);
             EnsureMembership(
-                receiverConnectionId,
+                hostConnectionId,
                 sessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 requireApproved: true);
 
-            var pending = session.PendingPresenter;
+            var pending = session.PendingAnnotator;
             if (pending is null
                 || !string.Equals(
                     pending.ConnectionId,
-                    presenterConnectionId,
+                    annotatorConnectionId,
                     StringComparison.Ordinal))
             {
                 throw new SessionOperationException(
-                    "presenter_not_pending",
-                    "The selected presenter no longer has a pending request.");
+                    "annotator_not_pending",
+                    "The selected annotator no longer has a pending request.");
             }
 
             var sessionToken = secretGenerator.GenerateSecret();
             var reconnectToken = secretGenerator.GenerateSecret();
             var participant = new Participant(
-                ClientRole.Presenter,
+                ClientRole.Annotator,
                 pending.ClientInstanceId,
-                presenterConnectionId,
+                annotatorConnectionId,
                 secretGenerator.HashSecret(sessionToken),
                 secretGenerator.HashSecret(reconnectToken));
-            session.Presenters.Add(
-                presenterConnectionId,
-                new ConnectedPresenter(
+            session.Annotators.Add(
+                annotatorConnectionId,
+                new ConnectedAnnotator(
                     pending,
                     participant,
                     new SequenceNumberTracker(session.SequenceWindowSize),
@@ -408,64 +408,64 @@ public sealed class SessionManager : ISessionManager
                         rateLimitOptions.EventsPerSecond,
                         rateLimitOptions.BurstSize,
                         timeProvider.GetUtcNow())));
-            session.PendingPresenter = null;
-            connections[presenterConnectionId] = new ConnectionMembership(
+            session.PendingAnnotator = null;
+            connections[annotatorConnectionId] = new ConnectionMembership(
                 session.Id,
-                ClientRole.Presenter,
+                ClientRole.Annotator,
                 Approved: true);
 
             var credential = new SessionCredential(
                 session.Id,
-                ClientRole.Presenter,
+                ClientRole.Annotator,
                 pending.ClientInstanceId,
                 sessionToken,
                 reconnectToken,
                 session.ExpiresAt);
             var state = CreateState(session);
-            return new ApprovePresenterResult(
+            return new ApproveAnnotatorResult(
                 session.Id,
-                presenterConnectionId,
-                receiverConnectionId,
+                annotatorConnectionId,
+                hostConnectionId,
                 credential,
                 state);
         }
     }
 
-    public RejectPresenterResult RejectPresenter(
+    public RejectAnnotatorResult RejectAnnotator(
         string sessionId,
-        string presenterConnectionId,
-        string receiverConnectionId)
+        string annotatorConnectionId,
+        string hostConnectionId)
     {
         EnsureIdentifier(sessionId, nameof(sessionId));
-        EnsureIdentifier(presenterConnectionId, nameof(presenterConnectionId));
-        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        EnsureIdentifier(annotatorConnectionId, nameof(annotatorConnectionId));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
 
         lock (syncRoot)
         {
             var session = GetActiveSession(sessionId);
             EnsureMembership(
-                receiverConnectionId,
+                hostConnectionId,
                 sessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 requireApproved: true);
-            var pending = session.PendingPresenter;
+            var pending = session.PendingAnnotator;
             if (pending is null
                 || !string.Equals(
                     pending.ConnectionId,
-                    presenterConnectionId,
+                    annotatorConnectionId,
                     StringComparison.Ordinal))
             {
                 throw new SessionOperationException(
-                    "presenter_not_pending",
-                    "The selected presenter no longer has a pending request.");
+                    "annotator_not_pending",
+                    "The selected annotator no longer has a pending request.");
             }
 
-            session.PendingPresenter = null;
-            connections.Remove(presenterConnectionId);
-            return new RejectPresenterResult(
+            session.PendingAnnotator = null;
+            connections.Remove(annotatorConnectionId);
+            return new RejectAnnotatorResult(
                 sessionId,
-                presenterConnectionId,
-                receiverConnectionId);
+                annotatorConnectionId,
+                hostConnectionId);
         }
     }
 
@@ -480,11 +480,11 @@ public sealed class SessionManager : ISessionManager
         lock (syncRoot)
         {
             var membership = GetMembership(connectionId);
-            if (membership.Role != ClientRole.Presenter || !membership.Approved)
+            if (membership.Role != ClientRole.Annotator || !membership.Approved)
             {
                 throw new SessionOperationException(
-                    "presenter_required",
-                    "Only the approved presenter can send pointer events.");
+                    "annotator_required",
+                    "Only the approved annotator can send pointer events.");
             }
 
             if (!string.Equals(membership.SessionId, pointerEvent.SessionId, StringComparison.Ordinal))
@@ -495,28 +495,28 @@ public sealed class SessionManager : ISessionManager
             }
 
             var session = GetActiveSession(membership.SessionId);
-            if (!session.Presenters.TryGetValue(connectionId, out var presenter))
+            if (!session.Annotators.TryGetValue(connectionId, out var annotator))
             {
                 throw new SessionOperationException(
-                    "presenter_not_connected",
-                    "The presenter is no longer connected to this session.");
+                    "annotator_not_connected",
+                    "The annotator is no longer connected to this session.");
             }
-            // The budget is per presenter: each one sends its own gesture stream at the
+            // The budget is per annotator: each one sends its own gesture stream at the
             // client's update rate, so a shared session budget would throttle everybody as
-            // soon as two senders drew at the same time.
-            if (!presenter.RateLimiter.TryAcquire(now))
+            // soon as two annotators drew at the same time.
+            if (!annotator.RateLimiter.TryAcquire(now))
             {
                 throw new SessionOperationException(
                     "pointer_rate_exceeded",
                     "The pointer event rate limit was exceeded.");
             }
 
-            if (!presenter.SequenceNumbers.TryAccept(pointerEvent.SequenceNumber))
+            if (!annotator.SequenceNumbers.TryAccept(pointerEvent.SequenceNumber))
             {
                 return new PointerRelayResult(
                     PointerRelayDisposition.IgnoredSequence,
                     session.Id,
-                    session.Receiver.ConnectionId);
+                    session.Host.ConnectionId);
             }
 
             session.PointerCount++;
@@ -524,7 +524,7 @@ public sealed class SessionManager : ISessionManager
             return new PointerRelayResult(
                 PointerRelayDisposition.Accepted,
                 session.Id,
-                session.Receiver.ConnectionId);
+                session.Host.ConnectionId);
         }
     }
 
@@ -538,11 +538,11 @@ public sealed class SessionManager : ISessionManager
         lock (syncRoot)
         {
             var membership = GetMembership(connectionId);
-            if (membership.Role != ClientRole.Receiver || !membership.Approved)
+            if (membership.Role != ClientRole.Host || !membership.Approved)
             {
                 throw new SessionOperationException(
-                    "receiver_required",
-                    "Only the session receiver can acknowledge pointer events.");
+                    "host_required",
+                    "Only the session host can acknowledge pointer events.");
             }
 
             var session = GetActiveSession(membership.SessionId);
@@ -564,15 +564,15 @@ public sealed class SessionManager : ISessionManager
         {
             EnsureConnectionIsUnbound(connectionId);
             var session = GetActiveSession(request.SessionId);
-            ConnectedPresenter? connectedPresenter = null;
+            ConnectedAnnotator? connectedAnnotator = null;
             Participant? participant;
-            if (request.Role == ClientRole.Receiver)
+            if (request.Role == ClientRole.Host)
             {
-                participant = session.Receiver;
+                participant = session.Host;
             }
-            else if (request.Role == ClientRole.Presenter)
+            else if (request.Role == ClientRole.Annotator)
             {
-                connectedPresenter = session.Presenters.Values.FirstOrDefault(candidate =>
+                connectedAnnotator = session.Annotators.Values.FirstOrDefault(candidate =>
                     string.Equals(
                         candidate.Participant.ClientInstanceId,
                         request.ClientInstanceId,
@@ -583,7 +583,7 @@ public sealed class SessionManager : ISessionManager
                     && secretGenerator.SecretMatches(
                         request.ReconnectToken,
                         candidate.Participant.ReconnectTokenHash));
-                participant = connectedPresenter?.Participant;
+                participant = connectedAnnotator?.Participant;
             }
             else
             {
@@ -612,24 +612,24 @@ public sealed class SessionManager : ISessionManager
             var newReconnectToken = secretGenerator.GenerateSecret();
             participant.ConnectionId = connectionId;
             participant.ReconnectTokenHash = secretGenerator.HashSecret(newReconnectToken);
-            if (connectedPresenter is not null)
+            if (connectedAnnotator is not null)
             {
-                var previousPresenterKey = session.Presenters
-                    .First(pair => ReferenceEquals(pair.Value, connectedPresenter))
+                var previousAnnotatorKey = session.Annotators
+                    .First(pair => ReferenceEquals(pair.Value, connectedAnnotator))
                     .Key;
-                if (!string.Equals(previousPresenterKey, connectionId, StringComparison.Ordinal))
+                if (!string.Equals(previousAnnotatorKey, connectionId, StringComparison.Ordinal))
                 {
-                    session.Presenters.Remove(previousPresenterKey);
+                    session.Annotators.Remove(previousAnnotatorKey);
                 }
 
-                session.ReplacePointerOriginConnection(previousPresenterKey, connectionId);
-                connectedPresenter.Descriptor = connectedPresenter.Descriptor with
+                session.ReplacePointerOriginConnection(previousAnnotatorKey, connectionId);
+                connectedAnnotator.Descriptor = connectedAnnotator.Descriptor with
                 {
                     ConnectionId = connectionId,
                 };
-                session.Presenters[connectionId] = connectedPresenter;
+                session.Annotators[connectionId] = connectedAnnotator;
             }
-            if (participant.Role == ClientRole.Receiver)
+            if (participant.Role == ClientRole.Host)
             {
                 if (!string.IsNullOrWhiteSpace(applicationInstanceId))
                 {
@@ -669,7 +669,7 @@ public sealed class SessionManager : ISessionManager
         {
             var membership = GetMembership(connectionId);
             if (!string.Equals(membership.SessionId, sessionId, StringComparison.Ordinal)
-                || (!membership.Approved && membership.Role != ClientRole.Presenter))
+                || (!membership.Approved && membership.Role != ClientRole.Annotator))
             {
                 throw new SessionOperationException(
                     "session_member_required",
@@ -677,42 +677,42 @@ public sealed class SessionManager : ISessionManager
             }
 
             var session = GetActiveSession(sessionId);
-            if (membership.Role == ClientRole.Presenter)
+            if (membership.Role == ClientRole.Annotator)
             {
-                // A presenter waiting for approval is still bound to the session, so it can
-                // withdraw its own request without waiting for the receiver to answer.
+                // An annotator waiting for approval is still bound to the session, so it can
+                // withdraw its own request without waiting for the host to answer.
                 return membership.Approved
-                    ? DisconnectPresenterNoLock(session, connectionId)
-                    : CancelPendingPresenterNoLock(session, connectionId);
+                    ? DisconnectAnnotatorNoLock(session, connectionId)
+                    : CancelPendingAnnotatorNoLock(session, connectionId);
             }
 
             return TerminateSessionNoLock(session);
         }
     }
 
-    public SessionTerminationResult DisconnectPresenters(
+    public SessionTerminationResult DisconnectAnnotators(
         string sessionId,
-        string receiverConnectionId)
+        string hostConnectionId)
     {
         EnsureIdentifier(sessionId, nameof(sessionId));
-        EnsureIdentifier(receiverConnectionId, nameof(receiverConnectionId));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
 
         lock (syncRoot)
         {
             var session = GetActiveSession(sessionId);
             EnsureMembership(
-                receiverConnectionId,
+                hostConnectionId,
                 sessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 requireApproved: true);
-            if (session.Presenters.Count == 0 && session.PendingPresenter is null)
+            if (session.Annotators.Count == 0 && session.PendingAnnotator is null)
             {
                 throw new SessionOperationException(
-                    "presenter_not_connected",
-                    "No presenter is connected to this receiver.");
+                    "annotator_not_connected",
+                    "No annotator is connected to this host.");
             }
 
-            return DisconnectPresentersNoLock(session);
+            return DisconnectAnnotatorsNoLock(session);
         }
     }
 
@@ -762,61 +762,61 @@ public sealed class SessionManager : ISessionManager
                 return null;
             }
 
-            if (membership.Role == ClientRole.Receiver)
+            if (membership.Role == ClientRole.Host)
             {
                 connections.Remove(connectionId);
-                session.Receiver.ConnectionId = null;
+                session.Host.ConnectionId = null;
 
-                var presenterConnectionIds = session.Presenters.Values
-                    .Select(presenter => presenter.Participant.ConnectionId)
+                var annotatorConnectionIds = session.Annotators.Values
+                    .Select(annotator => annotator.Participant.ConnectionId)
                     .OfType<string>()
-                    .Concat(session.PendingPresenter is null
+                    .Concat(session.PendingAnnotator is null
                         ? []
-                        : [session.PendingPresenter.ConnectionId])
+                        : [session.PendingAnnotator.ConnectionId])
                     .Distinct(StringComparer.Ordinal)
                     .ToArray();
-                foreach (var presenterConnectionId in presenterConnectionIds)
+                foreach (var annotatorConnectionId in annotatorConnectionIds)
                 {
-                    connections.Remove(presenterConnectionId);
+                    connections.Remove(annotatorConnectionId);
                 }
 
-                session.Presenters.Clear();
-                session.PendingPresenter = null;
+                session.Annotators.Clear();
+                session.PendingAnnotator = null;
                 session.ClearPointerOrigins();
                 return new ConnectionDisconnectResult(
                     session.Id,
-                    ClientRole.Receiver,
-                    presenterConnectionIds,
-                    ReceiverConnectionId: null,
+                    ClientRole.Host,
+                    annotatorConnectionIds,
+                    HostConnectionId: null,
                     CreateState(session),
                     session.GroupKey);
             }
 
             connections.Remove(connectionId);
-            var cancelledPresenterRequestConnectionId = membership.Approved
+            var cancelledAnnotatorRequestConnectionId = membership.Approved
                 ? null
                 : connectionId;
             if (!membership.Approved)
             {
-                if (session.PendingPresenter?.ConnectionId == connectionId)
+                if (session.PendingAnnotator?.ConnectionId == connectionId)
                 {
-                    session.PendingPresenter = null;
+                    session.PendingAnnotator = null;
                 }
             }
             else
             {
-                session.Presenters.Remove(connectionId);
+                session.Annotators.Remove(connectionId);
                 session.RemovePointerOrigins(connectionId);
             }
 
             return new ConnectionDisconnectResult(
                 session.Id,
-                ClientRole.Presenter,
-                PresenterConnectionIdsToEnd: [],
-                session.Receiver.ConnectionId,
+                ClientRole.Annotator,
+                AnnotatorConnectionIdsToEnd: [],
+                session.Host.ConnectionId,
                 CreateState(session),
                 session.GroupKey,
-                cancelledPresenterRequestConnectionId);
+                cancelledAnnotatorRequestConnectionId);
         }
     }
 
@@ -828,8 +828,8 @@ public sealed class SessionManager : ISessionManager
             || sessionOptions.MaximumSessionHours <= 0
             || sessionOptions.MaximumSessionHours > 8
             || sessionOptions.SequenceWindowSize <= 0
-            || sessionOptions.MaximumPresentersPerReceiver is < 1
-                or > ContractValidator.MaximumConnectedPresenters
+            || sessionOptions.MaximumAnnotatorsPerHost is < 1
+                or > ContractValidator.MaximumConnectedAnnotators
             || rateLimitOptions.EventsPerSecond <= 0
             || rateLimitOptions.BurstSize <= 0)
         {
@@ -862,7 +862,7 @@ public sealed class SessionManager : ISessionManager
         null,
         null);
 
-    private JoinSessionResult BindPendingPresenterNoLock(
+    private JoinSessionResult BindPendingAnnotatorNoLock(
         SessionRecord session,
         string connectionId,
         string clientInstanceId,
@@ -882,7 +882,7 @@ public sealed class SessionManager : ISessionManager
                 GetConnectionGroupNoLock(connectionId),
                 StringComparison.Ordinal))
         {
-            return RejectedJoin("The selected receiver is no longer available.");
+            return RejectedJoin("The selected host is no longer available.");
         }
 
         if (string.Equals(
@@ -893,34 +893,34 @@ public sealed class SessionManager : ISessionManager
             return RejectedJoin("A client cannot connect to itself.");
         }
 
-        if (session.Presenters.Count >= session.MaximumPresenterConnections)
+        if (session.Annotators.Count >= session.MaximumAnnotatorConnections)
         {
-            return RejectedJoin("The receiver has reached its connection limit.");
+            return RejectedJoin("The host has reached its connection limit.");
         }
 
-        if (session.PendingPresenter is not null)
+        if (session.PendingAnnotator is not null)
         {
-            return RejectedJoin("The session already has a presenter request.");
+            return RejectedJoin("The session already has an annotator request.");
         }
 
         // An access request settles the question the grace period asks, so the session is no
         // longer a candidate for collection even on a relay that publishes nothing.
         session.AbandonmentResolved = true;
-        var presenter = new PresenterDescriptor(
+        var annotator = new AnnotatorDescriptor(
             connectionId,
             clientInstanceId,
             displayName,
             clientVersion,
             profilePicturePng is null ? null : [.. profilePicturePng]);
-        session.PendingPresenter = presenter;
+        session.PendingAnnotator = annotator;
         connections.Add(
             connectionId,
-            new ConnectionMembership(session.Id, ClientRole.Presenter, Approved: false));
+            new ConnectionMembership(session.Id, ClientRole.Annotator, Approved: false));
 
         return new JoinSessionResult(
             new JoinResponse(true, session.Id, null),
-            session.Receiver.ConnectionId,
-            presenter);
+            session.Host.ConnectionId,
+            annotator);
     }
 
     private string GenerateUniqueSessionId()
@@ -939,12 +939,12 @@ public sealed class SessionManager : ISessionManager
         connectionGroups.TryGetValue(connectionId, out var groupKey) ? groupKey : OpenGroupKey;
 
     /// <summary>
-    /// Carries a session across with the receiver that changed its server password. A session
-    /// keeps the key it was published under otherwise, which would leave the receiver listed
+    /// Carries a session across with the host that changed its server password. A session
+    /// keeps the key it was published under otherwise, which would leave the host listed
     /// and joinable under the password it just left. A pending request that no longer shares
     /// the session's group is cancelled from either side: approving one would form a session
-    /// across the boundary the password draws. An already approved presenter keeps its place,
-    /// because the receiver admitted it by name and ends it with Disconnect all senders.
+    /// across the boundary the password draws. An already approved annotator keeps its place,
+    /// because the host admitted it by name and ends it with Disconnect all annotators.
     /// </summary>
     private SessionTerminationResult? MoveConnectionSessionNoLock(
         string connectionId,
@@ -956,7 +956,7 @@ public sealed class SessionManager : ISessionManager
             return null;
         }
 
-        if (membership.Role == ClientRole.Receiver)
+        if (membership.Role == ClientRole.Host)
         {
             session.GroupKey = groupKey;
         }
@@ -965,7 +965,7 @@ public sealed class SessionManager : ISessionManager
             return null;
         }
 
-        var pending = session.PendingPresenter;
+        var pending = session.PendingAnnotator;
         if (pending is null
             || string.Equals(
                 session.GroupKey,
@@ -975,7 +975,7 @@ public sealed class SessionManager : ISessionManager
             return null;
         }
 
-        return CancelPendingPresenterNoLock(session, pending.ConnectionId);
+        return CancelPendingAnnotatorNoLock(session, pending.ConnectionId);
     }
 
     /// <summary>
@@ -995,12 +995,12 @@ public sealed class SessionManager : ISessionManager
 
     /// <summary>
     /// A session nobody has asked to join is abandoned only when nothing can make it reachable.
-    /// A connected receiver that chose to be invisible can publish itself at any time, so it
+    /// A connected host that chose to be invisible can publish itself at any time, so it
     /// keeps its session; a disconnected shell that is also hidden can no longer be joined and
     /// is collected.
     /// </summary>
     private static bool IsAbandonedNoLock(SessionRecord session) =>
-        !session.IsDiscoverable && session.Receiver.ConnectionId is null;
+        !session.IsDiscoverable && session.Host.ConnectionId is null;
 
     private void EnsureConnectionIsUnbound(string connectionId)
     {
@@ -1076,115 +1076,115 @@ public sealed class SessionManager : ISessionManager
             session.GroupKey);
     }
 
-    private SessionTerminationResult DisconnectPresentersNoLock(SessionRecord session)
+    private SessionTerminationResult DisconnectAnnotatorsNoLock(SessionRecord session)
     {
-        var presenterConnectionIds = session.Presenters.Values
-            .Select(presenter => presenter.Participant.ConnectionId)
+        var annotatorConnectionIds = session.Annotators.Values
+            .Select(annotator => annotator.Participant.ConnectionId)
             .OfType<string>()
-            .Concat(session.PendingPresenter is null
+            .Concat(session.PendingAnnotator is null
                 ? []
-                : [session.PendingPresenter.ConnectionId])
+                : [session.PendingAnnotator.ConnectionId])
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        foreach (var presenterConnectionId in presenterConnectionIds)
+        foreach (var annotatorConnectionId in annotatorConnectionIds)
         {
-            connections.Remove(presenterConnectionId);
+            connections.Remove(annotatorConnectionId);
         }
 
-        session.Presenters.Clear();
-        session.PendingPresenter = null;
+        session.Annotators.Clear();
+        session.PendingAnnotator = null;
         session.ClearPointerOrigins();
         return new SessionTerminationResult(
             session.Id,
-            presenterConnectionIds,
+            annotatorConnectionIds,
             session.PointerCount,
             session.GroupKey,
-            ReceiverPreserved: true,
-            PresenterConnectionId: presenterConnectionIds.FirstOrDefault(),
-            ReceiverConnectionId: session.Receiver.ConnectionId,
+            HostPreserved: true,
+            AnnotatorConnectionId: annotatorConnectionIds.FirstOrDefault(),
+            HostConnectionId: session.Host.ConnectionId,
             State: CreateState(session),
-            PresenterConnectionIds: presenterConnectionIds);
+            AnnotatorConnectionIds: annotatorConnectionIds);
     }
 
-    private SessionTerminationResult CancelPendingPresenterNoLock(
+    private SessionTerminationResult CancelPendingAnnotatorNoLock(
         SessionRecord session,
-        string presenterConnectionId)
+        string annotatorConnectionId)
     {
-        if (session.PendingPresenter is null
+        if (session.PendingAnnotator is null
             || !string.Equals(
-                session.PendingPresenter.ConnectionId,
-                presenterConnectionId,
+                session.PendingAnnotator.ConnectionId,
+                annotatorConnectionId,
                 StringComparison.Ordinal))
         {
             throw new SessionOperationException(
-                "presenter_not_pending",
+                "annotator_not_pending",
                 "This connection no longer has a pending request.");
         }
 
-        connections.Remove(presenterConnectionId);
-        session.PendingPresenter = null;
+        connections.Remove(annotatorConnectionId);
+        session.PendingAnnotator = null;
         return new SessionTerminationResult(
             session.Id,
-            [presenterConnectionId],
+            [annotatorConnectionId],
             session.PointerCount,
             session.GroupKey,
-            ReceiverPreserved: true,
-            PresenterConnectionId: presenterConnectionId,
-            ReceiverConnectionId: session.Receiver.ConnectionId,
+            HostPreserved: true,
+            AnnotatorConnectionId: annotatorConnectionId,
+            HostConnectionId: session.Host.ConnectionId,
             State: CreateState(session),
-            PresenterConnectionIds: [presenterConnectionId],
-            CancelledPresenterRequestConnectionId: presenterConnectionId);
+            AnnotatorConnectionIds: [annotatorConnectionId],
+            CancelledAnnotatorRequestConnectionId: annotatorConnectionId);
     }
 
-    private SessionTerminationResult DisconnectPresenterNoLock(
+    private SessionTerminationResult DisconnectAnnotatorNoLock(
         SessionRecord session,
-        string presenterConnectionId)
+        string annotatorConnectionId)
     {
-        connections.Remove(presenterConnectionId);
-        session.Presenters.Remove(presenterConnectionId);
-        session.RemovePointerOrigins(presenterConnectionId);
+        connections.Remove(annotatorConnectionId);
+        session.Annotators.Remove(annotatorConnectionId);
+        session.RemovePointerOrigins(annotatorConnectionId);
         return new SessionTerminationResult(
             session.Id,
-            [presenterConnectionId],
+            [annotatorConnectionId],
             session.PointerCount,
             session.GroupKey,
-            ReceiverPreserved: true,
-            PresenterConnectionId: presenterConnectionId,
-            ReceiverConnectionId: session.Receiver.ConnectionId,
+            HostPreserved: true,
+            AnnotatorConnectionId: annotatorConnectionId,
+            HostConnectionId: session.Host.ConnectionId,
             State: CreateState(session),
-            PresenterConnectionIds: [presenterConnectionId]);
+            AnnotatorConnectionIds: [annotatorConnectionId]);
     }
 
     private static SessionStateMessage CreateState(SessionRecord session) => new(
         session.Id,
-        Approved: session.Presenters.Count > 0,
-        session.ReceiverDisplay,
+        Approved: session.Annotators.Count > 0,
+        session.HostDisplay,
         session.ExpiresAt,
         session.IsDiscoverable,
-        session.Presenters.Values
-            .Select(presenter => new ConnectedPresenterDescriptor(
-                presenter.Descriptor.DisplayName,
-                presenter.Descriptor.ProfilePicturePng is null
+        session.Annotators.Values
+            .Select(annotator => new ConnectedAnnotatorDescriptor(
+                annotator.Descriptor.DisplayName,
+                annotator.Descriptor.ProfilePicturePng is null
                     ? null
-                    : [.. presenter.Descriptor.ProfilePicturePng]))
-            .OrderBy(presenter => presenter.DisplayName, StringComparer.OrdinalIgnoreCase)
+                    : [.. annotator.Descriptor.ProfilePicturePng]))
+            .OrderBy(annotator => annotator.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray(),
-        session.Receiver.ClientInstanceId,
+        session.Host.ClientInstanceId,
         session.ProfilePicturePng is null ? null : [.. session.ProfilePicturePng],
-        session.ReceiverDisplayName);
+        session.HostDisplayName);
 
     private sealed class SessionRecord(
         string id,
         DateTimeOffset abandonedAfter,
         DateTimeOffset expiresAt,
         string sessionSecretHash,
-        DisplayDescriptor receiverDisplay,
-        string receiverDisplayName,
+        DisplayDescriptor hostDisplay,
+        string hostDisplayName,
         string applicationInstanceId,
         byte[]? profilePicturePng,
-        Participant receiver,
+        Participant host,
         int sequenceWindowSize,
-        int maximumPresenterConnections,
+        int maximumAnnotatorConnections,
         string groupKey)
     {
         internal string Id { get; } = id;
@@ -1195,19 +1195,19 @@ public sealed class SessionManager : ISessionManager
 
         internal string SessionSecretHash { get; } = sessionSecretHash;
 
-        internal DisplayDescriptor ReceiverDisplay { get; set; } = receiverDisplay;
+        internal DisplayDescriptor HostDisplay { get; set; } = hostDisplay;
 
-        internal string ReceiverDisplayName { get; set; } = receiverDisplayName;
+        internal string HostDisplayName { get; set; } = hostDisplayName;
 
         internal string ApplicationInstanceId { get; set; } = applicationInstanceId;
 
         internal byte[]? ProfilePicturePng { get; set; } = profilePicturePng;
 
-        internal Participant Receiver { get; } = receiver;
+        internal Participant Host { get; } = host;
 
         internal int SequenceWindowSize { get; } = sequenceWindowSize;
 
-        internal int MaximumPresenterConnections { get; set; } = maximumPresenterConnections;
+        internal int MaximumAnnotatorConnections { get; set; } = maximumAnnotatorConnections;
 
         internal string GroupKey { get; set; } = groupKey;
 
@@ -1215,9 +1215,9 @@ public sealed class SessionManager : ISessionManager
 
         internal bool IsDiscoverable { get; set; }
 
-        internal PresenterDescriptor? PendingPresenter { get; set; }
+        internal AnnotatorDescriptor? PendingAnnotator { get; set; }
 
-        internal Dictionary<string, ConnectedPresenter> Presenters { get; } =
+        internal Dictionary<string, ConnectedAnnotator> Annotators { get; } =
             new(StringComparer.Ordinal);
 
         internal long PointerCount { get; set; }
@@ -1226,9 +1226,9 @@ public sealed class SessionManager : ISessionManager
 
         private Queue<Guid> PointerOriginOrder { get; } = [];
 
-        internal void RecordPointerOrigin(Guid eventId, string presenterConnectionId)
+        internal void RecordPointerOrigin(Guid eventId, string annotatorConnectionId)
         {
-            PointerOrigins[eventId] = presenterConnectionId;
+            PointerOrigins[eventId] = annotatorConnectionId;
             PointerOriginOrder.Enqueue(eventId);
             while (PointerOriginOrder.Count > 4_096)
             {
@@ -1238,17 +1238,17 @@ public sealed class SessionManager : ISessionManager
 
         internal string? TakePointerOrigin(Guid eventId)
         {
-            return PointerOrigins.Remove(eventId, out var presenterConnectionId)
-                ? presenterConnectionId
+            return PointerOrigins.Remove(eventId, out var annotatorConnectionId)
+                ? annotatorConnectionId
                 : null;
         }
 
-        internal void RemovePointerOrigins(string presenterConnectionId)
+        internal void RemovePointerOrigins(string annotatorConnectionId)
         {
             foreach (var eventId in PointerOrigins
                          .Where(pair => string.Equals(
                              pair.Value,
-                             presenterConnectionId,
+                             annotatorConnectionId,
                              StringComparison.Ordinal))
                          .Select(pair => pair.Key)
                          .ToArray())
@@ -1280,13 +1280,13 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    private sealed class ConnectedPresenter(
-        PresenterDescriptor descriptor,
+    private sealed class ConnectedAnnotator(
+        AnnotatorDescriptor descriptor,
         Participant participant,
         SequenceNumberTracker sequenceNumbers,
         PointerTokenBucket rateLimiter)
     {
-        internal PresenterDescriptor Descriptor { get; set; } = descriptor;
+        internal AnnotatorDescriptor Descriptor { get; set; } = descriptor;
 
         internal Participant Participant { get; } = participant;
 

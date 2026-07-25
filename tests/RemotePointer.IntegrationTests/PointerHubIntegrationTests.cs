@@ -21,12 +21,12 @@ public sealed class PointerHubIntegrationTests
     public async Task Discovery_AvailabilityChangesNotifyConnectedClients()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(factory, "receiver-notify", "Receiver");
+        await using var host = CreateConnection(factory, "host-notify", "Host");
         await using var observer = CreateConnection(factory, "observer-notify", "Observer");
         var notificationCount = 0;
         var receivedBoth = CompletionSource<bool>();
         observer.On(
-            "ReceiverDirectoryChanged",
+            "HostDirectoryChanged",
             () =>
             {
                 if (Interlocked.Increment(ref notificationCount) >= 2)
@@ -34,145 +34,145 @@ public sealed class PointerHubIntegrationTests
                     receivedBoth.TrySetResult(true);
                 }
             });
-        await receiver.StartAsync();
+        await host.StartAsync();
         await observer.StartAsync();
 
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
-        await receiver.InvokeAsync<bool>(
-            "SetReceiverDiscoverable",
+        await host.InvokeAsync<bool>(
+            "SetHostDiscoverable",
             created.SessionId,
             false);
 
         Assert.True(await receivedBoth.Task.WaitAsync(TestTimeout));
-        Assert.Empty(await observer.InvokeAsync<AvailableReceiverDescriptor[]>(
-            "GetAvailableReceivers"));
+        Assert.Empty(await observer.InvokeAsync<AvailableHostDescriptor[]>(
+            "GetAvailableHosts"));
     }
 
     [Fact]
-    public async Task Receiver_AcceptsMultiplePresentersUpToConfiguredLimit()
+    public async Task Host_AcceptsMultipleAnnotatorsUpToConfiguredLimit()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(factory, "receiver-multi", "Receiver");
-        await using var firstPresenter = CreateConnection(factory, "presenter-one", "Presenter One");
-        await using var secondPresenter = CreateConnection(factory, "presenter-two", "Presenter Two");
-        await using var thirdPresenter = CreateConnection(factory, "presenter-three", "Presenter Three");
-        var firstPending = CompletionSource<PresenterDescriptor>();
-        var secondPending = CompletionSource<PresenterDescriptor>();
+        await using var host = CreateConnection(factory, "host-multi", "Host");
+        await using var firstAnnotator = CreateConnection(factory, "annotator-one", "Annotator One");
+        await using var secondAnnotator = CreateConnection(factory, "annotator-two", "Annotator Two");
+        await using var thirdAnnotator = CreateConnection(factory, "annotator-three", "Annotator Three");
+        var firstPending = CompletionSource<AnnotatorDescriptor>();
+        var secondPending = CompletionSource<AnnotatorDescriptor>();
         var connectedState = CompletionSource<SessionStateMessage>();
         var firstEnded = CompletionSource<string>();
         var secondEnded = CompletionSource<string>();
         var requestCount = 0;
-        receiver.On<PresenterDescriptor>(
-            "PresenterJoinRequested",
-            presenter =>
+        host.On<AnnotatorDescriptor>(
+            "AnnotatorJoinRequested",
+            annotator =>
             {
                 if (Interlocked.Increment(ref requestCount) == 1)
                 {
-                    firstPending.TrySetResult(presenter);
+                    firstPending.TrySetResult(annotator);
                 }
                 else
                 {
-                    secondPending.TrySetResult(presenter);
+                    secondPending.TrySetResult(annotator);
                 }
             });
-        receiver.On<SessionStateMessage>(
+        host.On<SessionStateMessage>(
             "SessionApproved",
             state =>
             {
-                if (state.ConnectedPresenters?.Length == 2)
+                if (state.ConnectedAnnotators?.Length == 2)
                 {
                     connectedState.TrySetResult(state);
                 }
             });
-        firstPresenter.On<string>("SessionEnded", firstEnded.SetResult);
-        secondPresenter.On<string>("SessionEnded", secondEnded.SetResult);
-        await receiver.StartAsync();
-        await firstPresenter.StartAsync();
-        await secondPresenter.StartAsync();
-        await thirdPresenter.StartAsync();
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        firstAnnotator.On<string>("SessionEnded", firstEnded.SetResult);
+        secondAnnotator.On<string>("SessionEnded", secondEnded.SetResult);
+        await host.StartAsync();
+        await firstAnnotator.StartAsync();
+        await secondAnnotator.StartAsync();
+        await thirdAnnotator.StartAsync();
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
 
-        Assert.True((await firstPresenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"), string.Empty)).Accepted);
+        Assert.True((await firstAnnotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-one", "1.0.0"), string.Empty)).Accepted);
         var first = await firstPending.Task.WaitAsync(TestTimeout);
-        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, first.ConnectionId);
+        await host.InvokeAsync("ApproveAnnotator", created.SessionId, first.ConnectionId);
 
-        Assert.True((await secondPresenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"), string.Empty)).Accepted);
+        Assert.True((await secondAnnotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-two", "1.0.0"), string.Empty)).Accepted);
         var second = await secondPending.Task.WaitAsync(TestTimeout);
-        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, second.ConnectionId);
+        await host.InvokeAsync("ApproveAnnotator", created.SessionId, second.ConnectionId);
         var state = await connectedState.Task.WaitAsync(TestTimeout);
 
         Assert.Equal(
-            ["Presenter One", "Presenter Two"],
-            state.ConnectedPresenters!.Select(presenter => presenter.DisplayName).ToArray());
-        Assert.Empty(await thirdPresenter.InvokeAsync<AvailableReceiverDescriptor[]>(
-            "GetAvailableReceivers"));
-        var thirdJoin = await thirdPresenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-three", "1.0.0"), string.Empty);
+            ["Annotator One", "Annotator Two"],
+            state.ConnectedAnnotators!.Select(annotator => annotator.DisplayName).ToArray());
+        Assert.Empty(await thirdAnnotator.InvokeAsync<AvailableHostDescriptor[]>(
+            "GetAvailableHosts"));
+        var thirdJoin = await thirdAnnotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-three", "1.0.0"), string.Empty);
         Assert.False(thirdJoin.Accepted);
 
-        await receiver.InvokeAsync("DisconnectAllConnections", created.SessionId);
-        Assert.Contains("receiver", await firstEnded.Task.WaitAsync(TestTimeout));
-        Assert.Contains("receiver", await secondEnded.Task.WaitAsync(TestTimeout));
+        await host.InvokeAsync("DisconnectAllConnections", created.SessionId);
+        Assert.Contains("host", await firstEnded.Task.WaitAsync(TestTimeout));
+        Assert.Contains("host", await secondEnded.Task.WaitAsync(TestTimeout));
     }
 
     [Fact]
     public async Task Discovery_HidesAndRejectsSelfButAllowsSameMachinePeerWithProfile()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(
+        await using var host = CreateConnection(
             factory,
             "shared-machine-profile",
-            "Receiver",
-            "receiver-application");
+            "Host",
+            "host-application");
         await using var selfProbe = CreateConnection(
             factory,
             "shared-machine-profile",
             "Self probe",
-            "receiver-application");
+            "host-application");
         await using var otherInstance = CreateConnection(
             factory,
             "shared-machine-profile",
             "Other instance",
             "other-application");
-        await receiver.StartAsync();
+        await host.StartAsync();
         await selfProbe.StartAsync();
         await otherInstance.StartAsync();
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(picture),
             2,
             string.Empty);
 
         Assert.Empty(
-            await selfProbe.InvokeAsync<AvailableReceiverDescriptor[]>(
-                "GetAvailableReceivers"));
+            await selfProbe.InvokeAsync<AvailableHostDescriptor[]>(
+                "GetAvailableHosts"));
         var visible = Assert.Single(
-            await otherInstance.InvokeAsync<AvailableReceiverDescriptor[]>(
-                "GetAvailableReceivers"));
+            await otherInstance.InvokeAsync<AvailableHostDescriptor[]>(
+                "GetAvailableHosts"));
         Assert.Equal(picture, visible.ProfilePicturePng);
         var selfJoin = await selfProbe.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
+            "RequestToJoinHost",
             new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"), string.Empty);
         var peerJoin = await otherInstance.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
+            "RequestToJoinHost",
             new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"), string.Empty);
 
         Assert.False(selfJoin.Accepted);
@@ -180,77 +180,77 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
-    public async Task ActiveReceiver_ProfileChangePropagatesWithoutReconnect()
+    public async Task ActiveHost_ProfileChangePropagatesWithoutReconnect()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(factory, "receiver-live-profile", "Receiver");
-        await using var presenter = CreateConnection(factory, "presenter-live-profile", "Presenter");
-        var joinRequested = CompletionSource<PresenterDescriptor>();
+        await using var host = CreateConnection(factory, "host-live-profile", "Host");
+        await using var annotator = CreateConnection(factory, "annotator-live-profile", "Annotator");
+        var joinRequested = CompletionSource<AnnotatorDescriptor>();
         var updatedState = CompletionSource<SessionStateMessage>();
-        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
-        presenter.On<SessionStateMessage>(
+        host.On<AnnotatorDescriptor>("AnnotatorJoinRequested", joinRequested.SetResult);
+        annotator.On<SessionStateMessage>(
             "SessionApproved",
             state =>
             {
-                if (state.ReceiverDisplayName == "Updated Receiver")
+                if (state.HostDisplayName == "Updated Host")
                 {
                     updatedState.TrySetResult(state);
                 }
             });
-        await receiver.StartAsync();
-        await presenter.StartAsync();
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        await host.StartAsync();
+        await annotator.StartAsync();
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
-            "Receiver");
-        var join = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-live-profile", "1.0.0"),
-            "Presenter");
+            "Host");
+        var join = await annotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-live-profile", "1.0.0"),
+            "Annotator");
         Assert.True(join.Accepted);
         var pending = await joinRequested.Task.WaitAsync(TestTimeout);
-        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, pending.ConnectionId);
+        await host.InvokeAsync("ApproveAnnotator", created.SessionId, pending.ConnectionId);
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-        await receiver.InvokeAsync(
-            "UpdateReceiverClientSettings",
+        await host.InvokeAsync(
+            "UpdateHostClientSettings",
             created.SessionId,
-            "Updated Receiver",
+            "Updated Host",
             new ClientProfile(picture),
             2);
 
         var state = await updatedState.Task.WaitAsync(TestTimeout);
-        Assert.Equal(picture, state.ReceiverProfilePicturePng);
+        Assert.Equal(picture, state.HostProfilePicturePng);
         Assert.Equal(created.SessionId, state.SessionId);
     }
 
     [Fact]
-    public async Task ReceiverRejection_NotifiesPendingPresenterAndRestoresAvailability()
+    public async Task HostRejection_NotifiesPendingAnnotatorAndRestoresAvailability()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(factory, "receiver-reject", "Receiver");
-        await using var presenter = CreateConnection(factory, "presenter-reject", "Presenter");
-        var joinRequested = CompletionSource<PresenterDescriptor>();
+        await using var host = CreateConnection(factory, "host-reject", "Host");
+        await using var annotator = CreateConnection(factory, "annotator-reject", "Annotator");
+        var joinRequested = CompletionSource<AnnotatorDescriptor>();
         var rejected = CompletionSource<string>();
-        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
-        presenter.On<string>("SessionEnded", rejected.SetResult);
-        await receiver.StartAsync();
-        await presenter.StartAsync();
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        host.On<AnnotatorDescriptor>("AnnotatorJoinRequested", joinRequested.SetResult);
+        annotator.On<string>("SessionEnded", rejected.SetResult);
+        await host.StartAsync();
+        await annotator.StartAsync();
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
-        var join = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-reject", "1.0.0"), string.Empty);
+        var join = await annotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-reject", "1.0.0"), string.Empty);
         Assert.True(join.Accepted);
         var pending = await joinRequested.Task.WaitAsync(TestTimeout);
 
-        await receiver.InvokeAsync("RejectPresenter", created.SessionId, pending.ConnectionId);
+        await host.InvokeAsync("RejectAnnotator", created.SessionId, pending.ConnectionId);
 
         Assert.Contains(
             "declined",
@@ -259,23 +259,23 @@ public sealed class PointerHubIntegrationTests
         Assert.Equal(
             created.SessionId,
             Assert.Single(
-                await presenter.InvokeAsync<AvailableReceiverDescriptor[]>(
-                    "GetAvailableReceivers")).SessionId);
+                await annotator.InvokeAsync<AvailableHostDescriptor[]>(
+                    "GetAvailableHosts")).SessionId);
     }
 
     [Fact]
-    public async Task Discovery_ReceiverDisconnectAll_PreservesReceiverAvailability()
+    public async Task Discovery_HostDisconnectAll_PreservesHostAvailability()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
-        await using var presenter = CreateConnection(factory, "presenter-client", "Presenter Machine");
-        var joinRequested = CompletionSource<PresenterDescriptor>();
+        await using var host = CreateConnection(factory, "host-client", "Host Machine");
+        await using var annotator = CreateConnection(factory, "annotator-client", "Annotator Machine");
+        var joinRequested = CompletionSource<AnnotatorDescriptor>();
         var approved = CompletionSource<SessionStateMessage>();
         var availableAgain = CompletionSource<SessionStateMessage>();
-        var presenterDisconnected = CompletionSource<string>();
+        var annotatorDisconnected = CompletionSource<string>();
         var displayChanged = CompletionSource<DisplayDescriptor>();
-        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
-        receiver.On<SessionStateMessage>(
+        host.On<AnnotatorDescriptor>("AnnotatorJoinRequested", joinRequested.SetResult);
+        host.On<SessionStateMessage>(
             "SessionApproved",
             state =>
             {
@@ -284,30 +284,30 @@ public sealed class PointerHubIntegrationTests
                     availableAgain.TrySetResult(state);
                 }
             });
-        presenter.On<SessionStateMessage>("SessionApproved", approved.SetResult);
-        presenter.On<string>("SessionEnded", presenterDisconnected.SetResult);
-        presenter.On<DisplayDescriptor>("ReceiverDisplayChanged", displayChanged.SetResult);
-        await receiver.StartAsync();
-        await presenter.StartAsync();
+        annotator.On<SessionStateMessage>("SessionApproved", approved.SetResult);
+        annotator.On<string>("SessionEnded", annotatorDisconnected.SetResult);
+        annotator.On<DisplayDescriptor>("HostDisplayChanged", displayChanged.SetResult);
+        await host.StartAsync();
+        await annotator.StartAsync();
 
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
         var listed = Assert.Single(
-            await presenter.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
-        Assert.Equal("Receiver Machine", listed.DisplayName);
+            await annotator.InvokeAsync<AvailableHostDescriptor[]>("GetAvailableHosts"));
+        Assert.Equal("Host Machine", listed.DisplayName);
 
-        var join = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
+        var join = await annotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"), string.Empty);
         var pending = await joinRequested.Task.WaitAsync(TestTimeout);
         Assert.True(join.Accepted);
         Assert.False(approved.Task.IsCompleted);
 
-        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, pending.ConnectionId);
+        await host.InvokeAsync("ApproveAnnotator", created.SessionId, pending.ConnectionId);
         _ = await approved.Task.WaitAsync(TestTimeout);
         var updatedDisplay = new DisplayDescriptor(
             "display-1",
@@ -316,23 +316,23 @@ public sealed class PointerHubIntegrationTests
             1_920,
             1d,
             90);
-        await receiver.InvokeAsync("UpdateReceiverDisplay", created.SessionId, updatedDisplay);
+        await host.InvokeAsync("UpdateHostDisplay", created.SessionId, updatedDisplay);
         Assert.Equal(updatedDisplay, await displayChanged.Task.WaitAsync(TestTimeout));
 
-        await receiver.InvokeAsync("DisconnectAllConnections", created.SessionId);
+        await host.InvokeAsync("DisconnectAllConnections", created.SessionId);
         Assert.Contains(
-            "receiver",
-            await presenterDisconnected.Task.WaitAsync(TestTimeout),
+            "host",
+            await annotatorDisconnected.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
-        Assert.True((await availableAgain.Task.WaitAsync(TestTimeout)).ReceiverDiscoverable);
+        Assert.True((await availableAgain.Task.WaitAsync(TestTimeout)).HostDiscoverable);
         Assert.Equal(
             created.SessionId,
             Assert.Single(
-                await presenter.InvokeAsync<AvailableReceiverDescriptor[]>(
-                    "GetAvailableReceivers")).SessionId);
-        var nextJoin = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
+                await annotator.InvokeAsync<AvailableHostDescriptor[]>(
+                    "GetAvailableHosts")).SessionId);
+        var nextJoin = await annotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"), string.Empty);
         Assert.True(nextJoin.Accepted);
     }
 
@@ -340,142 +340,142 @@ public sealed class PointerHubIntegrationTests
     public async Task ApprovedSession_RevokesPeersOnDisconnectAndRequiresFreshRequest()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(factory, "receiver-client", "Receiver Machine");
-        await using var presenter = CreateConnection(factory, "presenter-client", "Presenter Machine");
-        var joinRequested = CompletionSource<PresenterDescriptor>();
-        var presenterCredential = CompletionSource<SessionCredential>();
+        await using var host = CreateConnection(factory, "host-client", "Host Machine");
+        await using var annotator = CreateConnection(factory, "annotator-client", "Annotator Machine");
+        var joinRequested = CompletionSource<AnnotatorDescriptor>();
+        var annotatorCredential = CompletionSource<SessionCredential>();
         var firstPointerReceived = CompletionSource<PointerEventMessage>();
         var acknowledgementReceived = CompletionSource<PointerAcknowledgement>();
-        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
-        receiver.On<PointerEventMessage>("PointerReceived", firstPointerReceived.SetResult);
-        presenter.On<SessionCredential>("SessionCredentialIssued", presenterCredential.SetResult);
-        presenter.On<PointerAcknowledgement>("PointerDisplayed", acknowledgementReceived.SetResult);
+        host.On<AnnotatorDescriptor>("AnnotatorJoinRequested", joinRequested.SetResult);
+        host.On<PointerEventMessage>("PointerReceived", firstPointerReceived.SetResult);
+        annotator.On<SessionCredential>("SessionCredentialIssued", annotatorCredential.SetResult);
+        annotator.On<PointerAcknowledgement>("PointerDisplayed", acknowledgementReceived.SetResult);
 
-        await receiver.StartAsync();
-        await presenter.StartAsync();
+        await host.StartAsync();
+        await annotator.StartAsync();
 
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
-        var joinResponse = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
+        var joinResponse = await annotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"),
             string.Empty);
-        var presenterDescriptor = await joinRequested.Task.WaitAsync(TestTimeout);
+        var annotatorDescriptor = await joinRequested.Task.WaitAsync(TestTimeout);
 
         Assert.True(joinResponse.Accepted);
         Assert.Equal(created.SessionId, joinResponse.SessionId);
-        Assert.Equal("Presenter Machine", presenterDescriptor.DisplayName);
+        Assert.Equal("Annotator Machine", annotatorDescriptor.DisplayName);
 
-        await receiver.InvokeAsync(
-            "ApprovePresenter",
+        await host.InvokeAsync(
+            "ApproveAnnotator",
             created.SessionId,
-            presenterDescriptor.ConnectionId);
-        var issuedPresenterCredential = await presenterCredential.Task.WaitAsync(TestTimeout);
+            annotatorDescriptor.ConnectionId);
+        var issuedAnnotatorCredential = await annotatorCredential.Task.WaitAsync(TestTimeout);
         var firstPointer = CreatePointer(created.SessionId, sequenceNumber: 0);
 
-        await presenter.InvokeAsync("SendPointer", firstPointer);
+        await annotator.InvokeAsync("SendPointer", firstPointer);
         var received = await firstPointerReceived.Task.WaitAsync(TestTimeout);
         Assert.Equal(firstPointer, received);
 
         var acknowledgement = new PointerAcknowledgement(
             firstPointer.EventId,
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        await receiver.InvokeAsync("AcknowledgePointer", acknowledgement);
+        await host.InvokeAsync("AcknowledgePointer", acknowledgement);
         Assert.Equal(
             acknowledgement,
             await acknowledgementReceived.Task.WaitAsync(TestTimeout));
 
-        var presenterDisconnectedState = CompletionSource<SessionStateMessage>();
-        receiver.On<SessionStateMessage>(
+        var annotatorDisconnectedState = CompletionSource<SessionStateMessage>();
+        host.On<SessionStateMessage>(
             "SessionApproved",
             state =>
             {
                 if (!state.Approved)
                 {
-                    presenterDisconnectedState.TrySetResult(state);
+                    annotatorDisconnectedState.TrySetResult(state);
                 }
             });
-        await presenter.StopAsync();
+        await annotator.StopAsync();
         Assert.Empty(
-            (await presenterDisconnectedState.Task.WaitAsync(TestTimeout)).ConnectedPresenters!);
+            (await annotatorDisconnectedState.Task.WaitAsync(TestTimeout)).ConnectedAnnotators!);
 
-        await using var resumedPresenter = CreateConnection(
+        await using var resumedAnnotator = CreateConnection(
             factory,
-            "presenter-client",
-            "Presenter Machine");
-        await resumedPresenter.StartAsync();
+            "annotator-client",
+            "Annotator Machine");
+        await resumedAnnotator.StartAsync();
         await Assert.ThrowsAsync<HubException>(
-            () => resumedPresenter.InvokeAsync<SessionCredential>(
+            () => resumedAnnotator.InvokeAsync<SessionCredential>(
                 "ResumeSession",
                 new SessionResumeRequest(
-                    issuedPresenterCredential.SessionId,
-                    ClientRole.Presenter,
-                    issuedPresenterCredential.ClientInstanceId,
-                    issuedPresenterCredential.SessionToken,
-                    issuedPresenterCredential.ReconnectToken)));
+                    issuedAnnotatorCredential.SessionId,
+                    ClientRole.Annotator,
+                    issuedAnnotatorCredential.ClientInstanceId,
+                    issuedAnnotatorCredential.SessionToken,
+                    issuedAnnotatorCredential.ReconnectToken)));
 
-        var secondJoinRequested = CompletionSource<PresenterDescriptor>();
-        receiver.On<PresenterDescriptor>(
-            "PresenterJoinRequested",
+        var secondJoinRequested = CompletionSource<AnnotatorDescriptor>();
+        host.On<AnnotatorDescriptor>(
+            "AnnotatorJoinRequested",
             secondJoinRequested.SetResult);
-        var freshJoin = await resumedPresenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
-        var secondPresenterDescriptor = await secondJoinRequested.Task.WaitAsync(TestTimeout);
+        var freshJoin = await resumedAnnotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"), string.Empty);
+        var secondAnnotatorDescriptor = await secondJoinRequested.Task.WaitAsync(TestTimeout);
         Assert.True(freshJoin.Accepted);
-        await receiver.InvokeAsync(
-            "ApprovePresenter",
+        await host.InvokeAsync(
+            "ApproveAnnotator",
             created.SessionId,
-            secondPresenterDescriptor.ConnectionId);
+            secondAnnotatorDescriptor.ConnectionId);
 
-        var presenterSessionEnded = CompletionSource<string>();
-        resumedPresenter.On<string>("SessionEnded", presenterSessionEnded.SetResult);
-        await receiver.StopAsync();
+        var annotatorSessionEnded = CompletionSource<string>();
+        resumedAnnotator.On<string>("SessionEnded", annotatorSessionEnded.SetResult);
+        await host.StopAsync();
         Assert.Contains(
             "request access again",
-            await presenterSessionEnded.Task.WaitAsync(TestTimeout),
+            await annotatorSessionEnded.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
 
-        await using var resumedReceiver = CreateConnection(
+        await using var resumedHost = CreateConnection(
             factory,
-            "receiver-client",
-            "Receiver Machine");
-        var resumedReceiverState = CompletionSource<SessionStateMessage>();
-        var receiverSessionEnded = CompletionSource<string>();
-        resumedReceiver.On<SessionStateMessage>(
+            "host-client",
+            "Host Machine");
+        var resumedHostState = CompletionSource<SessionStateMessage>();
+        var hostSessionEnded = CompletionSource<string>();
+        resumedHost.On<SessionStateMessage>(
             "SessionApproved",
-            resumedReceiverState.SetResult);
-        resumedReceiver.On<string>("SessionEnded", receiverSessionEnded.SetResult);
-        await resumedReceiver.StartAsync();
-        var rotatedReceiverCredential = await resumedReceiver.InvokeAsync<SessionCredential>(
+            resumedHostState.SetResult);
+        resumedHost.On<string>("SessionEnded", hostSessionEnded.SetResult);
+        await resumedHost.StartAsync();
+        var rotatedHostCredential = await resumedHost.InvokeAsync<SessionCredential>(
             "ResumeSession",
             new SessionResumeRequest(
                 created.Credential.SessionId,
-                ClientRole.Receiver,
+                ClientRole.Host,
                 created.Credential.ClientInstanceId,
                 created.Credential.SessionToken,
                 created.Credential.ReconnectToken));
-        Assert.NotEqual(created.Credential.ReconnectToken, rotatedReceiverCredential.ReconnectToken);
-        Assert.False((await resumedReceiverState.Task.WaitAsync(TestTimeout)).Approved);
+        Assert.NotEqual(created.Credential.ReconnectToken, rotatedHostCredential.ReconnectToken);
+        Assert.False((await resumedHostState.Task.WaitAsync(TestTimeout)).Approved);
 
-        var thirdJoinRequested = CompletionSource<PresenterDescriptor>();
-        resumedReceiver.On<PresenterDescriptor>(
-            "PresenterJoinRequested",
+        var thirdJoinRequested = CompletionSource<AnnotatorDescriptor>();
+        resumedHost.On<AnnotatorDescriptor>(
+            "AnnotatorJoinRequested",
             thirdJoinRequested.SetResult);
-        var requestAfterReceiverRestart = await resumedPresenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
-        Assert.True(requestAfterReceiverRestart.Accepted);
+        var requestAfterHostRestart = await resumedAnnotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"), string.Empty);
+        Assert.True(requestAfterHostRestart.Accepted);
         _ = await thirdJoinRequested.Task.WaitAsync(TestTimeout);
 
-        await resumedReceiver.InvokeAsync("EndSession", created.SessionId);
+        await resumedHost.InvokeAsync("EndSession", created.SessionId);
         Assert.Contains(
             "ended",
-            await receiverSessionEnded.Task.WaitAsync(TestTimeout),
+            await hostSessionEnded.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -505,7 +505,7 @@ public sealed class PointerHubIntegrationTests
 
         var exception = await Record.ExceptionAsync(
             () => connection.InvokeAsync(
-                    "RequestToJoinReceiver",
+                    "RequestToJoinHost",
                     oversizedRequest,
                     string.Empty)
                 .WaitAsync(TestTimeout));
@@ -592,14 +592,14 @@ public sealed class PointerHubIntegrationTests
                 builder.UseSetting("RateLimits:EventsPerSecond", "20");
                 builder.UseSetting("RateLimits:BurstSize", "30");
             });
-        await using var receiver = CreateConnection(factory, "receiver-rate", "Receiver");
-        await using var presenter = CreateConnection(factory, "presenter-rate", "Presenter");
-        var joinRequested = CompletionSource<PresenterDescriptor>();
-        var presenterCredential = CompletionSource<SessionCredential>();
+        await using var host = CreateConnection(factory, "host-rate", "Host");
+        await using var annotator = CreateConnection(factory, "annotator-rate", "Annotator");
+        var joinRequested = CompletionSource<AnnotatorDescriptor>();
+        var annotatorCredential = CompletionSource<SessionCredential>();
         var allPointersReceived = CompletionSource<int>();
         var receivedCount = 0;
-        receiver.On<PresenterDescriptor>("PresenterJoinRequested", joinRequested.SetResult);
-        receiver.On<PointerEventMessage>(
+        host.On<AnnotatorDescriptor>("AnnotatorJoinRequested", joinRequested.SetResult);
+        host.On<PointerEventMessage>(
             "PointerReceived",
             _ =>
             {
@@ -609,32 +609,32 @@ public sealed class PointerHubIntegrationTests
                     allPointersReceived.TrySetResult(count);
                 }
             });
-        presenter.On<SessionCredential>("SessionCredentialIssued", presenterCredential.SetResult);
-        await receiver.StartAsync();
-        await presenter.StartAsync();
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        annotator.On<SessionCredential>("SessionCredentialIssued", annotatorCredential.SetResult);
+        await host.StartAsync();
+        await annotator.StartAsync();
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
-        _ = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-rate", "1.0.0"),
+        _ = await annotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-rate", "1.0.0"),
             string.Empty);
         var pending = await joinRequested.Task.WaitAsync(TestTimeout);
-        await receiver.InvokeAsync("ApprovePresenter", created.SessionId, pending.ConnectionId);
-        _ = await presenterCredential.Task.WaitAsync(TestTimeout);
+        await host.InvokeAsync("ApproveAnnotator", created.SessionId, pending.ConnectionId);
+        _ = await annotatorCredential.Task.WaitAsync(TestTimeout);
 
         for (var sequence = 0; sequence < 30; sequence++)
         {
-            await presenter.InvokeAsync(
+            await annotator.InvokeAsync(
                 "SendPointer",
                 CreatePointer(created.SessionId, sequence));
         }
 
         await Assert.ThrowsAsync<HubException>(
-            () => presenter.InvokeAsync(
+            () => annotator.InvokeAsync(
                 "SendPointer",
                 CreatePointer(created.SessionId, 30)));
         Assert.Equal(30, await allPointersReceived.Task.WaitAsync(TestTimeout));
@@ -644,40 +644,40 @@ public sealed class PointerHubIntegrationTests
     public async Task ServerPassword_ScopesTheDirectoryToClientsThatShareIt()
     {
         using var factory = CreateFactory(requireServerPassword: true);
-        await using var receiver = CreateConnection(factory, "receiver-group", "Receiver");
+        await using var host = CreateConnection(factory, "host-group", "Host");
         await using var insider = CreateConnection(factory, "insider-group", "Insider");
         await using var outsider = CreateConnection(factory, "outsider-group", "Outsider");
-        await receiver.StartAsync();
+        await host.StartAsync();
         await insider.StartAsync();
         await outsider.StartAsync();
 
         Assert.True(
-            (await receiver.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
+            (await host.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
                 .ServerPasswordRequired);
         await Assert.ThrowsAsync<HubException>(
-            () => receiver.InvokeAsync<CreateSessionResponse>(
-                "CreateReceiverSession",
+            () => host.InvokeAsync<CreateSessionResponse>(
+                "CreateHostSession",
                 CreateDisplay(),
                 new ClientProfile(),
                 2,
                 string.Empty));
 
-        await receiver.InvokeAsync("EnterRelayGroup", "shared-key");
+        await host.InvokeAsync("EnterRelayGroup", "shared-key");
         await insider.InvokeAsync("EnterRelayGroup", "shared-key");
         await outsider.InvokeAsync("EnterRelayGroup", "other-key");
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
 
-        var insiderView = await insider.InvokeAsync<AvailableReceiverDescriptor[]>(
-            "GetAvailableReceivers");
-        var outsiderView = await outsider.InvokeAsync<AvailableReceiverDescriptor[]>(
-            "GetAvailableReceivers");
+        var insiderView = await insider.InvokeAsync<AvailableHostDescriptor[]>(
+            "GetAvailableHosts");
+        var outsiderView = await outsider.InvokeAsync<AvailableHostDescriptor[]>(
+            "GetAvailableHosts");
         var outsiderJoin = await outsider.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
+            "RequestToJoinHost",
             new DirectJoinRequest(created.SessionId, "outsider-group", "1.0.0"), string.Empty);
 
         Assert.Equal(created.SessionId, Assert.Single(insiderView).SessionId);
@@ -686,31 +686,31 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
-    public async Task ChangedServerPassword_HidesTheReceiverFromItsFormerPeerAndTellsItToRelist()
+    public async Task ChangedServerPassword_HidesTheHostFromItsFormerPeerAndTellsItToRelist()
     {
         using var factory = CreateFactory(requireServerPassword: true);
-        await using var receiver = CreateConnection(factory, "moving-receiver", "Receiver");
+        await using var host = CreateConnection(factory, "moving-host", "Host");
         await using var peer = CreateConnection(factory, "staying-peer", "Peer");
         var peerRelisted = CompletionSource<bool>();
-        peer.On("ReceiverDirectoryChanged", () => peerRelisted.TrySetResult(true));
-        await receiver.StartAsync();
+        peer.On("HostDirectoryChanged", () => peerRelisted.TrySetResult(true));
+        await host.StartAsync();
         await peer.StartAsync();
-        await receiver.InvokeAsync("EnterRelayGroup", "first-password-key");
+        await host.InvokeAsync("EnterRelayGroup", "first-password-key");
         await peer.InvokeAsync("EnterRelayGroup", "first-password-key");
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
-        Assert.Single(await peer.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
+        Assert.Single(await peer.InvokeAsync<AvailableHostDescriptor[]>("GetAvailableHosts"));
 
-        await receiver.InvokeAsync("EnterRelayGroup", "second-password-key");
+        await host.InvokeAsync("EnterRelayGroup", "second-password-key");
 
         Assert.True(await peerRelisted.Task.WaitAsync(TestTimeout));
-        Assert.Empty(await peer.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
+        Assert.Empty(await peer.InvokeAsync<AvailableHostDescriptor[]>("GetAvailableHosts"));
         var staleJoin = await peer.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
+            "RequestToJoinHost",
             new DirectJoinRequest(created.SessionId, "staying-peer", "1.0.0"),
             string.Empty);
         Assert.False(staleJoin.Accepted);
@@ -720,31 +720,31 @@ public sealed class PointerHubIntegrationTests
     public async Task ChangedServerPassword_CancelsAJoinRequestItLeavesBehind()
     {
         using var factory = CreateFactory(requireServerPassword: true);
-        await using var receiver = CreateConnection(factory, "moving-receiver", "Receiver");
+        await using var host = CreateConnection(factory, "moving-host", "Host");
         await using var peer = CreateConnection(factory, "requesting-peer", "Peer");
-        var pending = CompletionSource<PresenterDescriptor>();
+        var pending = CompletionSource<AnnotatorDescriptor>();
         var cancelled = CompletionSource<string>();
         var peerEnded = CompletionSource<string>();
-        receiver.On<PresenterDescriptor>("PresenterJoinRequested", pending.SetResult);
-        receiver.On<string>("PresenterJoinCancelled", cancelled.SetResult);
+        host.On<AnnotatorDescriptor>("AnnotatorJoinRequested", pending.SetResult);
+        host.On<string>("AnnotatorJoinCancelled", cancelled.SetResult);
         peer.On<string>("SessionEnded", peerEnded.SetResult);
-        await receiver.StartAsync();
+        await host.StartAsync();
         await peer.StartAsync();
-        await receiver.InvokeAsync("EnterRelayGroup", "first-password-key");
+        await host.InvokeAsync("EnterRelayGroup", "first-password-key");
         await peer.InvokeAsync("EnterRelayGroup", "first-password-key");
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
         Assert.True((await peer.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiver",
+            "RequestToJoinHost",
             new DirectJoinRequest(created.SessionId, "requesting-peer", "1.0.0"),
             string.Empty)).Accepted);
         var requested = await pending.Task.WaitAsync(TestTimeout);
 
-        await receiver.InvokeAsync("EnterRelayGroup", "second-password-key");
+        await host.InvokeAsync("EnterRelayGroup", "second-password-key");
 
         Assert.Equal(requested.ConnectionId, await cancelled.Task.WaitAsync(TestTimeout));
         Assert.Contains(
@@ -752,8 +752,8 @@ public sealed class PointerHubIntegrationTests
             await peerEnded.Task.WaitAsync(TestTimeout),
             StringComparison.Ordinal);
         await Assert.ThrowsAsync<HubException>(
-            () => receiver.InvokeAsync(
-                "ApprovePresenter",
+            () => host.InvokeAsync(
+                "ApproveAnnotator",
                 created.SessionId,
                 requested.ConnectionId));
     }
@@ -762,22 +762,22 @@ public sealed class PointerHubIntegrationTests
     public async Task ServerPassword_IsNotRequiredOnAnOpenRelay()
     {
         using var factory = CreateFactory();
-        await using var receiver = CreateConnection(factory, "open-receiver", "Receiver");
-        await using var presenter = CreateConnection(factory, "open-presenter", "Presenter");
-        await receiver.StartAsync();
-        await presenter.StartAsync();
+        await using var host = CreateConnection(factory, "open-host", "Host");
+        await using var annotator = CreateConnection(factory, "open-annotator", "Annotator");
+        await host.StartAsync();
+        await annotator.StartAsync();
 
         Assert.False(
-            (await receiver.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
+            (await host.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
                 .ServerPasswordRequired);
-        var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSession",
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             string.Empty);
-        var available = await presenter.InvokeAsync<AvailableReceiverDescriptor[]>(
-            "GetAvailableReceivers");
+        var available = await annotator.InvokeAsync<AvailableHostDescriptor[]>(
+            "GetAvailableHosts");
 
         Assert.Equal(created.SessionId, Assert.Single(available).SessionId);
     }

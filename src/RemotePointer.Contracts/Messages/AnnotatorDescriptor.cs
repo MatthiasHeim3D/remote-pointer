@@ -1,6 +1,6 @@
 namespace RemotePointer.Contracts.Messages;
 
-public sealed record PresenterDescriptor(
+public sealed record AnnotatorDescriptor(
     string ConnectionId,
     string ClientInstanceId,
     string DisplayName,

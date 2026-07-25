@@ -24,11 +24,11 @@ Clients see each other only when they use the same server password, which they e
 
 `REMOTEPOINTER_REQUIRE_SERVER_PASSWORD` defaults to `true`, and a client that presents no password can then neither publish itself nor list or reach anyone. Set it to `false` to allow clients without one; they all land in a single open pool and share their names and profile pictures with anyone who can reach the relay, which the client warns about. Choose a password with the same care as one for a video meeting: everyone holding it sees every published name and picture, and changing it means telling everyone.
 
-## The receiver directory
+## The host directory
 
-Receivers publish themselves in the relay directory, which is how the desktop client finds them, and it is the only route into a session. There is no switch to turn it off: a relay that published nothing would accept no join request and could serve nobody. Each receiver still controls its own visibility and can hide itself at any time.
+Hosts publish themselves in the relay directory, which is how the desktop client finds them, and it is the only route into a session. There is no switch to turn it off: a relay that published nothing would accept no join request and could serve nobody. Each host still controls its own visibility and can hide itself at any time.
 
-Being listed does not grant access — every direct join still requires receiver approval. It does mean anyone holding the server password can list the receivers currently published under it, which is why that password is the boundary that matters.
+Being listed does not grant access — every direct join still requires host approval. It does mean anyone holding the server password can list the hosts currently published under it, which is why that password is the boundary that matters.
 
 ```powershell
 docker compose up -d --build

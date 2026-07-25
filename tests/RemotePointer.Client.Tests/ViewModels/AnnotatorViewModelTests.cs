@@ -7,51 +7,51 @@ using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Tests.ViewModels;
 
-public sealed class PresenterViewModelTests
+public sealed class AnnotatorViewModelTests
 {
     [Fact]
-    public async Task DiscoveryInitialization_LoadsReceiversAndDirectJoinRequestsSelection()
+    public async Task DiscoveryInitialization_LoadsHostsAndDirectJoinRequestsSelection()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
             Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
-            AvailableReceivers =
+            AvailableHosts =
             [
-                new AvailableReceiverDescriptor(
+                new AvailableHostDescriptor(
                     "session-visible",
-                    "Receiver PC",
+                    "Host PC",
                     ProfilePicturePng: [1, 2, 3]),
             ],
         };
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
 
         await viewModel.InitializeAsync();
-        viewModel.JoinDiscoveredReceiverCommand.Execute(null);
+        viewModel.JoinDiscoveredHostCommand.Execute(null);
 
-        Assert.Equal("session-visible", relay.RequestedReceiverSessionId);
+        Assert.Equal("session-visible", relay.RequestedHostSessionId);
         Assert.True(viewModel.IsJoinPending);
-        Assert.Equal("Receiver PC", viewModel.CurrentReceiverName);
-        Assert.Equal(new byte[] { 1, 2, 3 }, viewModel.CurrentReceiverProfilePicturePng);
+        Assert.Equal("Host PC", viewModel.CurrentHostName);
+        Assert.Equal(new byte[] { 1, 2, 3 }, viewModel.CurrentHostProfilePicturePng);
         Assert.Equal(
             "Request sent. Waiting for approval.",
-            viewModel.SenderConnectionStatusLabel);
+            viewModel.ConnectionStatusLabel);
         Assert.Equal("Cancel connection request", viewModel.EndSessionActionLabel);
         Assert.True(viewModel.EndSessionCommand.CanExecute(null));
     }
 
     [Fact]
-    public async Task PendingRequest_CanBeCancelledFromTheSenderPanel()
+    public async Task PendingRequest_CanBeCancelledFromTheAnnotatorPanel()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
             Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
-            AvailableReceivers = [new AvailableReceiverDescriptor("session-visible", "Receiver PC")],
+            AvailableHosts = [new AvailableHostDescriptor("session-visible", "Host PC")],
         };
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         await viewModel.InitializeAsync();
-        viewModel.JoinDiscoveredReceiverCommand.Execute(null);
+        viewModel.JoinDiscoveredHostCommand.Execute(null);
         Assert.True(viewModel.IsJoinPending);
 
         viewModel.EndSessionCommand.Execute(null);
@@ -64,43 +64,43 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
-    public async Task DirectoryChange_AutomaticallyRefreshesAvailableReceivers()
+    public async Task DirectoryChange_AutomaticallyRefreshesAvailableHosts()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
             Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
         };
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         await viewModel.InitializeAsync();
-        relay.AvailableReceivers =
+        relay.AvailableHosts =
         [
-            new AvailableReceiverDescriptor("new-session", "New receiver"),
+            new AvailableHostDescriptor("new-session", "New host"),
         ];
 
-        relay.RaiseReceiverDirectoryChanged();
+        relay.RaiseHostDirectoryChanged();
 
-        Assert.Equal("new-session", Assert.Single(viewModel.AvailableReceivers).SessionId);
+        Assert.Equal("new-session", Assert.Single(viewModel.AvailableHosts).SessionId);
     }
 
     [Fact]
-    public async Task ReturningSenderRole_ReloadsTheListingItDroppedWhileReceiving()
+    public async Task ReturningAnnotatorRole_ReloadsTheListingItDroppedWhileReceiving()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
-            AvailableReceivers = [new AvailableReceiverDescriptor("peer-session", "Peer PC")],
+            AvailableHosts = [new AvailableHostDescriptor("peer-session", "Peer PC")],
         };
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         await viewModel.InitializeAsync();
-        Assert.Single(viewModel.AvailableReceivers);
+        Assert.Single(viewModel.AvailableHosts);
 
-        viewModel.SetSenderRoleEnabled(false);
-        Assert.Empty(viewModel.AvailableReceivers);
+        viewModel.SetRoleEnabled(false);
+        Assert.Empty(viewModel.AvailableHosts);
 
-        viewModel.SetSenderRoleEnabled(true);
+        viewModel.SetRoleEnabled(true);
 
-        Assert.Equal("peer-session", Assert.Single(viewModel.AvailableReceivers).SessionId);
+        Assert.Equal("peer-session", Assert.Single(viewModel.AvailableHosts).SessionId);
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class PresenterViewModelTests
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         await viewModel.InitializeAsync();
         relay.RaiseApproved(
             new SessionStateMessage(
@@ -116,19 +116,19 @@ public sealed class PresenterViewModelTests
                 true,
                 new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
                 DateTimeOffset.UtcNow.AddHours(1)));
-        relay.AvailableReceivers =
+        relay.AvailableHosts =
         [
-            new AvailableReceiverDescriptor("listed-while-busy", "Late receiver"),
+            new AvailableHostDescriptor("listed-while-busy", "Late host"),
         ];
 
-        relay.RaiseReceiverDirectoryChanged();
-        Assert.Empty(viewModel.AvailableReceivers);
+        relay.RaiseHostDirectoryChanged();
+        Assert.Empty(viewModel.AvailableHosts);
 
-        relay.RaiseSessionEnded("Disconnected from the receiver.");
+        relay.RaiseSessionEnded("Disconnected from the host.");
 
         Assert.Equal(
             "listed-while-busy",
-            Assert.Single(viewModel.AvailableReceivers).SessionId);
+            Assert.Single(viewModel.AvailableHosts).SessionId);
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public sealed class PresenterViewModelTests
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         relay.RaiseApproved(
             new SessionStateMessage(
                 "session-1",
@@ -154,7 +154,7 @@ public sealed class PresenterViewModelTests
         Assert.Equal(0.75d, sent.NormalizedY);
         Assert.Equal(2_000, sent.TimeToLiveMilliseconds);
         Assert.True(sent.SequenceNumber > 1_000_000);
-        Assert.Contains("2560 × 1440", viewModel.ReceiverDisplayShape, StringComparison.Ordinal);
+        Assert.Contains("2560 × 1440", viewModel.HostDisplayShape, StringComparison.Ordinal);
         Assert.Contains("42 ms", viewModel.LastAcknowledgement, StringComparison.Ordinal);
     }
 
@@ -163,7 +163,7 @@ public sealed class PresenterViewModelTests
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         relay.RaiseApproved(
             new SessionStateMessage(
                 "session-1",
@@ -183,7 +183,7 @@ public sealed class PresenterViewModelTests
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         relay.RaiseApproved(
             new SessionStateMessage(
                 "session-1",
@@ -210,7 +210,7 @@ public sealed class PresenterViewModelTests
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         relay.RaiseApproved(
             new SessionStateMessage(
                 "session-1",
@@ -218,21 +218,21 @@ public sealed class PresenterViewModelTests
                 new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
                 DateTimeOffset.UtcNow.AddHours(8)));
 
-        relay.RaiseSessionEnded("Ended by receiver.");
+        relay.RaiseSessionEnded("Ended by host.");
 
         Assert.False(viewModel.IsSessionApproved);
         Assert.Equal(1, service.ExitCount);
     }
 
     [Fact]
-    public void EndSessionFailure_KeepsPresenterSessionActive()
+    public void EndSessionFailure_KeepsAnnotatorSessionActive()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient
         {
             EndException = new InvalidOperationException("Relay unavailable."),
         };
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         relay.RaiseApproved(
             new SessionStateMessage(
                 "session-1",
@@ -248,31 +248,31 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
-    public void CalibrateCommand_UsesSyncedReceiverAspectRatio()
+    public void CalibrateCommand_UsesSyncedHostAspectRatio()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         relay.RaiseApproved(
             new SessionStateMessage(
                 "session-1",
                 true,
                 new DisplayDescriptor("display", "Display", 2_560, 1_440, 1d, 0),
                 DateTimeOffset.UtcNow.AddHours(8),
-                ReceiverClientInstanceId: "receiver-client-id"));
+                HostClientInstanceId: "host-client-id"));
 
         viewModel.CalibrateCommand.Execute(null);
 
         Assert.Equal(16d / 9d, service.RequestedAspectRatio, precision: 12);
-        Assert.Equal("receiver-client-id", service.CalibrationIdentity);
+        Assert.Equal("host-client-id", service.CalibrationIdentity);
     }
 
     [Fact]
-    public void ReceiverDisplayChange_UpdatesShapeAndInvalidatesDifferentAspectCalibration()
+    public void HostDisplayChange_UpdatesShapeAndInvalidatesDifferentAspectCalibration()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
-        using var viewModel = new PresenterViewModel(service, relay);
+        using var viewModel = new AnnotatorViewModel(service, relay);
         relay.RaiseApproved(
             new SessionStateMessage(
                 "session-1",
@@ -280,10 +280,10 @@ public sealed class PresenterViewModelTests
                 new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
                 DateTimeOffset.UtcNow.AddHours(8)));
 
-        relay.RaiseReceiverDisplayChanged(
+        relay.RaiseHostDisplayChanged(
             new DisplayDescriptor("display", "Display", 1_200, 1_920, 1d, 90));
 
-        Assert.Contains("1200 × 1920", viewModel.ReceiverDisplayShape, StringComparison.Ordinal);
+        Assert.Contains("1200 × 1920", viewModel.HostDisplayShape, StringComparison.Ordinal);
         Assert.Equal(1_200d / 1_920d, service.UpdatedAspectRatio, precision: 12);
     }
 
@@ -291,7 +291,7 @@ public sealed class PresenterViewModelTests
     public void LocalDisplayChange_InvalidatesCalibration()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
 
         viewModel.HandleLocalDisplayConfigurationChanged();
 
@@ -302,7 +302,7 @@ public sealed class PresenterViewModelTests
     public void TogglePointingMode_OpensCalibrationWhenInactive()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
 
         viewModel.TogglePointingMode();
 
@@ -314,7 +314,7 @@ public sealed class PresenterViewModelTests
     public void TogglePointingMode_ForwardsWhenReady()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
         service.RaiseState(TargetRegionState.Ready, "Ready");
 
         viewModel.TogglePointingMode();
@@ -326,7 +326,7 @@ public sealed class PresenterViewModelTests
     public void PointerCaptured_UpdatesCountAndCoordinates()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
 
         service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
 
@@ -339,7 +339,7 @@ public sealed class PresenterViewModelTests
     public void SetUsageHintsState_ForwardsPreferencesToInputArea()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
 
         viewModel.SetUsageHintsState(showUsageHints: false, hasShownUsageHints: true);
 
@@ -351,7 +351,7 @@ public sealed class PresenterViewModelTests
     public void SetDrawingOpacityPercent_ForwardsPreferenceToInputArea()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
 
         viewModel.SetDrawingOpacityPercent(35);
 
@@ -362,7 +362,7 @@ public sealed class PresenterViewModelTests
     public void StateChanges_UpdatePointingAndStatusProperties()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
 
         service.RaiseState(TargetRegionState.Pointing, "Pointing active");
 
@@ -377,7 +377,7 @@ public sealed class PresenterViewModelTests
     public void ReportHotKeyRegistrationFailure_PresentsError()
     {
         using var service = new FakeTargetRegionService();
-        using var viewModel = new PresenterViewModel(service);
+        using var viewModel = new AnnotatorViewModel(service);
 
         viewModel.ReportHotKeyRegistrationFailure("Hotkey unavailable.");
 
@@ -416,8 +416,8 @@ public sealed class PresenterViewModelTests
         public int DrawingOpacityPercent { get; private set; } =
             PointerSettings.DefaultDrawingOpacityPercent;
 
-        public void SetCalibrationIdentity(string? receiverIdentity) =>
-            CalibrationIdentity = receiverIdentity;
+        public void SetCalibrationIdentity(string? hostIdentity) =>
+            CalibrationIdentity = hostIdentity;
 
         public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints)
         {

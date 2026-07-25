@@ -14,7 +14,7 @@ using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Overlays;
 
-public partial class ReceiverOverlayWindow : Window
+public partial class HostOverlayWindow : Window
 {
     private const int MarkerDiameter = 72;
     private const int MarkerDurationMilliseconds = 900;
@@ -29,7 +29,7 @@ public partial class ReceiverOverlayWindow : Window
     private nint handle;
     private MonitorDescriptor monitor;
 
-    public ReceiverOverlayWindow(
+    public HostOverlayWindow(
         MonitorDescriptor monitor,
         IMonitorService monitorService,
         IDisplayCoordinateMapper coordinateMapper)

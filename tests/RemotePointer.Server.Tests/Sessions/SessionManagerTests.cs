@@ -11,53 +11,53 @@ public sealed class SessionManagerTests
         new(2026, 7, 23, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Receiver_IsAutomaticallyDiscoverableAndDirectJoinStillRequiresApproval()
+    public void Host_IsAutomaticallyDiscoverableAndDirectJoinStillRequiresApproval()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
+        var created = CreateHost(context);
 
-        var available = Assert.Single(context.Manager.GetAvailableReceivers());
+        var available = Assert.Single(context.Manager.GetAvailableHosts());
         Assert.Equal(created.SessionId, available.SessionId);
-        Assert.Equal("Receiver Machine", available.DisplayName);
+        Assert.Equal("Host Machine", available.DisplayName);
 
-        var join = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
-            "presenter-connection",
-            "Presenter Machine");
+        var join = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"),
+            "annotator-connection",
+            "Annotator Machine");
 
         Assert.True(join.Response.Accepted);
-        Assert.NotNull(join.Presenter);
-        Assert.Empty(context.Manager.GetAvailableReceivers());
+        Assert.NotNull(join.Annotator);
+        Assert.Empty(context.Manager.GetAvailableHosts());
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.AcceptPointer(
-                "presenter-connection",
+                "annotator-connection",
                 CreatePointer(InitialTime, created.SessionId, 0)));
     }
 
     [Fact]
-    public void PresenterProfilePicture_IsIncludedInApprovalAndConnectedState()
+    public void AnnotatorProfilePicture_IsIncludedInApprovalAndConnectedState()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
+        var created = CreateHost(context);
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-        var join = context.Manager.RequestToJoinReceiver(
+        var join = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(
                 created.SessionId,
-                "presenter-client",
+                "annotator-client",
                 "1.0.0",
                 new ClientProfile(picture)),
-            "presenter-connection",
-            "Presenter Machine");
-        var approval = context.Manager.ApprovePresenter(
+            "annotator-connection",
+            "Annotator Machine");
+        var approval = context.Manager.ApproveAnnotator(
             created.SessionId,
-            join.Presenter!.ConnectionId,
-            "receiver-connection");
+            join.Annotator!.ConnectionId,
+            "host-connection");
 
-        Assert.Equal(picture, join.Presenter.ProfilePicturePng);
-        var connectedPresenter = Assert.Single(approval.State.ConnectedPresenters!);
-        Assert.Equal("Presenter Machine", connectedPresenter.DisplayName);
-        Assert.Equal(picture, connectedPresenter.ProfilePicturePng);
+        Assert.Equal(picture, join.Annotator.ProfilePicturePng);
+        var connectedAnnotator = Assert.Single(approval.State.ConnectedAnnotators!);
+        Assert.Equal("Annotator Machine", connectedAnnotator.DisplayName);
+        Assert.Equal(picture, connectedAnnotator.ProfilePicturePng);
     }
 
     [Fact]
@@ -65,20 +65,20 @@ public sealed class SessionManagerTests
     {
         var context = CreateContext();
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        var created = context.Manager.CreateReceiverSession(
+        var created = context.Manager.CreateHostSession(
             CreateDisplay(),
-            "receiver-connection",
+            "host-connection",
             "shared-machine-profile",
-            "Receiver Machine",
-            "receiver-application",
+            "Host Machine",
+            "host-application",
             new ClientProfile(picture));
 
-        Assert.Empty(context.Manager.GetAvailableReceivers("receiver-application"));
+        Assert.Empty(context.Manager.GetAvailableHosts("host-application"));
         var visibleToOtherInstance = Assert.Single(
-            context.Manager.GetAvailableReceivers("other-application"));
+            context.Manager.GetAvailableHosts("other-application"));
 
         Assert.Equal(created.SessionId, visibleToOtherInstance.SessionId);
-        Assert.Equal("receiver-application", visibleToOtherInstance.ApplicationInstanceId);
+        Assert.Equal("host-application", visibleToOtherInstance.ApplicationInstanceId);
         Assert.Equal(picture, visibleToOtherInstance.ProfilePicturePng);
     }
 
@@ -86,21 +86,21 @@ public sealed class SessionManagerTests
     public void DirectJoin_RejectsSelfButAllowsAnotherInstanceWithSameMachineProfile()
     {
         var context = CreateContext();
-        var created = context.Manager.CreateReceiverSession(
+        var created = context.Manager.CreateHostSession(
             CreateDisplay(),
-            "receiver-connection",
+            "host-connection",
             "shared-machine-profile",
-            "Receiver Machine",
-            "receiver-application");
+            "Host Machine",
+            "host-application");
 
-        var selfJoin = context.Manager.RequestToJoinReceiver(
+        var selfJoin = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"),
-            "self-presenter-connection",
+            "self-annotator-connection",
             "This Instance",
-            "receiver-application");
-        var otherInstanceJoin = context.Manager.RequestToJoinReceiver(
+            "host-application");
+        var otherInstanceJoin = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"),
-            "other-presenter-connection",
+            "other-annotator-connection",
             "Other Instance",
             "other-application");
 
@@ -110,67 +110,67 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ReceiverDisplayUpdate_IsReturnedForApprovedPresenter()
+    public void HostDisplayUpdate_IsReturnedForApprovedAnnotator()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
         var changed = new DisplayDescriptor("display-1", "Display 1", 1_200, 1_920, 1d, 90);
 
-        var result = context.Manager.UpdateReceiverDisplay(
+        var result = context.Manager.UpdateHostDisplay(
             approved.Created.SessionId,
-            "receiver-connection",
+            "host-connection",
             changed);
 
-        Assert.Equal(approved.PresenterConnectionId, result.PresenterConnectionId);
+        Assert.Equal(approved.AnnotatorConnectionId, result.AnnotatorConnectionId);
         Assert.Equal(changed, result.Display);
     }
 
     [Fact]
-    public void ReceiverClientSettingsUpdate_ChangesActiveSessionAndDirectoryImmediately()
+    public void HostClientSettingsUpdate_ChangesActiveSessionAndDirectoryImmediately()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-        var result = context.Manager.UpdateReceiverClientSettings(
+        var result = context.Manager.UpdateHostClientSettings(
             approved.Created.SessionId,
-            "receiver-connection",
-            "Updated Receiver",
+            "host-connection",
+            "Updated Host",
             new ClientProfile(picture),
             2);
 
-        Assert.Equal("Updated Receiver", result.State.ReceiverDisplayName);
-        Assert.Equal(picture, result.State.ReceiverProfilePicturePng);
-        Assert.Contains(approved.PresenterConnectionId, result.PresenterConnectionIds);
-        var available = Assert.Single(context.Manager.GetAvailableReceivers());
-        Assert.Equal("Updated Receiver", available.DisplayName);
+        Assert.Equal("Updated Host", result.State.HostDisplayName);
+        Assert.Equal(picture, result.State.HostProfilePicturePng);
+        Assert.Contains(approved.AnnotatorConnectionId, result.AnnotatorConnectionIds);
+        var available = Assert.Single(context.Manager.GetAvailableHosts());
+        Assert.Equal("Updated Host", available.DisplayName);
         Assert.Equal(picture, available.ProfilePicturePng);
     }
 
     [Fact]
-    public void DiscoverableReceiver_RemainsAvailableAfterTheAbandonmentGrace()
+    public void DiscoverableHost_RemainsAvailableAfterTheAbandonmentGrace()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
+        var created = CreateHost(context);
         context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
 
         var expired = context.Manager.CollectExpiredSessions();
 
         Assert.Empty(expired);
-        Assert.Equal(created.SessionId, Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
-        var directJoin = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
-            "presenter-connection",
-            "Presenter Machine");
+        Assert.Equal(created.SessionId, Assert.Single(context.Manager.GetAvailableHosts()).SessionId);
+        var directJoin = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"),
+            "annotator-connection",
+            "Annotator Machine");
         Assert.True(directJoin.Response.Accepted);
     }
 
     [Fact]
-    public void InvisibleReceiver_KeepsItsSessionAfterTheAbandonmentGrace()
+    public void InvisibleHost_KeepsItsSessionAfterTheAbandonmentGrace()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
-        context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", false);
+        var created = CreateHost(context);
+        context.Manager.SetHostDiscoverable(created.SessionId, "host-connection", false);
         context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
 
         var expired = context.Manager.CollectExpiredSessions();
@@ -178,19 +178,19 @@ public sealed class SessionManagerTests
         Assert.Empty(expired);
         Assert.Equal(1, context.Manager.ActiveSessionCount);
         Assert.True(
-            context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", true));
+            context.Manager.SetHostDiscoverable(created.SessionId, "host-connection", true));
         Assert.Equal(
             created.SessionId,
-            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
+            Assert.Single(context.Manager.GetAvailableHosts()).SessionId);
     }
 
     [Fact]
     public void AbandonedInvisibleSession_IsCollectedAfterTheAbandonmentGrace()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
-        context.Manager.SetReceiverDiscoverable(created.SessionId, "receiver-connection", false);
-        _ = context.Manager.Disconnect("receiver-connection");
+        var created = CreateHost(context);
+        context.Manager.SetHostDiscoverable(created.SessionId, "host-connection", false);
+        _ = context.Manager.Disconnect("host-connection");
         context.TimeProvider.Advance(TimeSpan.FromMinutes(11));
 
         var expired = context.Manager.CollectExpiredSessions();
@@ -203,23 +203,23 @@ public sealed class SessionManagerTests
     public void ServerPassword_ScopesTheDirectoryAndJoinsToClientsThatShareIt()
     {
         var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
-        var created = CreateReceiver(context);
+        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var created = CreateHost(context);
         context.Manager.SetConnectionGroup("insider-connection", "group-one");
         context.Manager.SetConnectionGroup("outsider-connection", "group-two");
 
         Assert.Equal(
             created.SessionId,
-            Assert.Single(context.Manager.GetAvailableReceivers(null, "insider-connection")).SessionId);
-        Assert.Empty(context.Manager.GetAvailableReceivers(null, "outsider-connection"));
+            Assert.Single(context.Manager.GetAvailableHosts(null, "insider-connection")).SessionId);
+        Assert.Empty(context.Manager.GetAvailableHosts(null, "outsider-connection"));
 
-        var outsiderJoin = context.Manager.RequestToJoinReceiver(
+        var outsiderJoin = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(created.SessionId, "outsider-client", "1.0.0"),
             "outsider-connection",
             "Outsider");
         Assert.False(outsiderJoin.Response.Accepted);
 
-        var insiderJoin = context.Manager.RequestToJoinReceiver(
+        var insiderJoin = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(created.SessionId, "insider-client", "1.0.0"),
             "insider-connection",
             "Insider");
@@ -227,18 +227,18 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ChangedServerPassword_TakesThePublishedReceiverOutOfTheOldGroup()
+    public void ChangedServerPassword_TakesThePublishedHostOutOfTheOldGroup()
     {
         var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
-        var created = CreateReceiver(context);
+        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var created = CreateHost(context);
         context.Manager.SetConnectionGroup("former-peer-connection", "group-one");
-        Assert.Single(context.Manager.GetAvailableReceivers(null, "former-peer-connection"));
+        Assert.Single(context.Manager.GetAvailableHosts(null, "former-peer-connection"));
 
-        context.Manager.SetConnectionGroup("receiver-connection", "group-two");
+        context.Manager.SetConnectionGroup("host-connection", "group-two");
 
-        Assert.Empty(context.Manager.GetAvailableReceivers(null, "former-peer-connection"));
-        var staleJoin = context.Manager.RequestToJoinReceiver(
+        Assert.Empty(context.Manager.GetAvailableHosts(null, "former-peer-connection"));
+        var staleJoin = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(created.SessionId, "former-peer-client", "1.0.0"),
             "former-peer-connection",
             "Former Peer");
@@ -247,81 +247,81 @@ public sealed class SessionManagerTests
         context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
         Assert.Equal(
             created.SessionId,
-            Assert.Single(context.Manager.GetAvailableReceivers(null, "new-peer-connection")).SessionId);
+            Assert.Single(context.Manager.GetAvailableHosts(null, "new-peer-connection")).SessionId);
     }
 
     [Fact]
     public void ChangedServerPassword_CancelsAJoinRequestThatNoLongerSharesTheGroup()
     {
         var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
-        var created = CreateReceiver(context);
-        context.Manager.SetConnectionGroup("presenter-connection", "group-one");
-        var join = JoinPresenter(context, created);
+        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var created = CreateHost(context);
+        context.Manager.SetConnectionGroup("annotator-connection", "group-one");
+        var join = JoinAnnotator(context, created);
         Assert.True(join.Response.Accepted);
 
-        var change = context.Manager.SetConnectionGroup("receiver-connection", "group-two");
+        var change = context.Manager.SetConnectionGroup("host-connection", "group-two");
 
         Assert.Equal(
-            "presenter-connection",
-            change.CancelledJoinRequest?.CancelledPresenterRequestConnectionId);
-        Assert.Equal("receiver-connection", change.CancelledJoinRequest?.ReceiverConnectionId);
+            "annotator-connection",
+            change.CancelledJoinRequest?.CancelledAnnotatorRequestConnectionId);
+        Assert.Equal("host-connection", change.CancelledJoinRequest?.HostConnectionId);
 
-        // The request is gone from both sides: the receiver is listable again, and the former
+        // The request is gone from both sides: the host is listable again, and the former
         // requester is unbound rather than left waiting on an approval it can no longer get.
         context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
-        Assert.Single(context.Manager.GetAvailableReceivers(null, "new-peer-connection"));
+        Assert.Single(context.Manager.GetAvailableHosts(null, "new-peer-connection"));
         Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.ApprovePresenter(
+            () => context.Manager.ApproveAnnotator(
                 created.SessionId,
-                "presenter-connection",
-                "receiver-connection"));
+                "annotator-connection",
+                "host-connection"));
     }
 
     [Fact]
-    public void ChangedServerPassword_KeepsAPresenterTheReceiverAlreadyApproved()
+    public void ChangedServerPassword_KeepsAAnnotatorTheHostAlreadyApproved()
     {
         var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
-        var created = CreateReceiver(context);
-        context.Manager.SetConnectionGroup("presenter-connection", "group-one");
-        var join = JoinPresenter(context, created);
-        _ = context.Manager.ApprovePresenter(
+        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var created = CreateHost(context);
+        context.Manager.SetConnectionGroup("annotator-connection", "group-one");
+        var join = JoinAnnotator(context, created);
+        _ = context.Manager.ApproveAnnotator(
             created.SessionId,
-            join.Presenter!.ConnectionId,
-            "receiver-connection");
+            join.Annotator!.ConnectionId,
+            "host-connection");
 
-        var change = context.Manager.SetConnectionGroup("presenter-connection", "group-two");
+        var change = context.Manager.SetConnectionGroup("annotator-connection", "group-two");
 
         Assert.Null(change.CancelledJoinRequest);
         var relayed = context.Manager.AcceptPointer(
-            "presenter-connection",
+            "annotator-connection",
             CreatePointer(InitialTime, created.SessionId, 0));
         Assert.Equal(PointerRelayDisposition.Accepted, relayed.Disposition);
     }
 
     [Fact]
-    public void ResumedReceiver_PublishesUnderThePasswordItsConnectionPresented()
+    public void ResumedHost_PublishesUnderThePasswordItsConnectionPresented()
     {
         var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
-        var created = CreateReceiver(context);
-        _ = context.Manager.Disconnect("receiver-connection");
+        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var created = CreateHost(context);
+        _ = context.Manager.Disconnect("host-connection");
 
         context.Manager.SetConnectionGroup("resumed-connection", "group-two");
         _ = context.Manager.ResumeSession(
             "resumed-connection",
             new SessionResumeRequest(
                 created.SessionId,
-                ClientRole.Receiver,
-                "receiver-client",
+                ClientRole.Host,
+                "host-client",
                 created.Credential.SessionToken,
                 created.Credential.ReconnectToken));
 
         context.Manager.SetConnectionGroup("former-peer-connection", "group-one");
         context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
-        Assert.Empty(context.Manager.GetAvailableReceivers(null, "former-peer-connection"));
-        Assert.Single(context.Manager.GetAvailableReceivers(null, "new-peer-connection"));
+        Assert.Empty(context.Manager.GetAvailableHosts(null, "former-peer-connection"));
+        Assert.Single(context.Manager.GetAvailableHosts(null, "new-peer-connection"));
     }
 
     [Fact]
@@ -330,9 +330,9 @@ public sealed class SessionManagerTests
         var context = CreateContext(requireServerPassword: true);
 
         Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.SetConnectionGroup("receiver-connection", null));
-        Assert.ThrowsAny<InvalidOperationException>(() => CreateReceiver(context));
-        Assert.Empty(context.Manager.GetAvailableReceivers(null, "receiver-connection"));
+            () => context.Manager.SetConnectionGroup("host-connection", null));
+        Assert.ThrowsAny<InvalidOperationException>(() => CreateHost(context));
+        Assert.Empty(context.Manager.GetAvailableHosts(null, "host-connection"));
         Assert.True(context.Manager.ServerPasswordRequired);
     }
 
@@ -340,12 +340,12 @@ public sealed class SessionManagerTests
     public void OpenRelay_KeepsPasswordlessClientsInOneSharedGroup()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
+        var created = CreateHost(context);
 
         Assert.Equal(SessionManager.OpenGroupKey, context.Manager.GetConnectionGroup("anyone"));
         Assert.Equal(
             created.SessionId,
-            Assert.Single(context.Manager.GetAvailableReceivers(null, "anyone")).SessionId);
+            Assert.Single(context.Manager.GetAvailableHosts(null, "anyone")).SessionId);
     }
 
     [Fact]
@@ -359,42 +359,42 @@ public sealed class SessionManagerTests
         Assert.Equal(
             SessionManager.OpenGroupKey,
             context.Manager.GetConnectionGroup("browser-connection"));
-        Assert.Empty(context.Manager.GetAvailableReceivers(null, "browser-connection"));
+        Assert.Empty(context.Manager.GetAvailableHosts(null, "browser-connection"));
     }
 
     [Fact]
-    public void CreateReceiverSession_FitsTheDefaultPresenterCountToTheRelayLimit()
+    public void CreateHostSession_FitsTheDefaultAnnotatorCountToTheRelayLimit()
     {
-        var context = CreateContext(maximumPresentersPerReceiver: 1);
-        var created = CreateReceiver(context);
-        ApproveDirectPresenter(context, created, "presenter-one");
+        var context = CreateContext(maximumAnnotatorsPerHost: 1);
+        var created = CreateHost(context);
+        ApproveDirectAnnotator(context, created, "annotator-one");
 
-        var rejected = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"),
-            "presenter-two-connection",
-            "Presenter Two");
+        var rejected = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-two", "1.0.0"),
+            "annotator-two-connection",
+            "Annotator Two");
 
         Assert.False(rejected.Response.Accepted);
         Assert.Contains("limit", rejected.Response.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.CreateReceiverSession(
+            () => context.Manager.CreateHostSession(
                 CreateDisplay(),
                 "other-connection",
                 "other-client",
-                "Other Receiver",
-                maximumPresenterConnections: 2));
+                "Other Host",
+                maximumAnnotatorConnections: 2));
     }
 
     [Fact]
-    public void CreateReceiverSession_ReportsAnOversizedIdentifierAsAValidationFailure()
+    public void CreateHostSession_ReportsAnOversizedIdentifierAsAValidationFailure()
     {
         var context = CreateContext();
 
         var exception = Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.CreateReceiverSession(
+            () => context.Manager.CreateHostSession(
                 CreateDisplay(),
-                "receiver-connection",
-                "receiver-client",
+                "host-connection",
+                "host-client",
                 new string('n', 129)));
 
         Assert.Contains("128", exception.Message, StringComparison.Ordinal);
@@ -402,20 +402,20 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void CreateReceiverSession_IssuesReceiverOnlyCredential()
+    public void CreateHostSession_IssuesHostOnlyCredential()
     {
         var context = CreateContext();
 
-        var response = context.Manager.CreateReceiverSession(
+        var response = context.Manager.CreateHostSession(
             CreateDisplay(),
-            "receiver-connection",
-            "receiver-client",
-            "Receiver Machine");
+            "host-connection",
+            "host-client",
+            "Host Machine");
 
         Assert.True(response.SessionId.Length >= 43);
         Assert.True(response.SessionSecret.Length >= 43);
-        Assert.Equal(ClientRole.Receiver, response.Credential.Role);
-        Assert.Equal("receiver-client", response.Credential.ClientInstanceId);
+        Assert.Equal(ClientRole.Host, response.Credential.Role);
+        Assert.Equal("host-client", response.Credential.ClientInstanceId);
         Assert.Equal(InitialTime.AddHours(8), response.Credential.ExpiresAt);
         Assert.Equal(1, context.Manager.ActiveSessionCount);
     }
@@ -424,78 +424,78 @@ public sealed class SessionManagerTests
     public void SecondJoinRequest_ExposesNoSessionDataToTheRejectedClient()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
+        var created = CreateHost(context);
 
-        var first = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"),
-            "presenter-connection-one",
-            "Presenter One");
-        var second = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"),
-            "presenter-connection-two",
-            "Presenter Two");
+        var first = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-one", "1.0.0"),
+            "annotator-connection-one",
+            "Annotator One");
+        var second = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-two", "1.0.0"),
+            "annotator-connection-two",
+            "Annotator Two");
 
         Assert.True(first.Response.Accepted);
-        Assert.NotNull(first.Presenter);
+        Assert.NotNull(first.Annotator);
         Assert.False(second.Response.Accepted);
         Assert.Null(second.Response.SessionId);
-        Assert.Null(second.ReceiverConnectionId);
-        Assert.Null(second.Presenter);
+        Assert.Null(second.HostConnectionId);
+        Assert.Null(second.Annotator);
     }
 
     [Fact]
-    public void ApprovePresenter_RequiresOwningReceiver()
+    public void ApproveAnnotator_RequiresOwningHost()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
-        var join = JoinPresenter(context, created);
+        var created = CreateHost(context);
+        var join = JoinAnnotator(context, created);
 
         Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.ApprovePresenter(
+            () => context.Manager.ApproveAnnotator(
                 created.SessionId,
-                join.Presenter!.ConnectionId,
+                join.Annotator!.ConnectionId,
                 "unauthorized-connection"));
     }
 
     [Fact]
-    public void RejectPresenter_RemovesPendingMembershipAndAllowsAnotherRequest()
+    public void RejectAnnotator_RemovesPendingMembershipAndAllowsAnotherRequest()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
-        var firstJoin = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"),
-            "presenter-connection-one",
-            "Presenter One");
+        var created = CreateHost(context);
+        var firstJoin = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-one", "1.0.0"),
+            "annotator-connection-one",
+            "Annotator One");
 
-        var rejection = context.Manager.RejectPresenter(
+        var rejection = context.Manager.RejectAnnotator(
             created.SessionId,
-            firstJoin.Presenter!.ConnectionId,
-            "receiver-connection");
-        var secondJoin = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"),
-            "presenter-connection-two",
-            "Presenter Two");
+            firstJoin.Annotator!.ConnectionId,
+            "host-connection");
+        var secondJoin = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-two", "1.0.0"),
+            "annotator-connection-two",
+            "Annotator Two");
 
-        Assert.Equal("presenter-connection-one", rejection.PresenterConnectionId);
+        Assert.Equal("annotator-connection-one", rejection.AnnotatorConnectionId);
         Assert.True(secondJoin.Response.Accepted);
     }
 
     [Fact]
-    public void ApprovedPresenter_CanRelayPointerOnlyToReceiver()
+    public void ApprovedAnnotator_CanRelayPointerOnlyToHost()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.AcceptPointer(
-            approved.PresenterConnectionId,
+            approved.AnnotatorConnectionId,
             CreatePointer(context.TimeProvider.GetUtcNow(), approved.Created.SessionId, 0));
 
         Assert.Equal(PointerRelayDisposition.Accepted, result.Disposition);
-        Assert.Equal("receiver-connection", result.ReceiverConnectionId);
+        Assert.Equal("host-connection", result.HostConnectionId);
     }
 
     [Fact]
-    public void ApprovedPresenter_CanRelayValidatedGesturePointer()
+    public void ApprovedAnnotator_CanRelayValidatedGesturePointer()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
@@ -508,7 +508,7 @@ public sealed class SessionManagerTests
             GestureId = Guid.NewGuid(),
         };
 
-        var result = context.Manager.AcceptPointer(approved.PresenterConnectionId, pointer);
+        var result = context.Manager.AcceptPointer(approved.AnnotatorConnectionId, pointer);
 
         Assert.Equal(PointerRelayDisposition.Accepted, result.Disposition);
     }
@@ -517,7 +517,7 @@ public sealed class SessionManagerTests
     public void UnauthorizedConnection_CannotSendPointer()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
+        var created = CreateHost(context);
 
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.AcceptPointer(
@@ -535,8 +535,8 @@ public sealed class SessionManagerTests
             approved.Created.SessionId,
             7);
 
-        var first = context.Manager.AcceptPointer(approved.PresenterConnectionId, pointer);
-        var duplicate = context.Manager.AcceptPointer(approved.PresenterConnectionId, pointer with
+        var first = context.Manager.AcceptPointer(approved.AnnotatorConnectionId, pointer);
+        var duplicate = context.Manager.AcceptPointer(approved.AnnotatorConnectionId, pointer with
         {
             EventId = Guid.NewGuid(),
         });
@@ -553,7 +553,7 @@ public sealed class SessionManagerTests
         for (var sequence = 0; sequence < 30; sequence++)
         {
             var result = context.Manager.AcceptPointer(
-                approved.PresenterConnectionId,
+                approved.AnnotatorConnectionId,
                 CreatePointer(
                     context.TimeProvider.GetUtcNow(),
                     approved.Created.SessionId,
@@ -563,7 +563,7 @@ public sealed class SessionManagerTests
 
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.AcceptPointer(
-                approved.PresenterConnectionId,
+                approved.AnnotatorConnectionId,
                 CreatePointer(
                     context.TimeProvider.GetUtcNow(),
                     approved.Created.SessionId,
@@ -571,35 +571,35 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void BurstRateLimit_IsTrackedPerPresenter()
+    public void BurstRateLimit_IsTrackedPerAnnotator()
     {
         var context = CreateContext();
-        var created = context.Manager.CreateReceiverSession(
+        var created = context.Manager.CreateHostSession(
             CreateDisplay(),
-            "receiver-connection",
-            "receiver-client",
-            "Receiver",
-            maximumPresenterConnections: 2);
-        ApproveDirectPresenter(context, created, "presenter-one");
-        ApproveDirectPresenter(context, created, "presenter-two");
+            "host-connection",
+            "host-client",
+            "Host",
+            maximumAnnotatorConnections: 2);
+        ApproveDirectAnnotator(context, created, "annotator-one");
+        ApproveDirectAnnotator(context, created, "annotator-two");
 
         for (var sequence = 0; sequence < 30; sequence++)
         {
             Assert.Equal(
                 PointerRelayDisposition.Accepted,
                 context.Manager.AcceptPointer(
-                    "presenter-one-connection",
+                    "annotator-one-connection",
                     CreatePointer(InitialTime, created.SessionId, sequence)).Disposition);
         }
 
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.AcceptPointer(
-                "presenter-one-connection",
+                "annotator-one-connection",
                 CreatePointer(InitialTime, created.SessionId, 30)));
         Assert.Equal(
             PointerRelayDisposition.Accepted,
             context.Manager.AcceptPointer(
-                "presenter-two-connection",
+                "annotator-two-connection",
                 CreatePointer(InitialTime, created.SessionId, 0)).Disposition);
     }
 
@@ -611,7 +611,7 @@ public sealed class SessionManagerTests
         for (var sequence = 0; sequence < 30; sequence++)
         {
             _ = context.Manager.AcceptPointer(
-                approved.PresenterConnectionId,
+                approved.AnnotatorConnectionId,
                 CreatePointer(
                     context.TimeProvider.GetUtcNow(),
                     approved.Created.SessionId,
@@ -620,7 +620,7 @@ public sealed class SessionManagerTests
 
         context.TimeProvider.Advance(TimeSpan.FromMilliseconds(50));
         var result = context.Manager.AcceptPointer(
-            approved.PresenterConnectionId,
+            approved.AnnotatorConnectionId,
             CreatePointer(
                 context.TimeProvider.GetUtcNow(),
                 approved.Created.SessionId,
@@ -638,7 +638,7 @@ public sealed class SessionManagerTests
 
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.AcceptPointer(
-                approved.PresenterConnectionId,
+                approved.AnnotatorConnectionId,
                 CreatePointer(
                     context.TimeProvider.GetUtcNow(),
                     approved.Created.SessionId,
@@ -647,22 +647,22 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void PresenterDisconnect_RevokesCredentialAndClearsConnectedState()
+    public void AnnotatorDisconnect_RevokesCredentialAndClearsConnectedState()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
-        var credential = approved.Approval.PresenterCredential;
+        var credential = approved.Approval.AnnotatorCredential;
 
         var disconnected = Assert.IsType<ConnectionDisconnectResult>(
-            context.Manager.Disconnect(approved.PresenterConnectionId));
+            context.Manager.Disconnect(approved.AnnotatorConnectionId));
 
-        Assert.Equal(ClientRole.Presenter, disconnected.DisconnectedRole);
-        Assert.Equal("receiver-connection", disconnected.ReceiverConnectionId);
+        Assert.Equal(ClientRole.Annotator, disconnected.DisconnectedRole);
+        Assert.Equal("host-connection", disconnected.HostConnectionId);
         Assert.False(disconnected.State!.Approved);
-        Assert.Empty(disconnected.State.ConnectedPresenters!);
+        Assert.Empty(disconnected.State.ConnectedAnnotators!);
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.ResumeSession(
-                "presenter-reconnected",
+                "annotator-reconnected",
                 new SessionResumeRequest(
                     credential.SessionId,
                     credential.Role,
@@ -672,88 +672,88 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ReceiverDisconnect_RevokesPresentersAndResumeRequiresNewRequest()
+    public void HostDisconnect_RevokesAnnotatorsAndResumeRequiresNewRequest()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var disconnected = Assert.IsType<ConnectionDisconnectResult>(
-            context.Manager.Disconnect("receiver-connection"));
+            context.Manager.Disconnect("host-connection"));
 
-        Assert.Equal(ClientRole.Receiver, disconnected.DisconnectedRole);
+        Assert.Equal(ClientRole.Host, disconnected.DisconnectedRole);
         Assert.Contains(
-            approved.PresenterConnectionId,
-            disconnected.PresenterConnectionIdsToEnd);
+            approved.AnnotatorConnectionId,
+            disconnected.AnnotatorConnectionIdsToEnd);
         Assert.False(disconnected.State!.Approved);
-        Assert.Empty(context.Manager.GetAvailableReceivers());
+        Assert.Empty(context.Manager.GetAvailableHosts());
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.ResumeSession(
-                "presenter-reconnected",
+                "annotator-reconnected",
                 new SessionResumeRequest(
-                    approved.Approval.PresenterCredential.SessionId,
-                    approved.Approval.PresenterCredential.Role,
-                    approved.Approval.PresenterCredential.ClientInstanceId,
-                    approved.Approval.PresenterCredential.SessionToken,
-                    approved.Approval.PresenterCredential.ReconnectToken)));
+                    approved.Approval.AnnotatorCredential.SessionId,
+                    approved.Approval.AnnotatorCredential.Role,
+                    approved.Approval.AnnotatorCredential.ClientInstanceId,
+                    approved.Approval.AnnotatorCredential.SessionToken,
+                    approved.Approval.AnnotatorCredential.ReconnectToken)));
 
-        var resumedReceiver = context.Manager.ResumeSession(
-            "receiver-reconnected",
+        var resumedHost = context.Manager.ResumeSession(
+            "host-reconnected",
             new SessionResumeRequest(
                 approved.Created.Credential.SessionId,
                 approved.Created.Credential.Role,
                 approved.Created.Credential.ClientInstanceId,
                 approved.Created.Credential.SessionToken,
                 approved.Created.Credential.ReconnectToken));
-        var freshRequest = context.Manager.RequestToJoinReceiver(
+        var freshRequest = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(
                 approved.Created.SessionId,
-                "new-presenter-client",
+                "new-annotator-client",
                 "1.0.0"),
-            "new-presenter-connection",
-            "New Presenter");
+            "new-annotator-connection",
+            "New Annotator");
 
-        Assert.False(resumedReceiver.State.Approved);
+        Assert.False(resumedHost.State.Approved);
         Assert.True(freshRequest.Response.Accepted);
     }
 
     [Fact]
-    public void PendingPresenterDisconnect_CancelsRequestAndAllowsReplacement()
+    public void PendingAnnotatorDisconnect_CancelsRequestAndAllowsReplacement()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
-        var pending = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
+        var created = CreateHost(context);
+        var pending = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"),
             "pending-connection",
-            "Pending Presenter");
+            "Pending Annotator");
 
         var disconnected = Assert.IsType<ConnectionDisconnectResult>(
             context.Manager.Disconnect("pending-connection"));
-        var replacement = context.Manager.RequestToJoinReceiver(
+        var replacement = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(created.SessionId, "replacement-client", "1.0.0"),
             "replacement-connection",
-            "Replacement Presenter");
+            "Replacement Annotator");
 
         Assert.True(pending.Response.Accepted);
         Assert.Equal(
             "pending-connection",
-            disconnected.CancelledPresenterRequestConnectionId);
+            disconnected.CancelledAnnotatorRequestConnectionId);
         Assert.True(replacement.Response.Accepted);
     }
 
     [Fact]
-    public void ReceiverResume_UpdatesApplicationInstanceUsedForSelfFiltering()
+    public void HostResume_UpdatesApplicationInstanceUsedForSelfFiltering()
     {
         var context = CreateContext();
-        var created = context.Manager.CreateReceiverSession(
+        var created = context.Manager.CreateHostSession(
             CreateDisplay(),
-            "receiver-connection",
-            "receiver-client",
-            "Receiver",
+            "host-connection",
+            "host-client",
+            "Host",
             "old-application");
-        context.Manager.Disconnect("receiver-connection");
+        context.Manager.Disconnect("host-connection");
 
         _ = context.Manager.ResumeSession(
-            "receiver-reconnected",
+            "host-reconnected",
             new SessionResumeRequest(
                 created.Credential.SessionId,
                 created.Credential.Role,
@@ -762,65 +762,65 @@ public sealed class SessionManagerTests
                 created.Credential.ReconnectToken),
             "new-application");
 
-        Assert.Empty(context.Manager.GetAvailableReceivers("new-application"));
-        Assert.Single(context.Manager.GetAvailableReceivers("old-application"));
+        Assert.Empty(context.Manager.GetAvailableHosts("new-application"));
+        Assert.Single(context.Manager.GetAvailableHosts("old-application"));
     }
 
     [Fact]
-    public void ReceiverAcknowledgement_RelaysOnlyToApprovedPresenter()
+    public void HostAcknowledgement_RelaysOnlyToApprovedAnnotator()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
         var pointer = CreatePointer(InitialTime, approved.Created.SessionId, 1);
-        _ = context.Manager.AcceptPointer(approved.PresenterConnectionId, pointer);
+        _ = context.Manager.AcceptPointer(approved.AnnotatorConnectionId, pointer);
         var acknowledgement = new PointerAcknowledgement(pointer.EventId, 1000);
 
         var result = context.Manager.AcceptAcknowledgement(
-            "receiver-connection",
+            "host-connection",
             acknowledgement);
 
-        Assert.Equal(approved.PresenterConnectionId, result.PresenterConnectionId);
+        Assert.Equal(approved.AnnotatorConnectionId, result.AnnotatorConnectionId);
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.AcceptAcknowledgement(
-                approved.PresenterConnectionId,
+                approved.AnnotatorConnectionId,
                 acknowledgement));
     }
 
     [Fact]
-    public void MultiplePresenters_HonorLimitAndRouteSequencesAndAcknowledgementsIndependently()
+    public void MultipleAnnotators_HonorLimitAndRouteSequencesAndAcknowledgementsIndependently()
     {
         var context = CreateContext();
-        var created = context.Manager.CreateReceiverSession(
+        var created = context.Manager.CreateHostSession(
             CreateDisplay(),
-            "receiver-connection",
-            "receiver-client",
-            "Receiver",
-            maximumPresenterConnections: 2);
-        var firstJoin = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"),
-            "presenter-one-connection",
-            "Presenter One");
-        _ = context.Manager.ApprovePresenter(
+            "host-connection",
+            "host-client",
+            "Host",
+            maximumAnnotatorConnections: 2);
+        var firstJoin = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-one", "1.0.0"),
+            "annotator-one-connection",
+            "Annotator One");
+        _ = context.Manager.ApproveAnnotator(
             created.SessionId,
-            firstJoin.Presenter!.ConnectionId,
-            "receiver-connection");
+            firstJoin.Annotator!.ConnectionId,
+            "host-connection");
 
-        Assert.Single(context.Manager.GetAvailableReceivers());
-        var secondJoin = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"),
-            "presenter-two-connection",
-            "Presenter Two");
-        var secondApproval = context.Manager.ApprovePresenter(
+        Assert.Single(context.Manager.GetAvailableHosts());
+        var secondJoin = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-two", "1.0.0"),
+            "annotator-two-connection",
+            "Annotator Two");
+        var secondApproval = context.Manager.ApproveAnnotator(
             created.SessionId,
-            secondJoin.Presenter!.ConnectionId,
-            "receiver-connection");
+            secondJoin.Annotator!.ConnectionId,
+            "host-connection");
 
-        Assert.Equal(2, secondApproval.State.ConnectedPresenters?.Length);
-        Assert.Empty(context.Manager.GetAvailableReceivers());
-        var rejectedThird = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-three", "1.0.0"),
-            "presenter-three-connection",
-            "Presenter Three");
+        Assert.Equal(2, secondApproval.State.ConnectedAnnotators?.Length);
+        Assert.Empty(context.Manager.GetAvailableHosts());
+        var rejectedThird = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-three", "1.0.0"),
+            "annotator-three-connection",
+            "Annotator Three");
         Assert.False(rejectedThird.Response.Accepted);
         Assert.Contains("limit", rejectedThird.Response.Reason, StringComparison.OrdinalIgnoreCase);
 
@@ -828,161 +828,161 @@ public sealed class SessionManagerTests
         var secondPointer = CreatePointer(InitialTime, created.SessionId, 7);
         Assert.Equal(
             PointerRelayDisposition.Accepted,
-            context.Manager.AcceptPointer("presenter-one-connection", firstPointer).Disposition);
+            context.Manager.AcceptPointer("annotator-one-connection", firstPointer).Disposition);
         Assert.Equal(
             PointerRelayDisposition.Accepted,
-            context.Manager.AcceptPointer("presenter-two-connection", secondPointer).Disposition);
+            context.Manager.AcceptPointer("annotator-two-connection", secondPointer).Disposition);
         Assert.Equal(
-            "presenter-one-connection",
+            "annotator-one-connection",
             context.Manager.AcceptAcknowledgement(
-                "receiver-connection",
-                new PointerAcknowledgement(firstPointer.EventId, 1000)).PresenterConnectionId);
+                "host-connection",
+                new PointerAcknowledgement(firstPointer.EventId, 1000)).AnnotatorConnectionId);
         Assert.Equal(
-            "presenter-two-connection",
+            "annotator-two-connection",
             context.Manager.AcceptAcknowledgement(
-                "receiver-connection",
-                new PointerAcknowledgement(secondPointer.EventId, 1001)).PresenterConnectionId);
+                "host-connection",
+                new PointerAcknowledgement(secondPointer.EventId, 1001)).AnnotatorConnectionId);
 
         var firstEnded = context.Manager.EndSession(
             created.SessionId,
-            "presenter-one-connection");
-        Assert.True(firstEnded.ReceiverPreserved);
+            "annotator-one-connection");
+        Assert.True(firstEnded.HostPreserved);
         Assert.Equal(
-            ["Presenter Two"],
-            firstEnded.State!.ConnectedPresenters!
-                .Select(presenter => presenter.DisplayName)
+            ["Annotator Two"],
+            firstEnded.State!.ConnectedAnnotators!
+                .Select(annotator => annotator.DisplayName)
                 .ToArray());
-        Assert.Single(context.Manager.GetAvailableReceivers());
+        Assert.Single(context.Manager.GetAvailableHosts());
     }
 
     [Fact]
-    public void PresenterEnd_PreservesAvailableReceiverForAnotherRequest()
+    public void AnnotatorEnd_PreservesAvailableHostForAnotherRequest()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.EndSession(
             approved.Created.SessionId,
-            approved.PresenterConnectionId);
+            approved.AnnotatorConnectionId);
 
         Assert.Equal(approved.Created.SessionId, result.SessionId);
-        Assert.True(result.ReceiverPreserved);
-        Assert.DoesNotContain("receiver-connection", result.ConnectionIds);
-        Assert.Contains(approved.PresenterConnectionId, result.ConnectionIds);
+        Assert.True(result.HostPreserved);
+        Assert.DoesNotContain("host-connection", result.ConnectionIds);
+        Assert.Contains(approved.AnnotatorConnectionId, result.ConnectionIds);
         Assert.Equal(1, context.Manager.ActiveSessionCount);
         Assert.Equal(
             approved.Created.SessionId,
-            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
-        var nextJoin = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(approved.Created.SessionId, "next-presenter", "1.0.0"),
-            "next-presenter-connection",
-            "Next Presenter");
+            Assert.Single(context.Manager.GetAvailableHosts()).SessionId);
+        var nextJoin = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(approved.Created.SessionId, "next-annotator", "1.0.0"),
+            "next-annotator-connection",
+            "Next Annotator");
         Assert.True(nextJoin.Response.Accepted);
     }
 
     [Fact]
-    public void PendingPresenterEnd_WithdrawsRequestAndReleasesTheReceiver()
+    public void PendingAnnotatorEnd_WithdrawsRequestAndReleasesTheHost()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
-        var join = JoinPresenter(context, created);
+        var created = CreateHost(context);
+        var join = JoinAnnotator(context, created);
 
-        var result = context.Manager.EndSession(created.SessionId, "presenter-connection");
+        var result = context.Manager.EndSession(created.SessionId, "annotator-connection");
 
-        Assert.True(result.ReceiverPreserved);
-        Assert.Equal("presenter-connection", result.CancelledPresenterRequestConnectionId);
-        Assert.Contains("presenter-connection", result.ConnectionIds);
+        Assert.True(result.HostPreserved);
+        Assert.Equal("annotator-connection", result.CancelledAnnotatorRequestConnectionId);
+        Assert.Contains("annotator-connection", result.ConnectionIds);
         Assert.False(result.State!.Approved);
         Assert.Equal(1, context.Manager.ActiveSessionCount);
         Assert.Equal(
             created.SessionId,
-            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
-        Assert.Equal("presenter-connection", join.Presenter!.ConnectionId);
-        var nextJoin = context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "next-presenter", "1.0.0"),
-            "next-presenter-connection",
-            "Next Presenter");
+            Assert.Single(context.Manager.GetAvailableHosts()).SessionId);
+        Assert.Equal("annotator-connection", join.Annotator!.ConnectionId);
+        var nextJoin = context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "next-annotator", "1.0.0"),
+            "next-annotator-connection",
+            "Next Annotator");
         Assert.True(nextJoin.Response.Accepted);
     }
 
     [Fact]
-    public void PendingPresenterEnd_CannotEndTheReceiverSession()
+    public void PendingAnnotatorEnd_CannotEndTheHostSession()
     {
         var context = CreateContext();
-        var created = CreateReceiver(context);
-        _ = JoinPresenter(context, created);
+        var created = CreateHost(context);
+        _ = JoinAnnotator(context, created);
 
-        context.Manager.EndSession(created.SessionId, "presenter-connection");
+        context.Manager.EndSession(created.SessionId, "annotator-connection");
 
         Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.EndSession(created.SessionId, "presenter-connection"));
+            () => context.Manager.EndSession(created.SessionId, "annotator-connection"));
         Assert.Equal(1, context.Manager.ActiveSessionCount);
     }
 
     [Fact]
-    public void ReceiverEnd_RemovesReceiverAndPresenter()
+    public void HostEnd_RemovesHostAndAnnotator()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
         var result = context.Manager.EndSession(
             approved.Created.SessionId,
-            "receiver-connection");
+            "host-connection");
 
-        Assert.False(result.ReceiverPreserved);
-        Assert.Contains("receiver-connection", result.ConnectionIds);
-        Assert.Contains(approved.PresenterConnectionId, result.ConnectionIds);
+        Assert.False(result.HostPreserved);
+        Assert.Contains("host-connection", result.ConnectionIds);
+        Assert.Contains(approved.AnnotatorConnectionId, result.ConnectionIds);
         Assert.Equal(0, context.Manager.ActiveSessionCount);
     }
 
     [Fact]
-    public void ReceiverDisconnectPresenters_PreservesAvailability()
+    public void HostDisconnectAnnotators_PreservesAvailability()
     {
         var context = CreateContext();
         var approved = CreateApprovedSession(context);
 
-        var result = context.Manager.DisconnectPresenters(
+        var result = context.Manager.DisconnectAnnotators(
             approved.Created.SessionId,
-            "receiver-connection");
+            "host-connection");
 
-        Assert.True(result.ReceiverPreserved);
-        Assert.Contains(approved.PresenterConnectionId, result.ConnectionIds);
+        Assert.True(result.HostPreserved);
+        Assert.Contains(approved.AnnotatorConnectionId, result.ConnectionIds);
         Assert.Equal(1, context.Manager.ActiveSessionCount);
         Assert.Equal(
             approved.Created.SessionId,
-            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
+            Assert.Single(context.Manager.GetAvailableHosts()).SessionId);
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.AcceptPointer(
-                approved.PresenterConnectionId,
+                approved.AnnotatorConnectionId,
                 CreatePointer(InitialTime, approved.Created.SessionId, 1)));
     }
 
     [Fact]
-    public void PresenterThatChangedItsPassword_StillReportsTheGroupItsSessionIsListedIn()
+    public void AnnotatorThatChangedItsPassword_StillReportsTheGroupItsSessionIsListedIn()
     {
         var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("receiver-connection", "shared-key");
-        context.Manager.SetConnectionGroup("presenter-connection", "shared-key");
+        context.Manager.SetConnectionGroup("host-connection", "shared-key");
+        context.Manager.SetConnectionGroup("annotator-connection", "shared-key");
         var approved = CreateApprovedSession(context);
 
-        // An approved presenter keeps its place when it changes its own password, so from here
+        // An approved annotator keeps its place when it changes its own password, so from here
         // its connection group and the group its session is published in disagree.
-        context.Manager.SetConnectionGroup("presenter-connection", "private-key");
+        context.Manager.SetConnectionGroup("annotator-connection", "private-key");
         var ended = context.Manager.EndSession(
             approved.Created.SessionId,
-            "presenter-connection");
+            "annotator-connection");
 
-        Assert.Equal("private-key", context.Manager.GetConnectionGroup("presenter-connection"));
+        Assert.Equal("private-key", context.Manager.GetConnectionGroup("annotator-connection"));
         Assert.Equal("shared-key", ended.GroupKey);
-        Assert.True(ended.ReceiverPreserved);
+        Assert.True(ended.HostPreserved);
     }
 
     [Fact]
     public void CollectedSession_ReportsTheGroupThatHasToRereadTheDirectory()
     {
         var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("receiver-connection", "shared-key");
-        _ = CreateReceiver(context);
+        context.Manager.SetConnectionGroup("host-connection", "shared-key");
+        _ = CreateHost(context);
 
         context.TimeProvider.Advance(TimeSpan.FromHours(9));
         var collected = Assert.Single(context.Manager.CollectExpiredSessions());
@@ -992,7 +992,7 @@ public sealed class SessionManagerTests
     }
 
     private static TestContext CreateContext(
-        int maximumPresentersPerReceiver = 16,
+        int maximumAnnotatorsPerHost = 16,
         bool requireServerPassword = false)
     {
         var timeProvider = new ManualTimeProvider(InitialTime);
@@ -1002,7 +1002,7 @@ public sealed class SessionManagerTests
                 AbandonedSessionLifetimeMinutes = 10,
                 MaximumSessionHours = 8,
                 SequenceWindowSize = 64,
-                MaximumPresentersPerReceiver = maximumPresentersPerReceiver,
+                MaximumAnnotatorsPerHost = maximumAnnotatorsPerHost,
                 RequireServerPassword = requireServerPassword,
             }),
             Options.Create(new PointerRateLimitOptions
@@ -1015,48 +1015,48 @@ public sealed class SessionManagerTests
         return new TestContext(manager, timeProvider);
     }
 
-    private static CreateSessionResponse CreateReceiver(TestContext context) =>
-        context.Manager.CreateReceiverSession(
+    private static CreateSessionResponse CreateHost(TestContext context) =>
+        context.Manager.CreateHostSession(
             CreateDisplay(),
-            "receiver-connection",
-            "receiver-client",
-            "Receiver Machine");
+            "host-connection",
+            "host-client",
+            "Host Machine");
 
-    private static JoinSessionResult JoinPresenter(
+    private static JoinSessionResult JoinAnnotator(
         TestContext context,
         CreateSessionResponse created) =>
-        context.Manager.RequestToJoinReceiver(
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"),
-            "presenter-connection",
-            "Presenter Machine");
+        context.Manager.RequestToJoinHost(
+            new DirectJoinRequest(created.SessionId, "annotator-client", "1.0.0"),
+            "annotator-connection",
+            "Annotator Machine");
 
-    private static void ApproveDirectPresenter(
+    private static void ApproveDirectAnnotator(
         TestContext context,
         CreateSessionResponse created,
         string clientInstanceId)
     {
-        var join = context.Manager.RequestToJoinReceiver(
+        var join = context.Manager.RequestToJoinHost(
             new DirectJoinRequest(created.SessionId, clientInstanceId, "1.0.0"),
             $"{clientInstanceId}-connection",
             clientInstanceId);
-        _ = context.Manager.ApprovePresenter(
+        _ = context.Manager.ApproveAnnotator(
             created.SessionId,
-            join.Presenter!.ConnectionId,
-            "receiver-connection");
+            join.Annotator!.ConnectionId,
+            "host-connection");
     }
 
     private static ApprovedContext CreateApprovedSession(TestContext context)
     {
-        var created = CreateReceiver(context);
-        var join = JoinPresenter(context, created);
-        var approval = context.Manager.ApprovePresenter(
+        var created = CreateHost(context);
+        var join = JoinAnnotator(context, created);
+        var approval = context.Manager.ApproveAnnotator(
             created.SessionId,
-            join.Presenter!.ConnectionId,
-            "receiver-connection");
+            join.Annotator!.ConnectionId,
+            "host-connection");
         return new ApprovedContext(
             created,
             approval,
-            join.Presenter.ConnectionId);
+            join.Annotator.ConnectionId);
     }
 
     private static DisplayDescriptor CreateDisplay() => new(
@@ -1086,6 +1086,6 @@ public sealed class SessionManagerTests
 
     private sealed record ApprovedContext(
         CreateSessionResponse Created,
-        ApprovePresenterResult Approval,
-        string PresenterConnectionId);
+        ApproveAnnotatorResult Approval,
+        string AnnotatorConnectionId);
 }

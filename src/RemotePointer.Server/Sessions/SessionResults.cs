@@ -9,20 +9,20 @@ public sealed record RelayGroupChange(
 
 public sealed record JoinSessionResult(
     JoinResponse Response,
-    string? ReceiverConnectionId,
-    PresenterDescriptor? Presenter);
+    string? HostConnectionId,
+    AnnotatorDescriptor? Annotator);
 
-public sealed record ApprovePresenterResult(
+public sealed record ApproveAnnotatorResult(
     string SessionId,
-    string PresenterConnectionId,
-    string ReceiverConnectionId,
-    SessionCredential PresenterCredential,
+    string AnnotatorConnectionId,
+    string HostConnectionId,
+    SessionCredential AnnotatorCredential,
     SessionStateMessage State);
 
-public sealed record RejectPresenterResult(
+public sealed record RejectAnnotatorResult(
     string SessionId,
-    string PresenterConnectionId,
-    string ReceiverConnectionId);
+    string AnnotatorConnectionId,
+    string HostConnectionId);
 
 public enum PointerRelayDisposition
 {
@@ -33,23 +33,23 @@ public enum PointerRelayDisposition
 public sealed record PointerRelayResult(
     PointerRelayDisposition Disposition,
     string SessionId,
-    string? ReceiverConnectionId);
+    string? HostConnectionId);
 
 public sealed record AcknowledgementRelayResult(
     string SessionId,
-    string? PresenterConnectionId);
+    string? AnnotatorConnectionId);
 
-public sealed record ReceiverDisplayUpdateResult(
+public sealed record HostDisplayUpdateResult(
     string SessionId,
-    IReadOnlyList<string> PresenterConnectionIds,
+    IReadOnlyList<string> AnnotatorConnectionIds,
     DisplayDescriptor Display)
 {
-    public string? PresenterConnectionId => PresenterConnectionIds.FirstOrDefault();
+    public string? AnnotatorConnectionId => AnnotatorConnectionIds.FirstOrDefault();
 }
 
-public sealed record ReceiverClientSettingsUpdateResult(
-    string ReceiverConnectionId,
-    IReadOnlyList<string> PresenterConnectionIds,
+public sealed record HostClientSettingsUpdateResult(
+    string HostConnectionId,
+    IReadOnlyList<string> AnnotatorConnectionIds,
     SessionStateMessage State);
 
 public sealed record ResumeSessionResult(
@@ -59,7 +59,7 @@ public sealed record ResumeSessionResult(
 
 /// <summary>
 /// <paramref name="GroupKey"/> is the group the affected session was published under, which is
-/// not always the group of the connection that caused the change: an approved presenter that
+/// not always the group of the connection that caused the change: an approved annotator that
 /// changes its server password keeps its place in the session it was admitted to. It is the
 /// directory that gained or lost an entry, so it is the one to notify.
 /// </summary>
@@ -68,18 +68,18 @@ public sealed record SessionTerminationResult(
     IReadOnlyList<string> ConnectionIds,
     long PointerCount,
     string GroupKey,
-    bool ReceiverPreserved = false,
-    string? PresenterConnectionId = null,
-    string? ReceiverConnectionId = null,
+    bool HostPreserved = false,
+    string? AnnotatorConnectionId = null,
+    string? HostConnectionId = null,
     SessionStateMessage? State = null,
-    IReadOnlyList<string>? PresenterConnectionIds = null,
-    string? CancelledPresenterRequestConnectionId = null);
+    IReadOnlyList<string>? AnnotatorConnectionIds = null,
+    string? CancelledAnnotatorRequestConnectionId = null);
 
 public sealed record ConnectionDisconnectResult(
     string SessionId,
     ClientRole DisconnectedRole,
-    IReadOnlyList<string> PresenterConnectionIdsToEnd,
-    string? ReceiverConnectionId,
+    IReadOnlyList<string> AnnotatorConnectionIdsToEnd,
+    string? HostConnectionId,
     SessionStateMessage? State,
     string GroupKey,
-    string? CancelledPresenterRequestConnectionId = null);
+    string? CancelledAnnotatorRequestConnectionId = null);

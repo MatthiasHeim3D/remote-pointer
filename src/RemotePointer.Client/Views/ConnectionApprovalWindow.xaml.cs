@@ -8,23 +8,23 @@ public partial class ConnectionApprovalWindow : Window
     private readonly Func<Task> rejectAsync;
 
     public ConnectionApprovalWindow(
-        string presenterName,
-        byte[]? presenterProfilePicturePng,
+        string annotatorName,
+        byte[]? annotatorProfilePicturePng,
         Func<Task> approveAsync,
         Func<Task> rejectAsync)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(presenterName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(annotatorName);
         this.approveAsync = approveAsync ?? throw new ArgumentNullException(nameof(approveAsync));
         this.rejectAsync = rejectAsync ?? throw new ArgumentNullException(nameof(rejectAsync));
-        PresenterProfilePicturePng = presenterProfilePicturePng is null
+        AnnotatorProfilePicturePng = annotatorProfilePicturePng is null
             ? null
-            : [.. presenterProfilePicturePng];
+            : [.. annotatorProfilePicturePng];
         InitializeComponent();
         DataContext = this;
-        PresenterNameText.Text = $"{presenterName} wants to connect";
+        AnnotatorNameText.Text = $"{annotatorName} wants to connect";
     }
 
-    public byte[]? PresenterProfilePicturePng { get; }
+    public byte[]? AnnotatorProfilePicturePng { get; }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {

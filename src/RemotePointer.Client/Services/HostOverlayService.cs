@@ -3,11 +3,11 @@ using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
 
-public sealed class ReceiverOverlayService(
+public sealed class HostOverlayService(
     IMonitorService monitorService,
-    IDisplayCoordinateMapper coordinateMapper) : IReceiverOverlayService
+    IDisplayCoordinateMapper coordinateMapper) : IHostOverlayService
 {
-    private ReceiverOverlayWindow? overlay;
+    private HostOverlayWindow? overlay;
     private bool disposed;
 
     public event EventHandler<OverlayStateChangedEventArgs>? StateChanged;
@@ -21,7 +21,7 @@ public sealed class ReceiverOverlayService(
 
         HideOverlay(raiseEvent: false);
 
-        overlay = new ReceiverOverlayWindow(monitor, monitorService, coordinateMapper);
+        overlay = new HostOverlayWindow(monitor, monitorService, coordinateMapper);
         overlay.SelectedMonitorDisconnected += OnSelectedMonitorDisconnected;
         overlay.Closed += OnOverlayClosed;
         overlay.Show();
@@ -50,7 +50,7 @@ public sealed class ReceiverOverlayService(
             StateChanged?.Invoke(
                 this,
                 new OverlayStateChangedEventArgs(
-                    "Show the receiver overlay before testing a marker.",
+                    "Show the host overlay before testing a marker.",
                     isError: true,
                     isVisible: false));
             return false;

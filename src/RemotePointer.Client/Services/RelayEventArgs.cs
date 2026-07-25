@@ -11,14 +11,14 @@ public sealed class RelayConnectionStatusChangedEventArgs(
     public string Message { get; } = message;
 }
 
-public sealed class PresenterJoinRequestedEventArgs(PresenterDescriptor presenter) : EventArgs
+public sealed class AnnotatorJoinRequestedEventArgs(AnnotatorDescriptor annotator) : EventArgs
 {
-    public PresenterDescriptor Presenter { get; } = presenter;
+    public AnnotatorDescriptor Annotator { get; } = annotator;
 }
 
-public sealed class PresenterJoinCancelledEventArgs(string presenterConnectionId) : EventArgs
+public sealed class AnnotatorJoinCancelledEventArgs(string annotatorConnectionId) : EventArgs
 {
-    public string PresenterConnectionId { get; } = presenterConnectionId;
+    public string AnnotatorConnectionId { get; } = annotatorConnectionId;
 }
 
 public sealed class RelaySessionStateEventArgs(SessionStateMessage state) : EventArgs
@@ -26,7 +26,7 @@ public sealed class RelaySessionStateEventArgs(SessionStateMessage state) : Even
     public SessionStateMessage State { get; } = state;
 }
 
-public sealed class RelayReceiverDisplayChangedEventArgs(DisplayDescriptor display) : EventArgs
+public sealed class RelayHostDisplayChangedEventArgs(DisplayDescriptor display) : EventArgs
 {
     public DisplayDescriptor Display { get; } = display;
 }

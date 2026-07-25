@@ -67,7 +67,7 @@ public partial class TargetRegionWindow : Window
             : 1d;
 
         InitializeComponent();
-        // Every shape the sender draws lives on this canvas, so one canvas-level opacity
+        // Every shape the annotator draws lives on this canvas, so one canvas-level opacity
         // multiplies through them without touching the fade animations on the shapes.
         RippleCanvas.Opacity = DrawingOpacity;
         pointerVisuals = new PointerVisualRenderer(RippleCanvas);

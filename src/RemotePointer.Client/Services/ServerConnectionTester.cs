@@ -9,7 +9,7 @@ namespace RemotePointer.Client.Services;
 public sealed class ServerConnectionTester : IServerConnectionTester
 {
     // The handler is shared for the lifetime of the process, so connections are recycled to
-    // pick up DNS changes for a relay host that moves.
+    // pick up DNS changes for a relay whose address moves.
     private static readonly HttpClient SharedHttpClient = new(
         new SocketsHttpHandler
         {
@@ -22,7 +22,7 @@ public sealed class ServerConnectionTester : IServerConnectionTester
     private const int MaximumVersionLength = 40;
 
     // A stranger's endpoint may answer with anything at all, so the identity payload is read from
-    // a bounded buffer instead of streaming whatever the host decides to send.
+    // a bounded buffer instead of streaming whatever that endpoint decides to send.
     private const int MaximumVersionPayloadBytes = 4 * 1024;
 
     // A newer relay may add fields to the payload, so unknown members are ignored rather than
@@ -94,8 +94,8 @@ public sealed class ServerConnectionTester : IServerConnectionTester
     }
 
     /// <summary>
-    /// Reads the version a Remote Pointer relay advertises, or null when the host is something
-    /// else. This doubles as the identity check, so anything unexpected — a missing endpoint, a
+    /// Reads the version a Remote Pointer relay advertises, or null when the address answers as
+    /// something else. This doubles as the identity check, so anything unexpected — a missing endpoint, a
     /// non-JSON body, a foreign or absent product id — fails the whole connection test.
     /// </summary>
     private async Task<string?> ReadServerVersionAsync(

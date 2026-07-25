@@ -3,10 +3,10 @@ namespace RemotePointer.Contracts.Messages;
 public sealed record SessionStateMessage(
     string SessionId,
     bool Approved,
-    DisplayDescriptor? ReceiverDisplay,
+    DisplayDescriptor? HostDisplay,
     DateTimeOffset ExpiresAt,
-    bool ReceiverDiscoverable = false,
-    ConnectedPresenterDescriptor[]? ConnectedPresenters = null,
-    string? ReceiverClientInstanceId = null,
-    byte[]? ReceiverProfilePicturePng = null,
-    string? ReceiverDisplayName = null);
+    bool HostDiscoverable = false,
+    ConnectedAnnotatorDescriptor[]? ConnectedAnnotators = null,
+    string? HostClientInstanceId = null,
+    byte[]? HostProfilePicturePng = null,
+    string? HostDisplayName = null);

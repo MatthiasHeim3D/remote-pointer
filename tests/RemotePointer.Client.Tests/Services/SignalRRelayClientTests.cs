@@ -30,34 +30,34 @@ public sealed class SignalRRelayClientTests
                 PasswordKey = SharedGroupKey,
             },
         };
-        await using var receiver = new SignalRRelayClient(
+        await using var host = new SignalRRelayClient(
             settings,
-            new FixedClientInstanceIdProvider("receiver-client"),
+            new FixedClientInstanceIdProvider("host-client"),
             server.CreateHandler,
             HttpTransportType.LongPolling);
-        await using var presenter = new SignalRRelayClient(
+        await using var annotator = new SignalRRelayClient(
             settings,
-            new FixedClientInstanceIdProvider("presenter-client"),
+            new FixedClientInstanceIdProvider("annotator-client"),
             server.CreateHandler,
             HttpTransportType.LongPolling);
-        var joinRequested = CompletionSource<PresenterDescriptor>();
-        var presenterApproved = CompletionSource<SessionStateMessage>();
+        var joinRequested = CompletionSource<AnnotatorDescriptor>();
+        var annotatorApproved = CompletionSource<SessionStateMessage>();
         var pointerReceived = CompletionSource<PointerEventMessage>();
         var acknowledgementReceived = CompletionSource<PointerAcknowledgement>();
-        var receiverEnded = CompletionSource<string>();
-        var presenterEnded = CompletionSource<string>();
-        receiver.PresenterJoinRequested += (_, e) => joinRequested.TrySetResult(e.Presenter);
-        presenter.SessionApproved += (_, e) => presenterApproved.TrySetResult(e.State);
-        receiver.PointerReceived += (_, e) => pointerReceived.TrySetResult(e.PointerEvent);
-        presenter.PointerDisplayed += (_, e) => acknowledgementReceived.TrySetResult(e.Acknowledgement);
-        receiver.SessionEnded += (_, e) => receiverEnded.TrySetResult(e.Reason);
-        presenter.SessionEnded += (_, e) => presenterEnded.TrySetResult(e.Reason);
+        var hostEnded = CompletionSource<string>();
+        var annotatorEnded = CompletionSource<string>();
+        host.AnnotatorJoinRequested += (_, e) => joinRequested.TrySetResult(e.Annotator);
+        annotator.SessionApproved += (_, e) => annotatorApproved.TrySetResult(e.State);
+        host.PointerReceived += (_, e) => pointerReceived.TrySetResult(e.PointerEvent);
+        annotator.PointerDisplayed += (_, e) => acknowledgementReceived.TrySetResult(e.Acknowledgement);
+        host.SessionEnded += (_, e) => hostEnded.TrySetResult(e.Reason);
+        annotator.SessionEnded += (_, e) => annotatorEnded.TrySetResult(e.Reason);
 
-        var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
-        var join = await presenter.RequestToJoinReceiverAsync(created.SessionId);
+        var created = await host.CreateHostSessionAsync(CreateDisplay());
+        var join = await annotator.RequestToJoinHostAsync(created.SessionId);
         var descriptor = await joinRequested.Task.WaitAsync(TestTimeout);
-        await receiver.ApprovePresenterAsync(created.SessionId, descriptor.ConnectionId);
-        var approved = await presenterApproved.Task.WaitAsync(TestTimeout);
+        await host.ApproveAnnotatorAsync(created.SessionId, descriptor.ConnectionId);
+        var approved = await annotatorApproved.Task.WaitAsync(TestTimeout);
         var pointer = new PointerEventMessage(
             Guid.NewGuid(),
             created.SessionId,
@@ -70,36 +70,36 @@ public sealed class SignalRRelayClientTests
 
         Assert.True(join.Accepted);
         Assert.True(approved.Approved);
-        Assert.Equal(ClientRole.Presenter, presenter.Credential?.Role);
-        Assert.True(await presenter.SendPointerAsync(pointer));
+        Assert.Equal(ClientRole.Annotator, annotator.Credential?.Role);
+        Assert.True(await annotator.SendPointerAsync(pointer));
         Assert.Equal(pointer, await pointerReceived.Task.WaitAsync(TestTimeout));
 
         var acknowledgement = new PointerAcknowledgement(
             pointer.EventId,
             DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
-        Assert.True(await receiver.AcknowledgePointerAsync(acknowledgement));
+        Assert.True(await host.AcknowledgePointerAsync(acknowledgement));
         Assert.Equal(
             acknowledgement,
             await acknowledgementReceived.Task.WaitAsync(TestTimeout));
 
-        await receiver.DisconnectAllConnectionsAsync();
+        await host.DisconnectAllConnectionsAsync();
         Assert.Contains(
-            "receiver",
-            await presenterEnded.Task.WaitAsync(TestTimeout),
+            "host",
+            await annotatorEnded.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             created.SessionId,
-            Assert.Single(await presenter.GetAvailableReceiversAsync()).SessionId);
+            Assert.Single(await annotator.GetAvailableHostsAsync()).SessionId);
 
-        await receiver.EndSessionAsync();
+        await host.EndSessionAsync();
         Assert.Contains(
             "ended",
-            await receiverEnded.Task.WaitAsync(TestTimeout),
+            await hostEnded.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task DisposingReceiver_EndsSessionAndRequiresNewPresenterRequest()
+    public async Task DisposingHost_EndsSessionAndRequiresNewAnnotatorRequest()
     {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
@@ -109,66 +109,66 @@ public sealed class SignalRRelayClientTests
         var store = new ProtectedSessionStore(
             new ReversingDataProtector(),
             sessionDirectory: sessionDirectory.Path);
-        await using var receiver = new SignalRRelayClient(
+        await using var host = new SignalRRelayClient(
             settings,
-            new FixedClientInstanceIdProvider("receiver-client"),
+            new FixedClientInstanceIdProvider("host-client"),
             server.CreateHandler,
             HttpTransportType.LongPolling,
-            ClientRole.Receiver,
+            ClientRole.Host,
             store);
-        await using var presenter = new SignalRRelayClient(
+        await using var annotator = new SignalRRelayClient(
             settings,
-            new FixedClientInstanceIdProvider("presenter-client"),
+            new FixedClientInstanceIdProvider("annotator-client"),
             server.CreateHandler,
             HttpTransportType.LongPolling);
-        var joinRequested = CompletionSource<PresenterDescriptor>();
-        var presenterApproved = CompletionSource<SessionStateMessage>();
-        var receiverApproved = CompletionSource<SessionStateMessage>();
-        receiver.PresenterJoinRequested += (_, e) => joinRequested.TrySetResult(e.Presenter);
-        receiver.SessionApproved += (_, e) => receiverApproved.TrySetResult(e.State);
-        presenter.SessionApproved += (_, e) => presenterApproved.TrySetResult(e.State);
-        var presenterEnded = CompletionSource<string>();
-        presenter.SessionEnded += (_, e) => presenterEnded.TrySetResult(e.Reason);
-        var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
-        Assert.Equal(created.Credential, store.Load(ClientRole.Receiver, "receiver-client"));
-        _ = await presenter.RequestToJoinReceiverAsync(created.SessionId);
+        var joinRequested = CompletionSource<AnnotatorDescriptor>();
+        var annotatorApproved = CompletionSource<SessionStateMessage>();
+        var hostApproved = CompletionSource<SessionStateMessage>();
+        host.AnnotatorJoinRequested += (_, e) => joinRequested.TrySetResult(e.Annotator);
+        host.SessionApproved += (_, e) => hostApproved.TrySetResult(e.State);
+        annotator.SessionApproved += (_, e) => annotatorApproved.TrySetResult(e.State);
+        var annotatorEnded = CompletionSource<string>();
+        annotator.SessionEnded += (_, e) => annotatorEnded.TrySetResult(e.Reason);
+        var created = await host.CreateHostSessionAsync(CreateDisplay());
+        Assert.Equal(created.Credential, store.Load(ClientRole.Host, "host-client"));
+        _ = await annotator.RequestToJoinHostAsync(created.SessionId);
         var descriptor = await joinRequested.Task.WaitAsync(TestTimeout);
-        await receiver.ApprovePresenterAsync(created.SessionId, descriptor.ConnectionId);
-        _ = await presenterApproved.Task.WaitAsync(TestTimeout);
-        _ = await receiverApproved.Task.WaitAsync(TestTimeout);
-        var originalReconnectToken = Assert.IsType<SessionCredential>(receiver.Credential)
+        await host.ApproveAnnotatorAsync(created.SessionId, descriptor.ConnectionId);
+        _ = await annotatorApproved.Task.WaitAsync(TestTimeout);
+        _ = await hostApproved.Task.WaitAsync(TestTimeout);
+        var originalReconnectToken = Assert.IsType<SessionCredential>(host.Credential)
             .ReconnectToken;
         Assert.Equal(
             originalReconnectToken,
-            store.Load(ClientRole.Receiver, "receiver-client")?.ReconnectToken);
+            store.Load(ClientRole.Host, "host-client")?.ReconnectToken);
 
-        await receiver.DisposeAsync();
+        await host.DisposeAsync();
 
         Assert.Contains(
             "ended",
-            await presenterEnded.Task.WaitAsync(TestTimeout),
+            await annotatorEnded.Task.WaitAsync(TestTimeout),
             StringComparison.OrdinalIgnoreCase);
-        Assert.Null(store.Load(ClientRole.Receiver, "receiver-client"));
+        Assert.Null(store.Load(ClientRole.Host, "host-client"));
 
-        await using var recoveredReceiver = new SignalRRelayClient(
+        await using var recoveredHost = new SignalRRelayClient(
             settings,
-            new FixedClientInstanceIdProvider("receiver-client"),
+            new FixedClientInstanceIdProvider("host-client"),
             server.CreateHandler,
             HttpTransportType.LongPolling,
-            ClientRole.Receiver,
+            ClientRole.Host,
             store);
-        Assert.Null(recoveredReceiver.Credential);
-        Assert.False(await recoveredReceiver.TryResumeSessionAsync());
+        Assert.Null(recoveredHost.Credential);
+        Assert.False(await recoveredHost.TryResumeSessionAsync());
 
-        var freshJoinRequested = CompletionSource<PresenterDescriptor>();
-        recoveredReceiver.PresenterJoinRequested +=
-            (_, e) => freshJoinRequested.TrySetResult(e.Presenter);
-        var newSession = await recoveredReceiver.CreateReceiverSessionAsync(CreateDisplay());
-        var freshJoin = await presenter.RequestToJoinReceiverAsync(newSession.SessionId);
+        var freshJoinRequested = CompletionSource<AnnotatorDescriptor>();
+        recoveredHost.AnnotatorJoinRequested +=
+            (_, e) => freshJoinRequested.TrySetResult(e.Annotator);
+        var newSession = await recoveredHost.CreateHostSessionAsync(CreateDisplay());
+        var freshJoin = await annotator.RequestToJoinHostAsync(newSession.SessionId);
 
         Assert.True(freshJoin.Accepted);
         _ = await freshJoinRequested.Task.WaitAsync(TestTimeout);
-        await recoveredReceiver.EndSessionAsync();
+        await recoveredHost.EndSessionAsync();
     }
 
     [Fact]
@@ -177,9 +177,9 @@ public sealed class SignalRRelayClientTests
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
         var server = factory.Server;
-        await using var receiver = new SignalRRelayClient(
+        await using var host = new SignalRRelayClient(
             CreateSettings(server.BaseAddress),
-            new FixedClientInstanceIdProvider("receiver-client"),
+            new FixedClientInstanceIdProvider("host-client"),
             server.CreateHandler,
             HttpTransportType.LongPolling);
         await using var peer = new SignalRRelayClient(
@@ -188,17 +188,17 @@ public sealed class SignalRRelayClientTests
             server.CreateHandler,
             HttpTransportType.LongPolling);
         var peerRelisted = CompletionSource<bool>();
-        peer.ReceiverDirectoryChanged += (_, _) => peerRelisted.TrySetResult(true);
-        var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
-        Assert.Single(await peer.GetAvailableReceiversAsync());
+        peer.HostDirectoryChanged += (_, _) => peerRelisted.TrySetResult(true);
+        var created = await host.CreateHostSessionAsync(CreateDisplay());
+        Assert.Single(await peer.GetAvailableHostsAsync());
 
-        // The receiver does nothing else afterwards: presenting the key has to be what carries
+        // The host does nothing else afterwards: presenting the key has to be what carries
         // the change to the relay, not whatever hub call happens to come next.
-        await receiver.SetServerPasswordKeyAsync("a-different-group-key");
+        await host.SetServerPasswordKeyAsync("a-different-group-key");
 
         Assert.True(await peerRelisted.Task.WaitAsync(TestTimeout));
-        Assert.Empty(await peer.GetAvailableReceiversAsync());
-        Assert.False((await peer.RequestToJoinReceiverAsync(created.SessionId)).Accepted);
+        Assert.Empty(await peer.GetAvailableHostsAsync());
+        Assert.False((await peer.RequestToJoinHostAsync(created.SessionId)).Accepted);
     }
 
     private static ClientSettings CreateSettings(Uri baseAddress) => new()

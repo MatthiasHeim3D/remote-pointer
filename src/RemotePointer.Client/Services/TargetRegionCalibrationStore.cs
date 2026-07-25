@@ -12,10 +12,10 @@ public sealed class TargetRegionCalibrationStore(string? directoryPath = null)
     private readonly string directoryPath =
         directoryPath ?? ClientDataDirectory.Resolve("Calibrations");
 
-    public RectangleD? Load(string receiverIdentity)
+    public RectangleD? Load(string hostIdentity)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(receiverIdentity);
-        var path = GetPath(receiverIdentity);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostIdentity);
+        var path = GetPath(hostIdentity);
         if (!File.Exists(path))
         {
             return null;
@@ -33,9 +33,9 @@ public sealed class TargetRegionCalibrationStore(string? directoryPath = null)
         }
     }
 
-    public void Save(string receiverIdentity, RectangleD rectangle)
+    public void Save(string hostIdentity, RectangleD rectangle)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(receiverIdentity);
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostIdentity);
         if (!IsValid(rectangle))
         {
             throw new ArgumentOutOfRangeException(nameof(rectangle));
@@ -44,7 +44,7 @@ public sealed class TargetRegionCalibrationStore(string? directoryPath = null)
         try
         {
             Directory.CreateDirectory(directoryPath);
-            File.WriteAllText(GetPath(receiverIdentity), JsonSerializer.Serialize(rectangle));
+            File.WriteAllText(GetPath(hostIdentity), JsonSerializer.Serialize(rectangle));
         }
         catch (Exception exception) when (
             exception is IOException

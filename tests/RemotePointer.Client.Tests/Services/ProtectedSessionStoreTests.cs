@@ -17,7 +17,7 @@ public sealed class ProtectedSessionStoreTests
 
         store.Save(credential);
         var rawFile = File.ReadAllText(Assert.Single(Directory.GetFiles(directory.Path)));
-        var loaded = store.Load(ClientRole.Presenter, "presenter-client");
+        var loaded = store.Load(ClientRole.Annotator, "annotator-client");
 
         Assert.Equal(credential, loaded);
         Assert.DoesNotContain(credential.SessionToken, rawFile, StringComparison.Ordinal);
@@ -33,7 +33,7 @@ public sealed class ProtectedSessionStoreTests
             sessionDirectory: directory.Path);
         store.Save(CreateCredential(DateTimeOffset.UtcNow.AddHours(1)));
 
-        var loaded = store.Load(ClientRole.Presenter, "different-client");
+        var loaded = store.Load(ClientRole.Annotator, "different-client");
 
         Assert.Null(loaded);
         Assert.Empty(Directory.GetFiles(directory.Path));
@@ -48,7 +48,7 @@ public sealed class ProtectedSessionStoreTests
             sessionDirectory: directory.Path);
         store.Save(CreateCredential(DateTimeOffset.UtcNow.AddMinutes(-1)));
 
-        var loaded = store.Load(ClientRole.Presenter, "presenter-client");
+        var loaded = store.Load(ClientRole.Annotator, "annotator-client");
 
         Assert.Null(loaded);
         Assert.Empty(Directory.GetFiles(directory.Path));
@@ -64,7 +64,7 @@ public sealed class ProtectedSessionStoreTests
         store.Save(CreateCredential(DateTimeOffset.UtcNow.AddHours(1)));
         File.WriteAllBytes(Assert.Single(Directory.GetFiles(directory.Path)), [0, 1, 2]);
 
-        var loaded = store.Load(ClientRole.Presenter, "presenter-client");
+        var loaded = store.Load(ClientRole.Annotator, "annotator-client");
 
         Assert.Null(loaded);
         Assert.Empty(Directory.GetFiles(directory.Path));
@@ -72,8 +72,8 @@ public sealed class ProtectedSessionStoreTests
 
     private static SessionCredential CreateCredential(DateTimeOffset expiresAt) => new(
         "session-1",
-        ClientRole.Presenter,
-        "presenter-client",
+        ClientRole.Annotator,
+        "annotator-client",
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq",
         "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijk",
         expiresAt);

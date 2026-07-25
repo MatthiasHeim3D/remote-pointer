@@ -2,7 +2,7 @@ using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
 
-public interface IReceiverOverlayService : IDisposable
+public interface IHostOverlayService : IDisposable
 {
     event EventHandler<OverlayStateChangedEventArgs>? StateChanged;
 

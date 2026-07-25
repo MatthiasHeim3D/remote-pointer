@@ -19,8 +19,8 @@ internal sealed class PointerVisualRenderer
     private const int MaximumPathPoints = 2_048;
     private const int MaximumTransientVisuals = 20;
 
-    // Each sender draws one gesture at a time and a receiver accepts at most sixteen senders,
-    // so this only bites when a sender opens gestures it never ends.
+    // Each annotator draws one gesture at a time and a host accepts at most sixteen annotators,
+    // so this only bites when an annotator opens gestures it never ends.
     private const int MaximumActiveGestures = 16;
 
     private static readonly Brush AccentBrush =

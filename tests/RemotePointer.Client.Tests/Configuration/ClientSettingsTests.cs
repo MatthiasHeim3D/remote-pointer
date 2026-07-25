@@ -28,7 +28,7 @@ public sealed class ClientSettingsTests
         var settings = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://pointer.example.test", settings.Server.BaseUrl);
-        Assert.Equal(2, settings.Receiver.MaximumSenderConnections);
+        Assert.Equal(2, settings.Host.MaximumAnnotatorConnections);
     }
 
     [Fact]
@@ -104,21 +104,21 @@ public sealed class ClientSettingsTests
             "https://saved.example.test",
             "Ada Lovelace",
             @"C:\Pictures\ada.png",
-            maximumSenderConnections: 4,
+            maximumAnnotatorConnections: 4,
             launchAtStartup: true,
             selectedDisplayId: "display-2",
             showUsageHints: false,
-            receiverAvailable: true);
+            hostAvailable: true);
         var reloaded = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://saved.example.test", reloaded.Server.BaseUrl);
         Assert.Equal("Ada Lovelace", reloaded.Profile.UserName);
         Assert.Equal(@"C:\Pictures\ada.png", reloaded.Profile.PicturePath);
-        Assert.Equal(4, reloaded.Receiver.MaximumSenderConnections);
+        Assert.Equal(4, reloaded.Host.MaximumAnnotatorConnections);
         Assert.True(reloaded.Startup.LaunchAtStartup);
-        Assert.Equal("display-2", reloaded.Receiver.SelectedDisplayId);
+        Assert.Equal("display-2", reloaded.Host.SelectedDisplayId);
         Assert.False(reloaded.Pointer.ShowUsageHints);
-        Assert.True(reloaded.Receiver.IsAvailable);
+        Assert.True(reloaded.Host.IsAvailable);
         Assert.False(reloaded.Pointer.HasShownUsageHints);
     }
 
@@ -135,7 +135,65 @@ public sealed class ClientSettingsTests
 
         Assert.Equal("https://packaged.example.test", settings.Server.BaseUrl);
         Assert.Equal(Environment.UserName, settings.Profile.UserName);
-        Assert.Equal(2, settings.Receiver.MaximumSenderConnections);
+        Assert.Equal(2, settings.Host.MaximumAnnotatorConnections);
+    }
+
+    [Fact]
+    public void Load_ReadsPreferencesWrittenBeforeTheAnnotatorHostRename()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        WriteUserPreferences(
+            directory.Path,
+            new
+            {
+                serverAddress = "https://saved.example.test",
+                userName = "Saved User",
+                profilePicturePath = string.Empty,
+                maximumSenderConnections = 5,
+                receiverAvailable = true,
+            });
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        // An upgrading client must keep both choices rather than silently reset the limit to
+        // two and take the user out of the directory.
+        Assert.Equal(5, settings.Host.MaximumAnnotatorConnections);
+        Assert.True(settings.Host.IsAvailable);
+    }
+
+    [Fact]
+    public void SaveUserPreferences_RewritesLegacyNamesUnderTheCurrentSpelling()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        WriteUserPreferences(
+            directory.Path,
+            new
+            {
+                serverAddress = "https://saved.example.test",
+                userName = "Saved User",
+                profilePicturePath = string.Empty,
+                maximumSenderConnections = 5,
+                receiverAvailable = true,
+            });
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUserPreferences(
+            "https://saved.example.test",
+            "Saved User",
+            null);
+
+        var written = File.ReadAllText(
+            System.IO.Path.Combine(directory.Path, "user-settings.json"));
+        Assert.Contains("maximumAnnotatorConnections", written, StringComparison.Ordinal);
+        Assert.Contains("hostAvailable", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("maximumSenderConnections", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("receiverAvailable", written, StringComparison.Ordinal);
+
+        var reloaded = ClientSettings.Load(directory.Path, null);
+        Assert.Equal(5, reloaded.Host.MaximumAnnotatorConnections);
+        Assert.True(reloaded.Host.IsAvailable);
     }
 
     [Fact]
@@ -150,14 +208,14 @@ public sealed class ClientSettingsTests
                 serverAddress = "http://insecure.example.test",
                 userName = new string('n', 200),
                 profilePicturePath = string.Empty,
-                maximumSenderConnections = 99,
+                maximumAnnotatorConnections = 99,
             });
 
         var settings = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal("https://packaged.example.test", settings.Server.BaseUrl);
         Assert.Equal(Environment.UserName, settings.Profile.UserName);
-        Assert.Equal(16, settings.Receiver.MaximumSenderConnections);
+        Assert.Equal(16, settings.Host.MaximumAnnotatorConnections);
     }
 
     [Fact]
@@ -219,16 +277,16 @@ public sealed class ClientSettingsTests
     }
 
     [Fact]
-    public void SaveReceiverAvailability_PersistsSelectionImmediately()
+    public void SaveHostAvailability_PersistsSelectionImmediately()
     {
         using var directory = new TemporaryDirectory();
         WriteSettings(directory.Path, "https://packaged.example.test");
         var settings = ClientSettings.Load(directory.Path, null);
 
-        settings.SaveReceiverAvailability(true);
+        settings.SaveHostAvailability(true);
         var reloaded = ClientSettings.Load(directory.Path, null);
 
-        Assert.True(reloaded.Receiver.IsAvailable);
+        Assert.True(reloaded.Host.IsAvailable);
     }
 
     [Fact]

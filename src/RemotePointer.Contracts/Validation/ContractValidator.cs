@@ -7,7 +7,7 @@ public static class ContractValidator
     public const int MaximumPointerTextLength = 256;
     public const int MaximumPathPointsPerEvent = 128;
     public const int MaximumProfilePictureBytes = 20 * 1_024;
-    public const int MaximumConnectedPresenters = 64;
+    public const int MaximumConnectedAnnotators = 64;
 
     public static ValidationResult Validate(
         PointerEventMessage? message,
@@ -226,46 +226,46 @@ public static class ContractValidator
         var errors = new List<ValidationError>();
         AddRequired(errors, IsRequiredIdentifier(state.SessionId), nameof(state.SessionId));
         AddRange(errors, state.ExpiresAt != default, nameof(state.ExpiresAt));
-        if (state.ReceiverClientInstanceId is not null)
+        if (state.HostClientInstanceId is not null)
         {
             AddRequired(
                 errors,
-                IsRequiredIdentifier(state.ReceiverClientInstanceId),
-                nameof(state.ReceiverClientInstanceId));
+                IsRequiredIdentifier(state.HostClientInstanceId),
+                nameof(state.HostClientInstanceId));
         }
 
-        if (state.ReceiverDisplayName is not null)
+        if (state.HostDisplayName is not null)
         {
             AddRequired(
                 errors,
-                IsRequiredIdentifier(state.ReceiverDisplayName),
-                nameof(state.ReceiverDisplayName));
+                IsRequiredIdentifier(state.HostDisplayName),
+                nameof(state.HostDisplayName));
         }
 
-        if (state.ReceiverProfilePicturePng is not null)
+        if (state.HostProfilePicturePng is not null)
         {
-            errors.AddRange(Validate(new ClientProfile(state.ReceiverProfilePicturePng)).Errors);
+            errors.AddRange(Validate(new ClientProfile(state.HostProfilePicturePng)).Errors);
         }
 
-        if (state.ReceiverDisplay is not null)
+        if (state.HostDisplay is not null)
         {
-            errors.AddRange(Validate(state.ReceiverDisplay).Errors);
+            errors.AddRange(Validate(state.HostDisplay).Errors);
         }
 
-        if (state.ConnectedPresenters is not null)
+        if (state.ConnectedAnnotators is not null)
         {
             AddRange(
                 errors,
-                state.ConnectedPresenters.Length <= MaximumConnectedPresenters,
-                nameof(state.ConnectedPresenters));
-            foreach (var presenter in state.ConnectedPresenters.Take(
-                         MaximumConnectedPresenters + 1))
+                state.ConnectedAnnotators.Length <= MaximumConnectedAnnotators,
+                nameof(state.ConnectedAnnotators));
+            foreach (var annotator in state.ConnectedAnnotators.Take(
+                         MaximumConnectedAnnotators + 1))
             {
                 AddRequired(
                     errors,
-                    !string.IsNullOrWhiteSpace(presenter.DisplayName)
-                        && presenter.DisplayName.Length <= 128,
-                    nameof(presenter.DisplayName));
+                    !string.IsNullOrWhiteSpace(annotator.DisplayName)
+                        && annotator.DisplayName.Length <= 128,
+                    nameof(annotator.DisplayName));
             }
         }
 

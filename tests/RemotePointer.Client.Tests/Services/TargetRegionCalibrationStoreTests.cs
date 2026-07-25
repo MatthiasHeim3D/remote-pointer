@@ -10,18 +10,18 @@ public sealed class TargetRegionCalibrationStoreTests : IDisposable
         $"RemotePointer.CalibrationTests.{Guid.NewGuid():N}");
 
     [Fact]
-    public void SaveAndLoad_UsesSeparateCalibrationPerReceiver()
+    public void SaveAndLoad_UsesSeparateCalibrationPerHost()
     {
         var store = new TargetRegionCalibrationStore(directoryPath);
         var first = new RectangleD(10d, 20d, 800d, 450d);
         var second = new RectangleD(30d, 40d, 640d, 480d);
 
-        store.Save("receiver-one", first);
-        store.Save("receiver-two", second);
+        store.Save("host-one", first);
+        store.Save("host-two", second);
 
-        Assert.Equal(first, store.Load("receiver-one"));
-        Assert.Equal(second, store.Load("receiver-two"));
-        Assert.Null(store.Load("unknown-receiver"));
+        Assert.Equal(first, store.Load("host-one"));
+        Assert.Equal(second, store.Load("host-two"));
+        Assert.Null(store.Load("unknown-host"));
     }
 
     [Fact]
@@ -33,10 +33,10 @@ public sealed class TargetRegionCalibrationStoreTests : IDisposable
         var store = new TargetRegionCalibrationStore(blockedPath);
 
         var exception = Record.Exception(
-            () => store.Save("receiver-one", new RectangleD(10d, 20d, 800d, 450d)));
+            () => store.Save("host-one", new RectangleD(10d, 20d, 800d, 450d)));
 
         Assert.Null(exception);
-        Assert.Null(store.Load("receiver-one"));
+        Assert.Null(store.Load("host-one"));
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class TargetRegionCalibrationStoreTests : IDisposable
         var store = new TargetRegionCalibrationStore(directoryPath);
 
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => store.Save("receiver-one", new RectangleD(0d, 0d, 10d, 10d)));
+            () => store.Save("host-one", new RectangleD(0d, 0d, 10d, 10d)));
     }
 
     public void Dispose()

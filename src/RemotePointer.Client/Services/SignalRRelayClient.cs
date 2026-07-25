@@ -29,7 +29,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private readonly HubConnection connection;
     private readonly string clientInstanceId;
     private ClientProfile clientProfile;
-    private int maximumPresenterConnections;
+    private int maximumAnnotatorConnections;
     private string displayName;
     private readonly ClientRole? expectedRole;
     private readonly IProtectedSessionStore? sessionStore;
@@ -75,7 +75,7 @@ public sealed class SignalRRelayClient : IRelayClient
         clientInstanceId = clientInstanceIdProvider.GetClientInstanceId();
         var applicationInstanceId = clientInstanceIdProvider.GetApplicationInstanceId();
         clientProfile = CreateClientProfile(settings.Profile.PicturePath);
-        maximumPresenterConnections = settings.Receiver.MaximumSenderConnections;
+        maximumAnnotatorConnections = settings.Host.MaximumAnnotatorConnections;
         this.expectedRole = expectedRole;
         this.sessionStore = sessionStore;
         this.auditLog = auditLog;
@@ -130,15 +130,15 @@ public sealed class SignalRRelayClient : IRelayClient
 
     public event EventHandler<RelayConnectionStatusChangedEventArgs>? ConnectionStatusChanged;
 
-    public event EventHandler? ReceiverDirectoryChanged;
+    public event EventHandler? HostDirectoryChanged;
 
-    public event EventHandler<PresenterJoinRequestedEventArgs>? PresenterJoinRequested;
+    public event EventHandler<AnnotatorJoinRequestedEventArgs>? AnnotatorJoinRequested;
 
-    public event EventHandler<PresenterJoinCancelledEventArgs>? PresenterJoinCancelled;
+    public event EventHandler<AnnotatorJoinCancelledEventArgs>? AnnotatorJoinCancelled;
 
     public event EventHandler<RelaySessionStateEventArgs>? SessionApproved;
 
-    public event EventHandler<RelayReceiverDisplayChangedEventArgs>? ReceiverDisplayChanged;
+    public event EventHandler<RelayHostDisplayChangedEventArgs>? HostDisplayChanged;
 
     public event EventHandler<RelayPointerEventArgs>? PointerReceived;
 
@@ -219,12 +219,12 @@ public sealed class SignalRRelayClient : IRelayClient
         }
     }
 
-    public async Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
+    public async Task<IReadOnlyList<AvailableHostDescriptor>> GetAvailableHostsAsync(
         CancellationToken cancellationToken = default)
     {
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
-        return await connection.InvokeAsync<AvailableReceiverDescriptor[]>(
-                "GetAvailableReceivers",
+        return await connection.InvokeAsync<AvailableHostDescriptor[]>(
+                "GetAvailableHosts",
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -255,18 +255,18 @@ public sealed class SignalRRelayClient : IRelayClient
         }
     }
 
-    public async Task<CreateSessionResponse> CreateReceiverSessionAsync(
+    public async Task<CreateSessionResponse> CreateHostSessionAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default)
     {
         EnsureValid(ContractValidator.Validate(display));
-        DiscardRecoveredCredential(ClientRole.Receiver);
+        DiscardRecoveredCredential(ClientRole.Host);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var response = await connection.InvokeAsync<CreateSessionResponse>(
-                "CreateReceiverSession",
+                "CreateHostSession",
                 display,
                 clientProfile,
-                maximumPresenterConnections,
+                maximumAnnotatorConnections,
                 displayName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -274,27 +274,27 @@ public sealed class SignalRRelayClient : IRelayClient
         return response;
     }
 
-    public async Task<bool> SetReceiverDiscoverableAsync(
+    public async Task<bool> SetHostDiscoverableAsync(
         bool discoverable,
         CancellationToken cancellationToken = default)
     {
         var currentSessionId = SessionId
-            ?? throw new InvalidOperationException("This receiver is not available on the relay.");
+            ?? throw new InvalidOperationException("This host is not available on the relay.");
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         return await connection.InvokeAsync<bool>(
-                "SetReceiverDiscoverable",
+                "SetHostDiscoverable",
                 currentSessionId,
                 discoverable,
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async Task<JoinResponse> RequestToJoinReceiverAsync(
+    public async Task<JoinResponse> RequestToJoinHostAsync(
         string selectedSessionId,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(selectedSessionId);
-        DiscardRecoveredCredential(ClientRole.Presenter);
+        DiscardRecoveredCredential(ClientRole.Annotator);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var request = new DirectJoinRequest(
             selectedSessionId,
@@ -302,7 +302,7 @@ public sealed class SignalRRelayClient : IRelayClient
             GetClientVersion(),
             clientProfile);
         var response = await connection.InvokeAsync<JoinResponse>(
-                "RequestToJoinReceiver",
+                "RequestToJoinHost",
                 request,
                 displayName,
                 cancellationToken)
@@ -318,16 +318,16 @@ public sealed class SignalRRelayClient : IRelayClient
         return response;
     }
 
-    public async Task UpdateReceiverDisplayAsync(
+    public async Task UpdateHostDisplayAsync(
         DisplayDescriptor display,
         CancellationToken cancellationToken = default)
     {
         EnsureValid(ContractValidator.Validate(display));
         var currentSessionId = SessionId
-            ?? throw new InvalidOperationException("This receiver is not available on the relay.");
+            ?? throw new InvalidOperationException("This host is not available on the relay.");
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await connection.InvokeAsync(
-                "UpdateReceiverDisplay",
+                "UpdateHostDisplay",
                 currentSessionId,
                 display,
                 cancellationToken)
@@ -337,7 +337,7 @@ public sealed class SignalRRelayClient : IRelayClient
     public async Task ApplyClientSettingsAsync(
         string newDisplayName,
         string? profilePicturePath,
-        int newMaximumPresenterConnections,
+        int newMaximumAnnotatorConnections,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newDisplayName);
@@ -346,58 +346,58 @@ public sealed class SignalRRelayClient : IRelayClient
             throw new ArgumentException("The display name cannot exceed 128 characters.", nameof(newDisplayName));
         }
 
-        if (newMaximumPresenterConnections is < 1 or > 16)
+        if (newMaximumAnnotatorConnections is < 1 or > 16)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(newMaximumPresenterConnections),
-                "Maximum presenter connections must be between 1 and 16.");
+                nameof(newMaximumAnnotatorConnections),
+                "Maximum annotator connections must be between 1 and 16.");
         }
 
         displayName = newDisplayName.Trim();
         clientProfile = CreateClientProfile(profilePicturePath);
-        maximumPresenterConnections = newMaximumPresenterConnections;
+        maximumAnnotatorConnections = newMaximumAnnotatorConnections;
 
         var currentSessionId = SessionId;
-        if (expectedRole != ClientRole.Receiver || currentSessionId is null)
+        if (expectedRole != ClientRole.Host || currentSessionId is null)
         {
             return;
         }
 
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await connection.InvokeAsync(
-                "UpdateReceiverClientSettings",
+                "UpdateHostClientSettings",
                 currentSessionId,
                 displayName,
                 clientProfile,
-                maximumPresenterConnections,
+                maximumAnnotatorConnections,
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async Task ApprovePresenterAsync(
+    public async Task ApproveAnnotatorAsync(
         string sessionId,
-        string presenterConnectionId,
+        string annotatorConnectionId,
         CancellationToken cancellationToken = default)
     {
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await connection.InvokeAsync(
-                "ApprovePresenter",
+                "ApproveAnnotator",
                 sessionId,
-                presenterConnectionId,
+                annotatorConnectionId,
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public async Task RejectPresenterAsync(
+    public async Task RejectAnnotatorAsync(
         string sessionId,
-        string presenterConnectionId,
+        string annotatorConnectionId,
         CancellationToken cancellationToken = default)
     {
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await connection.InvokeAsync(
-                "RejectPresenter",
+                "RejectAnnotator",
                 sessionId,
-                presenterConnectionId,
+                annotatorConnectionId,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -406,7 +406,7 @@ public sealed class SignalRRelayClient : IRelayClient
         CancellationToken cancellationToken = default)
     {
         var currentSessionId = SessionId
-            ?? throw new InvalidOperationException("This receiver is not available on the relay.");
+            ?? throw new InvalidOperationException("This host is not available on the relay.");
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         await connection.InvokeAsync(
                 "DisconnectAllConnections",
@@ -420,7 +420,7 @@ public sealed class SignalRRelayClient : IRelayClient
         CancellationToken cancellationToken = default)
     {
         var currentCredential = Credential;
-        if (!CanSend(ClientRole.Presenter, currentCredential)
+        if (!CanSend(ClientRole.Annotator, currentCredential)
             || !string.Equals(
                 pointerEvent.SessionId,
                 currentCredential!.SessionId,
@@ -448,7 +448,7 @@ public sealed class SignalRRelayClient : IRelayClient
         PointerAcknowledgement acknowledgement,
         CancellationToken cancellationToken = default)
     {
-        if (!CanSend(ClientRole.Receiver, Credential))
+        if (!CanSend(ClientRole.Host, Credential))
         {
             return false;
         }
@@ -520,20 +520,20 @@ public sealed class SignalRRelayClient : IRelayClient
     private void RegisterCallbacks()
     {
         connection.On(
-            "ReceiverDirectoryChanged",
-            () => Publish(() => ReceiverDirectoryChanged?.Invoke(this, EventArgs.Empty)));
-        connection.On<PresenterDescriptor>(
-            "PresenterJoinRequested",
-            presenter => Publish(
-                () => PresenterJoinRequested?.Invoke(
+            "HostDirectoryChanged",
+            () => Publish(() => HostDirectoryChanged?.Invoke(this, EventArgs.Empty)));
+        connection.On<AnnotatorDescriptor>(
+            "AnnotatorJoinRequested",
+            annotator => Publish(
+                () => AnnotatorJoinRequested?.Invoke(
                     this,
-                    new PresenterJoinRequestedEventArgs(presenter))));
+                    new AnnotatorJoinRequestedEventArgs(annotator))));
         connection.On<string>(
-            "PresenterJoinCancelled",
-            presenterConnectionId => Publish(
-                () => PresenterJoinCancelled?.Invoke(
+            "AnnotatorJoinCancelled",
+            annotatorConnectionId => Publish(
+                () => AnnotatorJoinCancelled?.Invoke(
                     this,
-                    new PresenterJoinCancelledEventArgs(presenterConnectionId))));
+                    new AnnotatorJoinCancelledEventArgs(annotatorConnectionId))));
         connection.On<SessionCredential>(
             "SessionCredentialIssued",
             issuedCredential => SetSession(issuedCredential.SessionId, issuedCredential));
@@ -550,11 +550,11 @@ public sealed class SignalRRelayClient : IRelayClient
                     () => SessionApproved?.Invoke(this, new RelaySessionStateEventArgs(state)));
             });
         connection.On<DisplayDescriptor>(
-            "ReceiverDisplayChanged",
+            "HostDisplayChanged",
             display => Publish(
-                () => ReceiverDisplayChanged?.Invoke(
+                () => HostDisplayChanged?.Invoke(
                     this,
-                    new RelayReceiverDisplayChangedEventArgs(display))));
+                    new RelayHostDisplayChangedEventArgs(display))));
         connection.On<PointerEventMessage>(
             "PointerReceived",
             pointerEvent => Publish(

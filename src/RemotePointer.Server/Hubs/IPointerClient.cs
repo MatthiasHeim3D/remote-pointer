@@ -4,15 +4,15 @@ namespace RemotePointer.Server.Hubs;
 
 public interface IPointerClient
 {
-    Task PresenterJoinRequested(PresenterDescriptor presenter);
+    Task AnnotatorJoinRequested(AnnotatorDescriptor annotator);
 
-    Task PresenterJoinCancelled(string presenterConnectionId);
+    Task AnnotatorJoinCancelled(string annotatorConnectionId);
 
     Task SessionApproved(SessionStateMessage state);
 
     Task SessionCredentialIssued(SessionCredential credential);
 
-    Task ReceiverDisplayChanged(DisplayDescriptor display);
+    Task HostDisplayChanged(DisplayDescriptor display);
 
     Task PointerReceived(PointerEventMessage pointerEvent);
 
@@ -20,5 +20,5 @@ public interface IPointerClient
 
     Task SessionEnded(string reason);
 
-    Task ReceiverDirectoryChanged();
+    Task HostDirectoryChanged();
 }

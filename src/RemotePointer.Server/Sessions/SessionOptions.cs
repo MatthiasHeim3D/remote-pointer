@@ -15,7 +15,7 @@ public sealed class SessionOptions
 
     public int SequenceWindowSize { get; set; } = 64;
 
-    public int MaximumPresentersPerReceiver { get; set; } = 16;
+    public int MaximumAnnotatorsPerHost { get; set; } = 16;
 
     /// <summary>
     /// Requires every client to present a server password before it can publish itself, list

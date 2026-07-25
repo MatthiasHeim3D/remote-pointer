@@ -136,7 +136,7 @@ public sealed class ProtectedSessionStore : IProtectedSessionStore
 
     private string GetPath(ClientRole role) => Path.Combine(
         sessionDirectory,
-        role == ClientRole.Receiver ? "receiver.session" : "presenter.session");
+        role == ClientRole.Host ? "host.session" : "annotator.session");
 
     private void ClearNoLock(ClientRole role)
     {

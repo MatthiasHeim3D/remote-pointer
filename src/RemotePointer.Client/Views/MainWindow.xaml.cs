@@ -16,7 +16,7 @@ public partial class MainWindow : Window
 {
     private const string RepositoryUrl = "https://github.com/MatthiasHeim3D/remote-pointer";
     private const double ExpandedHeight = 520d;
-    private const double SenderSessionHeight = 200d;
+    private const double AnnotatorSessionHeight = 200d;
     private const double AvailableClientsBaseHeight = 244d;
     private const double AvailableClientRowHeight = 64d;
     private const double ConnectedClientsBaseHeight = 306d;
@@ -37,7 +37,7 @@ public partial class MainWindow : Window
 
         var monitorService = new MonitorService();
         var coordinateMapper = new DisplayCoordinateMapper();
-        var overlayService = new ReceiverOverlayService(monitorService, coordinateMapper);
+        var overlayService = new HostOverlayService(monitorService, coordinateMapper);
         var targetRegionService = new TargetRegionService();
         var settings = ClientSettings.Load();
         var clientInstanceIdProvider = new ClientInstanceIdProvider();
@@ -46,20 +46,20 @@ public partial class MainWindow : Window
         var serverPasswordStore = new ProtectedServerPasswordStore(dataProtector, auditLog);
         // Loaded before the connections are built so the first connect already presents it.
         settings.Server.PasswordKey = serverPasswordStore.Load();
-        IRelayClient? receiverRelayClient = null;
-        IRelayClient? presenterRelayClient = null;
+        IRelayClient? hostRelayClient = null;
+        IRelayClient? annotatorRelayClient = null;
         if (!string.IsNullOrWhiteSpace(settings.Server.BaseUrl))
         {
-            receiverRelayClient = new SignalRRelayClient(
+            hostRelayClient = new SignalRRelayClient(
                 settings,
                 clientInstanceIdProvider,
-                expectedRole: RemotePointer.Contracts.Messages.ClientRole.Receiver,
+                expectedRole: RemotePointer.Contracts.Messages.ClientRole.Host,
                 sessionStore: protectedSessionStore,
                 auditLog: auditLog);
-            presenterRelayClient = new SignalRRelayClient(
+            annotatorRelayClient = new SignalRRelayClient(
                 settings,
                 clientInstanceIdProvider,
-                expectedRole: RemotePointer.Contracts.Messages.ClientRole.Presenter,
+                expectedRole: RemotePointer.Contracts.Messages.ClientRole.Annotator,
                 sessionStore: protectedSessionStore,
                 auditLog: auditLog);
         }
@@ -67,8 +67,8 @@ public partial class MainWindow : Window
             monitorService,
             overlayService,
             targetRegionService,
-            receiverRelayClient,
-            presenterRelayClient,
+            hostRelayClient,
+            annotatorRelayClient,
             settings.Pointer.DefaultTtlMilliseconds,
             settings,
             new StartupRegistrationService(),
@@ -78,9 +78,9 @@ public partial class MainWindow : Window
 
         trayIcon = new SystemTrayIcon(ShowFromTray, ExitFromTray);
         viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        viewModel.Presenter.PropertyChanged += OnViewModelPropertyChanged;
-        viewModel.Presenter.AvailableReceivers.CollectionChanged += OnClientCollectionChanged;
-        viewModel.ConnectedPresenters.CollectionChanged += OnClientCollectionChanged;
+        viewModel.Annotator.PropertyChanged += OnViewModelPropertyChanged;
+        viewModel.Annotator.AvailableHosts.CollectionChanged += OnClientCollectionChanged;
+        viewModel.ConnectedAnnotators.CollectionChanged += OnClientCollectionChanged;
         viewModel.ServerAddressChangeRequested += OnServerAddressChangeRequested;
         viewModel.RelayReinitializationRequested += OnRelayReinitializationRequested;
         StateChanged += OnWindowStateChanged;
@@ -105,7 +105,7 @@ public partial class MainWindow : Window
         }
         catch (Win32Exception exception)
         {
-            viewModel.Presenter.ReportHotKeyRegistrationFailure(exception.Message);
+            viewModel.Annotator.ReportHotKeyRegistrationFailure(exception.Message);
         }
     }
 
@@ -132,7 +132,7 @@ public partial class MainWindow : Window
             && wordParameter.ToInt32() == GlobalHotKeyRegistration.TogglePointerHotKeyId)
         {
             handled = true;
-            viewModel.Presenter.TogglePointingMode();
+            viewModel.Annotator.TogglePointingMode();
         }
 
         return 0;
@@ -143,9 +143,9 @@ public partial class MainWindow : Window
         Loaded -= OnLoaded;
         StateChanged -= OnWindowStateChanged;
         viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-        viewModel.Presenter.PropertyChanged -= OnViewModelPropertyChanged;
-        viewModel.Presenter.AvailableReceivers.CollectionChanged -= OnClientCollectionChanged;
-        viewModel.ConnectedPresenters.CollectionChanged -= OnClientCollectionChanged;
+        viewModel.Annotator.PropertyChanged -= OnViewModelPropertyChanged;
+        viewModel.Annotator.AvailableHosts.CollectionChanged -= OnClientCollectionChanged;
+        viewModel.ConnectedAnnotators.CollectionChanged -= OnClientCollectionChanged;
         viewModel.ServerAddressChangeRequested -= OnServerAddressChangeRequested;
         viewModel.RelayReinitializationRequested -= OnRelayReinitializationRequested;
         source?.RemoveHook(WindowMessageHook);
@@ -179,9 +179,9 @@ public partial class MainWindow : Window
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (ReferenceEquals(sender, viewModel)
-            && e.PropertyName == nameof(MainWindowViewModel.HasPendingPresenter))
+            && e.PropertyName == nameof(MainWindowViewModel.HasPendingAnnotator))
         {
-            if (viewModel.HasPendingPresenter)
+            if (viewModel.HasPendingAnnotator)
             {
                 ShowConnectionApprovalPrompt();
             }
@@ -211,24 +211,24 @@ public partial class MainWindow : Window
 
         if ((ReferenceEquals(sender, viewModel)
                 && e.PropertyName is nameof(MainWindowViewModel.IsSettingsOpen)
-                    or nameof(MainWindowViewModel.HasConnectedPresenter))
-            || (ReferenceEquals(sender, viewModel.Presenter)
-                && e.PropertyName is nameof(PresenterViewModel.IsSessionApproved)
-                    or nameof(PresenterViewModel.IsJoinPending)))
+                    or nameof(MainWindowViewModel.HasConnectedAnnotator))
+            || (ReferenceEquals(sender, viewModel.Annotator)
+                && e.PropertyName is nameof(AnnotatorViewModel.IsSessionApproved)
+                    or nameof(AnnotatorViewModel.IsJoinPending)))
         {
             UpdateFlyoutHeight();
         }
 
-        var status = viewModel.Presenter.IsPointing
+        var status = viewModel.Annotator.IsPointing
             ? "Pointing active"
-            : viewModel.Presenter.IsSessionApproved
-                ? "Presenter connected"
-                : viewModel.HasConnectedPresenter
+            : viewModel.Annotator.IsSessionApproved
+                ? "Annotator connected"
+                : viewModel.HasConnectedAnnotator
                     ? "Receiving pointers"
-                    : viewModel.HasReceiverSession
-                    ? viewModel.ReceiverAvailability == ReceiverAvailability.Available
-                        ? "Receiver available"
-                        : "Receiver invisible"
+                    : viewModel.HasHostSession
+                    ? viewModel.HostAvailability == HostAvailability.Available
+                        ? "Host available"
+                        : "Host invisible"
                     : "Inactive";
         trayIcon.SetStatus(status);
     }
@@ -237,17 +237,17 @@ public partial class MainWindow : Window
     {
         Height = viewModel.IsSettingsOpen
             ? ExpandedHeight
-            : viewModel.HasConnectedPresenter
+            : viewModel.HasConnectedAnnotator
                 ? CalculateClientListHeight(
                     ConnectedClientsBaseHeight,
                     ConnectedClientRowHeight,
-                    viewModel.ConnectedPresenters.Count)
-                : (viewModel.Presenter.IsSessionApproved || viewModel.Presenter.IsJoinPending)
-                    ? SenderSessionHeight
+                    viewModel.ConnectedAnnotators.Count)
+                : (viewModel.Annotator.IsSessionApproved || viewModel.Annotator.IsJoinPending)
+                    ? AnnotatorSessionHeight
                     : CalculateClientListHeight(
                         AvailableClientsBaseHeight,
                         AvailableClientRowHeight,
-                        viewModel.Presenter.AvailableReceivers.Count);
+                        viewModel.Annotator.AvailableHosts.Count);
         if (IsLoaded)
         {
             PositionFlyout();
@@ -415,10 +415,10 @@ public partial class MainWindow : Window
     {
         approvalWindow?.Close();
         approvalWindow = new ConnectionApprovalWindow(
-            viewModel.PendingPresenterName,
-            viewModel.PendingPresenterProfilePicturePng,
-            viewModel.ApprovePendingPresenterAsync,
-            viewModel.RejectPendingPresenterAsync);
+            viewModel.PendingAnnotatorName,
+            viewModel.PendingAnnotatorProfilePicturePng,
+            viewModel.ApprovePendingAnnotatorAsync,
+            viewModel.RejectPendingAnnotatorAsync);
         approvalWindow.Closed += (_, _) => approvalWindow = null;
         approvalWindow.Show();
     }

@@ -23,10 +23,10 @@ public sealed class SessionExpirationService(
                     .ConfigureAwait(false);
                 // A collected session leaves the directory without any client having asked for
                 // it, so the peers that were listing it are told to read it again. Nothing else
-                // would tell them, and they would go on offering a receiver that cannot be
+                // would tell them, and they would go on offering a host that cannot be
                 // joined until something unrelated changed.
                 await hubContext.Clients.Group(PointerHub.DirectoryGroupName(session.GroupKey))
-                    .ReceiverDirectoryChanged()
+                    .HostDirectoryChanged()
                     .ConfigureAwait(false);
                 logger.LogInformation(
                     AuditEventIds.SessionExpired,
