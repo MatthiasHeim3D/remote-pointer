@@ -105,6 +105,41 @@ public sealed class MainWindowViewModelTests
         Assert.Null(settings.Server.PasswordKey);
         Assert.Null(relay.ServerPasswordKey);
         Assert.Equal(1, relay.ServerPasswordKeyUpdateCount);
+        Assert.False(viewModel.HasServerPasswordCheckCode);
+        Assert.Empty(viewModel.ServerPasswordCheckCode);
+    }
+
+    [Fact]
+    public async Task ServerPasswordCheckCode_IdentifiesTheCurrentPasswordAndFollowsAChange()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        settings.Server.PasswordKey = ServerPasswordKey.Derive("first team password");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            receiverRelayClient: relay,
+            clientSettings: settings);
+        var raised = new List<string?>();
+        viewModel.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        var first = viewModel.ServerPasswordCheckCode;
+        Assert.True(viewModel.HasServerPasswordCheckCode);
+        Assert.Equal(
+            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("first team password")),
+            first);
+
+        // Replacing one password with another leaves HasServerPassword true throughout, so the
+        // code has to be raised on its own or the settings screen keeps showing the old one.
+        viewModel.ServerPasswordInput = "second team password";
+        await viewModel.CloseSettingsAsync();
+
+        Assert.NotEqual(first, viewModel.ServerPasswordCheckCode);
+        Assert.Equal(
+            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("second team password")),
+            viewModel.ServerPasswordCheckCode);
+        Assert.Contains(nameof(MainWindowViewModel.ServerPasswordCheckCode), raised);
     }
 
     [Fact]

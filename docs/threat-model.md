@@ -10,7 +10,7 @@ The primary objectives are to prevent remote control, prevent unintended disclos
 
 | Asset | Location | Protection |
 | --- | --- | --- |
-| Server password | Client memory during entry; derived key in a DPAPI-protected current-user file | Never sent to the relay or written to the preferences file; PBKDF2-SHA256 derivation makes a leaked key expensive to attack offline |
+| Server password | Client memory during entry; derived key in a DPAPI-protected current-user file | Never sent to the relay or written to the preferences file; PBKDF2-SHA256 derivation makes a leaked key expensive to attack offline; the settings screen shows only a 32-bit check code derived from the key under a separate domain separator |
 | Receiver name and profile picture | Client settings and relay session memory | Published only to clients presenting the same derived key; sent to the relay over TLS; never persisted server-side |
 | Session and reconnect tokens | Client memory and DPAPI-protected current-user file | TLS in transit, DPAPI at rest, hashes on relay |
 | Session secret | Receiver memory | Cryptographic generation; never logged or sent to presenter |

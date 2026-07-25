@@ -433,6 +433,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ? "A server password is set. Only clients using the same one can see you."
         : "Not set";
 
+    /// <summary>
+    /// The password itself is never stored, so it cannot be shown back. This code can: it is
+    /// the same on every client that uses the same password, which is what lets the user check
+    /// two clients against each other without anyone typing a password in the open.
+    /// </summary>
+    public string ServerPasswordCheckCode =>
+        ServerPasswordKey.DeriveCheckCode(clientSettings?.Server.PasswordKey) ?? string.Empty;
+
+    public bool HasServerPasswordCheckCode => ServerPasswordCheckCode.Length > 0;
+
     public string ServerPasswordValidationMessage =>
         ServerPasswordInput.Length == 0
             || ServerPasswordKey.IsValidPassword(ServerPasswordInput)
@@ -1488,6 +1498,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             clientSettings.Server.PasswordKey = key;
         }
 
+        // Raised here rather than from HasServerPassword, which does not change when one
+        // password replaces another — the case where the code is worth reading.
+        RaisePropertyChanged(nameof(ServerPasswordCheckCode));
+        RaisePropertyChanged(nameof(HasServerPasswordCheckCode));
         try
         {
             if (receiverRelayClient is not null)
@@ -1510,6 +1524,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RaisePropertyChanged(nameof(ShowServerPasswordWarning));
         RaisePropertyChanged(nameof(ServerPasswordWarning));
         RaisePropertyChanged(nameof(ServerPasswordStatus));
+        RaisePropertyChanged(nameof(ServerPasswordCheckCode));
+        RaisePropertyChanged(nameof(HasServerPasswordCheckCode));
         RaisePropertyChanged(nameof(EmptyClientListMessage));
         (ClearServerPasswordCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
     }

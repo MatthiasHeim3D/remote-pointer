@@ -31,6 +31,37 @@ public sealed class ServerPasswordTests : IDisposable
         Assert.DoesNotContain("=", key, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CheckCode_MatchesAcrossClientsOnTheSamePasswordAndDiffersForOthers()
+    {
+        var code = ServerPasswordKey.DeriveCheckCode(
+            ServerPasswordKey.Derive("correct horse battery"));
+
+        Assert.Equal(
+            code,
+            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("correct horse battery")));
+        Assert.NotEqual(
+            code,
+            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("correct horse batterz")));
+        Assert.Null(ServerPasswordKey.DeriveCheckCode(null));
+        Assert.Null(ServerPasswordKey.DeriveCheckCode("   "));
+    }
+
+    [Fact]
+    public void CheckCode_IsShortAndRevealsNeitherThePasswordNorTheKey()
+    {
+        const string password = "shared team password";
+        var key = ServerPasswordKey.Derive(password);
+
+        var code = ServerPasswordKey.DeriveCheckCode(key);
+
+        Assert.Equal("XXXX-XXXX".Length, code!.Length);
+        Assert.Matches("^[0-9A-F]{4}-[0-9A-F]{4}$", code);
+        Assert.DoesNotContain(password, code, StringComparison.OrdinalIgnoreCase);
+        // Domain separation: the code must not be a slice of the key put on display.
+        Assert.DoesNotContain(code.Replace("-", string.Empty, StringComparison.Ordinal), key, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

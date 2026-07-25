@@ -21,6 +21,13 @@ public static class ServerPasswordKey
     private const int Iterations = 210_000;
     private const int KeyBytes = 32;
 
+    /// <summary>
+    /// Separates the shown code from the key it is derived from, so the code is not a piece of
+    /// the key that the settings screen puts on display.
+    /// </summary>
+    private const string CheckCodePrefix = "RemotePointer.ServerPasswordCheck.v1:";
+    private const int CheckCodeBytes = 4;
+
     public static bool IsValidPassword(string? password) =>
         password is not null && password.Trim().Length >= MinimumPasswordLength;
 
@@ -52,5 +59,25 @@ public static class ServerPasswordKey
         {
             CryptographicOperations.ZeroMemory(key);
         }
+    }
+
+    /// <summary>
+    /// A short code that identifies which password a client is using without disclosing it.
+    /// Two clients show the same code only if they derived the same key, which is what makes
+    /// it worth comparing across machines. It is safe to display: recovering the password from
+    /// it still means guessing passwords through <see cref="Derive"/>, and the code is short
+    /// enough that many passwords produce the same one.
+    /// </summary>
+    public static string? DeriveCheckCode(string? groupKey)
+    {
+        if (string.IsNullOrWhiteSpace(groupKey))
+        {
+            return null;
+        }
+
+        var digest = SHA256.HashData(
+            Encoding.UTF8.GetBytes(CheckCodePrefix + groupKey));
+        var code = Convert.ToHexString(digest.AsSpan(0, CheckCodeBytes));
+        return $"{code[..4]}-{code[4..]}";
     }
 }

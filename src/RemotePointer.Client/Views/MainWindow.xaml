@@ -939,6 +939,26 @@
                                 Content="Remove"
                                 Visibility="{Binding HasServerPassword, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </Grid>
+                    <StackPanel Margin="0,10,0,0"
+                                Visibility="{Binding HasServerPasswordCheckCode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock VerticalAlignment="Center"
+                                       FontSize="11"
+                                       Foreground="#AFAFAF"
+                                       Text="Check code" />
+                            <TextBlock Margin="10,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Consolas"
+                                       FontSize="14"
+                                       Foreground="#E8E8E8"
+                                       Text="{Binding ServerPasswordCheckCode}" />
+                        </StackPanel>
+                        <TextBlock Margin="0,4,0,0"
+                                   FontSize="11"
+                                   Foreground="#AFAFAF"
+                                   TextWrapping="Wrap"
+                                   Text="Clients showing the same check code use the same server password. The password itself is never stored and cannot be shown." />
+                    </StackPanel>
                     <Border Margin="0,10,0,0"
                             Padding="10,8"
                             Background="#3A3222"
