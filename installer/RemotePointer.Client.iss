@@ -46,9 +46,6 @@ Source: "{#RelayRootCertificate}"; DestDir: "{app}"; DestName: "relay-root.crt";
 [Icons]
 Name: "{userprograms}\Remote Pointer"; Filename: "{app}\RemotePointer.Client.exe"; WorkingDir: "{app}"
 
-[Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "RemotePointer"; Flags: uninsdeletevalue
-
 [Run]
 #ifdef RelayRootCertificate
 Filename: "{sys}\certutil.exe"; Parameters: "-user -f -addstore Root ""{app}\relay-root.crt"""; StatusMsg: "Trusting the relay HTTPS certificate..."; Flags: runhidden waituntilterminated; Tasks: trustrelay
@@ -62,6 +59,12 @@ var
 begin
   if CurUninstallStep = usPostUninstall then
   begin
+    { The application owns this value: it writes it when "Launch at startup" is
+      enabled and removes it when the setting is turned off. Setup must not create
+      it, or an update would overwrite the user's choice with an empty command. }
+    RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Microsoft\Windows\CurrentVersion\Run', 'RemotePointer');
+
     UserDataDir := ExpandConstant('{localappdata}\RemotePointer');
     if DirExists(UserDataDir) and not UninstallSilent() then
     begin
