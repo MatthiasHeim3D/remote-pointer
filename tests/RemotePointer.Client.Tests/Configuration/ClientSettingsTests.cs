@@ -123,6 +123,62 @@ public sealed class ClientSettingsTests
     }
 
     [Fact]
+    public void Load_RecoversFromTruncatedUserPreferences()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        File.WriteAllText(
+            System.IO.Path.Combine(directory.Path, "user-settings.json"),
+            "{\"serverAddress\":\"https://saved.exa");
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal("https://packaged.example.test", settings.Server.BaseUrl);
+        Assert.Equal(Environment.UserName, settings.Profile.UserName);
+        Assert.Equal(2, settings.Receiver.MaximumSenderConnections);
+    }
+
+    [Fact]
+    public void Load_IgnoresStoredValuesThatWouldFailValidation()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        WriteUserPreferences(
+            directory.Path,
+            new
+            {
+                serverAddress = "http://insecure.example.test",
+                userName = new string('n', 200),
+                profilePicturePath = string.Empty,
+                maximumSenderConnections = 99,
+            });
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal("https://packaged.example.test", settings.Server.BaseUrl);
+        Assert.Equal(Environment.UserName, settings.Profile.UserName);
+        Assert.Equal(16, settings.Receiver.MaximumSenderConnections);
+    }
+
+    [Fact]
+    public void SaveUserPreferences_LeavesNoPartialFileBehind()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUserPreferences("https://saved.example.test", "Ada", null);
+        settings.SaveUserPreferences("https://saved.example.test", "Ada Lovelace", null);
+
+        Assert.Equal(
+            ["appsettings.json", "user-settings.json"],
+            Directory.GetFiles(directory.Path)
+                .Select(file => System.IO.Path.GetFileName(file) ?? string.Empty)
+                .Order(StringComparer.Ordinal)
+                .ToArray());
+    }
+
+    [Fact]
     public void SaveUserPreferences_RejectsEmptyUsername()
     {
         using var directory = new TemporaryDirectory();
@@ -220,6 +276,11 @@ public sealed class ClientSettingsTests
             });
         File.WriteAllText(System.IO.Path.Combine(directory, "appsettings.json"), json);
     }
+
+    private static void WriteUserPreferences(string directory, object preferences) =>
+        File.WriteAllText(
+            System.IO.Path.Combine(directory, "user-settings.json"),
+            JsonSerializer.Serialize(preferences));
 
     private sealed class TemporaryDirectory : IDisposable
     {

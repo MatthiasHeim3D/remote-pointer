@@ -147,7 +147,22 @@ public sealed class ClientSettings
             {
                 WriteIndented = true,
             });
-        File.WriteAllText(userPreferencesPath, json);
+
+        // Replacing the file atomically keeps an interrupted write from leaving truncated
+        // JSON behind, which the next start would have to recover from.
+        var temporaryPath = $"{userPreferencesPath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.WriteAllText(temporaryPath, json);
+            File.Move(temporaryPath, userPreferencesPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
     }
 
     internal void Validate()
@@ -232,30 +247,54 @@ public sealed class ClientSettings
             return;
         }
 
-        var preferences = JsonSerializer.Deserialize<UserPreferences>(
-            File.ReadAllText(path),
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        UserPreferences? preferences;
+        try
+        {
+            preferences = JsonSerializer.Deserialize<UserPreferences>(
+                File.ReadAllText(path),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        }
+        catch (Exception exception) when (
+            exception is JsonException
+                or IOException
+                or UnauthorizedAccessException
+                or NotSupportedException)
+        {
+            // Unreadable saved preferences must not make the client unlaunchable. Starting
+            // from defaults puts the user back in first-run setup, which they can complete.
+            return;
+        }
+
         if (preferences is null)
         {
             return;
         }
 
-        if (preferences.ServerAddress is not null)
+        // Every stored value is treated as untrusted: a hand-edited or partially written file
+        // must not produce a configuration that Validate rejects during startup.
+        if (preferences.ServerAddress is not null
+            && TryNormalizeServerAddress(preferences.ServerAddress, out var serverAddress, out _))
         {
-            Server.BaseUrl = preferences.ServerAddress;
+            Server.BaseUrl = serverAddress;
         }
 
-        Profile.UserName = preferences.UserName ?? string.Empty;
+        Profile.UserName = IsSupportedUserName(preferences.UserName)
+            ? preferences.UserName
+            : string.Empty;
         Profile.PicturePath = preferences.ProfilePicturePath ?? string.Empty;
-        Receiver.MaximumSenderConnections = preferences.MaximumSenderConnections <= 0
-            ? 2
-            : preferences.MaximumSenderConnections;
+        Receiver.MaximumSenderConnections = Math.Clamp(
+            preferences.MaximumSenderConnections <= 0 ? 2 : preferences.MaximumSenderConnections,
+            1,
+            16);
         Receiver.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
         Receiver.IsAvailable = preferences.ReceiverAvailable;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
         Pointer.ShowUsageHints = preferences.ShowUsageHints;
         Pointer.HasShownUsageHints = preferences.HasShownUsageHints;
     }
+
+    private static bool IsSupportedUserName(string? userName) =>
+        !string.IsNullOrWhiteSpace(userName) && userName.Length <= 128;
 
     private void ApplyMissingProfileDefaults(IUserProfileDefaultsProvider? provider)
     {
