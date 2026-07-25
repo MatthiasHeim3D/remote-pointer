@@ -3,7 +3,11 @@
 Remote Pointer is packaged as a self-contained x64 application in a per-user Inno Setup installer. Setup writes to `%LocalAppData%\Programs\Remote Pointer`, creates a current-user Start menu shortcut, and does not request administrator rights.
 
 The relay URL is not built into the installer. On first launch, the client opens
-Settings and asks the user to enter the HTTPS relay address. If the relay's HTTPS
+Settings and asks the user to enter the HTTPS relay address. Tell users the server
+password for your relay at the same time: they enter it in the same screen, and by
+default a relay refuses clients that have none. See
+[server-deployment.md](server-deployment.md#server-passwords) for what the password
+does. If the relay's HTTPS
 certificate chains to a publicly trusted CA (for example, a hostname fronted by a
 Cloudflare Tunnel), omit `-RelayRootCertificatePath` — Windows already trusts that
 certificate and no root needs installing:

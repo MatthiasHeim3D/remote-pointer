@@ -21,6 +21,7 @@
 | Presenter capture reporting | Normalized local pointer count and coordinate presentation |
 | Pairing and secrets | Friendly cryptographic codes, hashing, one-time consumption, expiry |
 | Receiver discovery | Server capability, receiver opt-in, directory filtering, direct request, mandatory approval |
+| Server password | Stable key derivation, minimum length, protected round trip, corrupt-file discard, group-scoped listing and joins, enforced and open relay modes, client warning states |
 | Display synchronization | Approval sends dimensions, receiver changes push to presenter, aspect/local display changes invalidate calibration |
 | Relay authorization | Receiver-only approval, presenter-only send, receiver-only acknowledgement |
 | Session lifecycle | Creation, approval, active expiry, termination, disconnect revocation, empty receiver-shell resume |

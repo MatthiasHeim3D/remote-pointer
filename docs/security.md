@@ -45,7 +45,9 @@ No development certificate-bypass switch will be included in production builds.
 - Pairing codes, session secrets, session tokens, and reconnect tokens are cryptographically generated; only hashes are retained in server state.
 - A pairing code is one-time and does not become a durable session credential.
 - Receiver discovery can be disabled by the server operator and always requires explicit receiver opt-in for each active session.
-- Directory entries expose only a machine label and opaque session ID. Direct requests still require receiver approval before any presenter credential is issued.
+- A server password scopes the directory. The client derives a key from it with PBKDF2-SHA256 and the relay never receives the password, so listings, join requests and directory notifications reach only clients holding the same one. `Sessions:RequireServerPassword` defaults to true and rejects clients that present none; disabling it puts passwordless clients into one open pool and the client warns about it.
+- Only the derived key is stored on the client, under DPAPI `CurrentUser` alongside session credentials, never in the preferences file and never shown back to the user.
+- Directory entries expose the receiver's chosen display name, optional profile picture, and opaque session ID to the clients that share its password. Direct requests still require receiver approval before any presenter credential is issued.
 - Presenter credentials are issued only after explicit approval from the session's receiver connection.
 - Role and session membership are revalidated for every pointer, acknowledgement, resume, and termination operation.
 - Reconnect requires the client-instance ID, session token, role, and a single-use rotating reconnect token.

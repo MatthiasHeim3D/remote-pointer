@@ -53,13 +53,17 @@ The default pointer TTL is 2,000 ms at the client. Structural validation current
 
 Pairing codes normalize case, whitespace, and hyphens. The accepted six-character alphabet excludes `0`, `O`, `1`, and `I` to reduce transcription errors. Codes are generated cryptographically, stored only by hash, expire after ten minutes when unused, and are consumed by the first accepted join request.
 
-When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explicitly publish its machine label and opaque session ID. A presenter may submit a direct join request for that entry, but receives no credential and cannot send pointers until the receiver approves. Disabled, hidden, disconnected, pending, and full-capacity receivers are omitted. A receiver chooses a maximum presenter count when creating the session; the client default is two and the server maximum is sixteen. A discoverable receiver can remain available after its pairing code expires, until the receiver reaches capacity, hides/ends it, or the session expires.
+`EnterRelayGroup` carries the key the client derives from its server password with PBKDF2-SHA256 — never the password, and passed as a hub argument rather than a connection query parameter so it stays out of proxy access logs. The relay holds it per connection, so it is presented again after every connect and reconnect, and two clients share a group only by deriving the same value. Listings, join requests and directory notifications never cross groups. When `Sessions:RequireServerPassword` is true a client that presents no key can neither publish itself nor list or reach anyone; when it is false such clients share one open pool.
+
+When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explicitly publish its chosen display name, optional profile picture, and opaque session ID to the clients that share its server password. A presenter may submit a direct join request for that entry, but receives no credential and cannot send pointers until the receiver approves. Disabled, hidden, disconnected, pending, and full-capacity receivers are omitted. A receiver chooses a maximum presenter count when creating the session; the client default is two and the server maximum is sixteen. A discoverable receiver can remain available after its pairing code expires, until the receiver reaches capacity, hides/ends it, or the session expires.
 
 ## SignalR surface
 
 Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a process-scoped `applicationInstanceId`, and an optional approval `displayName`. The process-scoped identity prevents a running client from discovering or joining its own receiver session while still allowing separate client processes on the same machine. Implemented client-to-server methods are:
 
 - `GetRelayCapabilities()`
+- `IsServerPasswordRequired()`
+- `EnterRelayGroup(groupKey)`
 - `GetAvailableReceivers()`
 - `CreateReceiverSession(DisplayDescriptor)`
 - `CreateReceiverSessionWithProfile(DisplayDescriptor, ClientProfile)`

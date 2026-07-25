@@ -16,7 +16,14 @@ Edit `.env`, then start the stack:
 ```text
 REMOTEPOINTER_HOSTNAME=pointer.internal.example
 REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=true
+REMOTEPOINTER_REQUIRE_SERVER_PASSWORD=true
 ```
+
+## Server passwords
+
+Clients see each other only when they use the same server password, which they enter in Settings. The relay never receives the password: the client derives a key from it and the relay groups clients whose keys match, so a directory listing, a join request and a directory notification never cross from one password to another. Groups are created and dropped implicitly — there is nothing to administer.
+
+`REMOTEPOINTER_REQUIRE_SERVER_PASSWORD` defaults to `true`, and a client that presents no password can then neither publish itself nor list or reach anyone. Set it to `false` to allow clients without one; they all land in a single open pool and share their names and profile pictures with anyone who can reach the relay, which the client warns about. Choose a password with the same care as one for a video meeting: everyone holding it sees every published name and picture, and changing it means telling everyone.
 
 Receiver discovery lets receivers publish themselves in the relay directory, which is how the desktop client finds them. `.env.example` ships with `REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED=false`, so a stack started from an unedited copy has the directory switched off and no receiver can be found; set it to `true` to enable it. Removing the variable altogether is not the same as setting it to `false` — Compose then falls back to `true`, matching the relay image's own default.
 

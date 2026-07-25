@@ -22,10 +22,11 @@ Every sender must be **individually approved** by the receiver, and the receiver
 
 ## Using it
 
-1. On the receiving PC, open Remote Pointer and choose **Available** to become discoverable.
-2. On each sending PC, pick that receiver from the list and request access.
-3. The receiver approves each request.
-4. Senders line up their target area over the receiver's screen in their remote-desktop view, then turn on pointing (or press **Ctrl+Alt+P**).
+1. On every PC, enter the same **server password** in Settings. Clients only see each other when their passwords match, so it works like a meeting password for your team.
+2. On the receiving PC, choose **Available** to become discoverable.
+3. On each sending PC, pick that receiver from the list and request access.
+4. The receiver approves each request.
+5. Senders line up their target area over the receiver's screen in their remote-desktop view, then turn on pointing (or press **Ctrl+Alt+P**).
 
 ### Pointer controls
 
@@ -52,7 +53,7 @@ Everything you draw fades on its own after a couple of seconds — nothing is sa
 
 ## Installing
 
-Remote Pointer is distributed as a per-user Windows installer that needs no administrator rights and installs only for the current account. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address.
+Remote Pointer is distributed as a per-user Windows installer that needs no administrator rights and installs only for the current account. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address; add the server password your team uses in the same screen.
 
 - Set up the relay server → [Server deployment](docs/server-deployment.md)
 - Build and install the client → [Client deployment](docs/deployment.md)

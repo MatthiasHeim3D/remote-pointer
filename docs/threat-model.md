@@ -10,6 +10,8 @@ The primary objectives are to prevent remote control, prevent unintended disclos
 
 | Asset | Location | Protection |
 | --- | --- | --- |
+| Server password | Client memory during entry; derived key in a DPAPI-protected current-user file | Never sent to the relay or written to the preferences file; PBKDF2-SHA256 derivation makes a leaked key expensive to attack offline |
+| Receiver name and profile picture | Client settings and relay session memory | Published only to clients presenting the same derived key; sent to the relay over TLS; never persisted server-side |
 | Session and reconnect tokens | Client memory and DPAPI-protected current-user file | TLS in transit, DPAPI at rest, hashes on relay |
 | Pairing code | Receiver UI and transient relay response | One-time, ten-minute lifetime, hash-only relay storage |
 | Session secret | Receiver memory | Cryptographic generation; never logged or sent to presenter |
@@ -35,7 +37,7 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 | Threat | Control | Residual risk |
 | --- | --- | --- |
 | Pairing-code guessing | Cryptographic alphabet, short expiry, one-time consumption, explicit receiver approval | Online attempts are not globally throttled by source IP in the MVP; network perimeter controls remain required |
-| Receiver-directory enumeration | Operator-controlled and off in the shipped `.env.example`, receiver opt-in per session, machine label plus opaque session ID only, approval before credentials | The relay image enables the directory unless the deployment turns it off, so a stack that omits the variable exposes opted-in receiver labels to anyone who can reach the relay; the small-network deployment relies on its closed network/VPN boundary |
+| Receiver-directory enumeration | Server password scopes every listing, join and notification to clients holding the same one; operator-controlled discovery, off in the shipped `.env.example`; receiver opt-in per session; approval before credentials | Directory entries carry the receiver's chosen name and profile picture, so everyone holding the password sees them without approval; the password is shared human-to-human, cannot be revoked for one person, and a relay with `RequireServerPassword=false` puts every passwordless client in one open pool |
 | Presenter impersonation | Random client identity, receiver-visible machine name, explicit approval, role token | Machine name is not cryptographic identity until optional Entra ID is added |
 | Credential theft from disk | Windows DPAPI CurrentUser encryption and no plaintext fallback | Malware running as the same user can call DPAPI and remains outside the app's isolation capability |
 | Token replay | Session/role/client binding and single-use reconnect-token rotation | A token stolen from live process memory can be used until rotation or expiry |

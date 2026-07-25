@@ -10,6 +10,7 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Deployment__BehindHttpsProxy: "true"
       Sessions__ReceiverDiscoveryEnabled: ${REMOTEPOINTER_RECEIVER_DISCOVERY_ENABLED:-true}
+      Sessions__RequireServerPassword: ${REMOTEPOINTER_REQUIRE_SERVER_PASSWORD:-true}
 
   caddy:
     image: caddy:2-alpine
