@@ -64,14 +64,10 @@ Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a proce
 - `GetRelayCapabilities()`
 - `EnterRelayGroup(groupKey)`
 - `GetAvailableReceivers()`
-- `CreateReceiverSession(DisplayDescriptor)`
-- `CreateReceiverSessionWithProfile(DisplayDescriptor, ClientProfile)`
-- `CreateReceiverSessionWithSettings(DisplayDescriptor, ClientProfile, maximumPresenterConnections)`
-- `CreateReceiverSessionWithClientSettings(DisplayDescriptor, ClientProfile, maximumPresenterConnections, displayName)`
+- `CreateReceiverSession(DisplayDescriptor, ClientProfile, maximumPresenterConnections, displayName)`
 - `SetReceiverDiscoverable(sessionId, discoverable)`
 - `RequestToJoinSession(JoinRequest)`
-- `RequestToJoinReceiver(DirectJoinRequest)`
-- `RequestToJoinReceiverWithDisplayName(DirectJoinRequest, displayName)`
+- `RequestToJoinReceiver(DirectJoinRequest, displayName)`
 - `UpdateReceiverDisplay(sessionId, DisplayDescriptor)`
 - `UpdateReceiverClientSettings(sessionId, displayName, ClientProfile, maximumPresenterConnections)`
 - `ApprovePresenter(sessionId, presenterConnectionId)`
@@ -82,11 +78,9 @@ Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a proce
 - `EndSession(sessionId)`
 - `DisconnectAllConnections(sessionId)`
 
-The four session-creation methods and the two direct-join methods are successive
-revisions of the same operation, kept so an older client can still reach a newer
-relay. The desktop client always calls the longest form. A receiver that omits a
-maximum presenter count receives the client default, reduced to the relay's own
-maximum where that is lower.
+A blank `displayName` falls back to the one supplied as a connection parameter. A
+receiver that requests more presenter connections than the relay allows is rejected
+rather than reduced, so the limit it asks for is the limit it gets.
 
 Implemented server-to-client methods are `PresenterJoinRequested`, `PresenterJoinCancelled`, `SessionCredentialIssued`, `SessionApproved`, `ReceiverDisplayChanged`, `PointerReceived`, `PointerDisplayed`, `SessionEnded`, and `ReceiverDirectoryChanged`. `ReceiverDirectoryChanged` is broadcast to every connected client whenever the directory could have changed, and carries no payload: a client that cares re-reads the directory with `GetAvailableReceivers`.
 

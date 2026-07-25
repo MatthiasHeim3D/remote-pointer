@@ -39,7 +39,10 @@ public sealed class PointerHubIntegrationTests
 
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
-            CreateDisplay());
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
         await receiver.InvokeAsync<bool>(
             "SetReceiverDiscoverable",
             created.SessionId,
@@ -93,20 +96,21 @@ public sealed class PointerHubIntegrationTests
         await secondPresenter.StartAsync();
         await thirdPresenter.StartAsync();
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSessionWithSettings",
+            "CreateReceiverSession",
             CreateDisplay(),
             new ClientProfile(),
-            2);
+            2,
+            string.Empty);
 
         Assert.True((await firstPresenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"))).Accepted);
+            new DirectJoinRequest(created.SessionId, "presenter-one", "1.0.0"), string.Empty)).Accepted);
         var first = await firstPending.Task.WaitAsync(TestTimeout);
         await receiver.InvokeAsync("ApprovePresenter", created.SessionId, first.ConnectionId);
 
         Assert.True((await secondPresenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"))).Accepted);
+            new DirectJoinRequest(created.SessionId, "presenter-two", "1.0.0"), string.Empty)).Accepted);
         var second = await secondPending.Task.WaitAsync(TestTimeout);
         await receiver.InvokeAsync("ApprovePresenter", created.SessionId, second.ConnectionId);
         var state = await connectedState.Task.WaitAsync(TestTimeout);
@@ -118,7 +122,7 @@ public sealed class PointerHubIntegrationTests
             "GetAvailableReceivers"));
         var thirdJoin = await thirdPresenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-three", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "presenter-three", "1.0.0"), string.Empty);
         Assert.False(thirdJoin.Accepted);
 
         await receiver.InvokeAsync("DisconnectAllConnections", created.SessionId);
@@ -151,10 +155,11 @@ public sealed class PointerHubIntegrationTests
         byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSessionWithSettings",
+            "CreateReceiverSession",
             CreateDisplay(),
             new ClientProfile(picture),
-            2);
+            2,
+            string.Empty);
 
         Assert.Empty(
             await selfProbe.InvokeAsync<AvailableReceiverDescriptor[]>(
@@ -165,10 +170,10 @@ public sealed class PointerHubIntegrationTests
         Assert.Equal(picture, visible.ProfilePicturePng);
         var selfJoin = await selfProbe.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"), string.Empty);
         var peerJoin = await otherInstance.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "shared-machine-profile", "1.0.0"), string.Empty);
 
         Assert.False(selfJoin.Accepted);
         Assert.True(peerJoin.Accepted);
@@ -195,13 +200,13 @@ public sealed class PointerHubIntegrationTests
         await receiver.StartAsync();
         await presenter.StartAsync();
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSessionWithClientSettings",
+            "CreateReceiverSession",
             CreateDisplay(),
             new ClientProfile(),
             2,
             "Receiver");
         var join = await presenter.InvokeAsync<JoinResponse>(
-            "RequestToJoinReceiverWithDisplayName",
+            "RequestToJoinReceiver",
             new DirectJoinRequest(created.SessionId, "presenter-live-profile", "1.0.0"),
             "Presenter");
         Assert.True(join.Accepted);
@@ -234,13 +239,14 @@ public sealed class PointerHubIntegrationTests
         await receiver.StartAsync();
         await presenter.StartAsync();
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
-            "CreateReceiverSessionWithSettings",
+            "CreateReceiverSession",
             CreateDisplay(),
             new ClientProfile(),
-            2);
+            2,
+            string.Empty);
         var join = await presenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-reject", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "presenter-reject", "1.0.0"), string.Empty);
         Assert.True(join.Accepted);
         var pending = await joinRequested.Task.WaitAsync(TestTimeout);
 
@@ -288,14 +294,17 @@ public sealed class PointerHubIntegrationTests
         Assert.True(capabilities.ReceiverDiscoveryEnabled);
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
-            CreateDisplay());
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
         var listed = Assert.Single(
             await presenter.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
         Assert.Equal("Receiver Machine", listed.DisplayName);
 
         var join = await presenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
         var pending = await joinRequested.Task.WaitAsync(TestTimeout);
         Assert.True(join.Accepted);
         Assert.False(approved.Task.IsCompleted);
@@ -325,7 +334,7 @@ public sealed class PointerHubIntegrationTests
                     "GetAvailableReceivers")).SessionId);
         var nextJoin = await presenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
         Assert.True(nextJoin.Accepted);
     }
 
@@ -349,7 +358,10 @@ public sealed class PointerHubIntegrationTests
 
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
-            CreateDisplay());
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
         var joinResponse = await presenter.InvokeAsync<JoinResponse>(
             "RequestToJoinSession",
             new JoinRequest(
@@ -417,7 +429,7 @@ public sealed class PointerHubIntegrationTests
             secondJoinRequested.SetResult);
         var freshJoin = await resumedPresenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
         var secondPresenterDescriptor = await secondJoinRequested.Task.WaitAsync(TestTimeout);
         Assert.True(freshJoin.Accepted);
         await receiver.InvokeAsync(
@@ -461,7 +473,7 @@ public sealed class PointerHubIntegrationTests
             thirdJoinRequested.SetResult);
         var requestAfterReceiverRestart = await resumedPresenter.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "presenter-client", "1.0.0"), string.Empty);
         Assert.True(requestAfterReceiverRestart.Accepted);
         _ = await thirdJoinRequested.Task.WaitAsync(TestTimeout);
 
@@ -605,7 +617,10 @@ public sealed class PointerHubIntegrationTests
         await presenter.StartAsync();
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
-            CreateDisplay());
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
         _ = await presenter.InvokeAsync<JoinResponse>(
             "RequestToJoinSession",
             new JoinRequest(
@@ -650,14 +665,20 @@ public sealed class PointerHubIntegrationTests
         await Assert.ThrowsAsync<HubException>(
             () => receiver.InvokeAsync<CreateSessionResponse>(
                 "CreateReceiverSession",
-                CreateDisplay()));
+                CreateDisplay(),
+                new ClientProfile(),
+                2,
+                string.Empty));
 
         await receiver.InvokeAsync("EnterRelayGroup", "shared-key");
         await insider.InvokeAsync("EnterRelayGroup", "shared-key");
         await outsider.InvokeAsync("EnterRelayGroup", "other-key");
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
-            CreateDisplay());
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
 
         var insiderView = await insider.InvokeAsync<AvailableReceiverDescriptor[]>(
             "GetAvailableReceivers");
@@ -665,7 +686,7 @@ public sealed class PointerHubIntegrationTests
             "GetAvailableReceivers");
         var outsiderJoin = await outsider.InvokeAsync<JoinResponse>(
             "RequestToJoinReceiver",
-            new DirectJoinRequest(created.SessionId, "outsider-group", "1.0.0"));
+            new DirectJoinRequest(created.SessionId, "outsider-group", "1.0.0"), string.Empty);
 
         Assert.Equal(created.SessionId, Assert.Single(insiderView).SessionId);
         Assert.Empty(outsiderView);
@@ -686,7 +707,10 @@ public sealed class PointerHubIntegrationTests
                 .ServerPasswordRequired);
         var created = await receiver.InvokeAsync<CreateSessionResponse>(
             "CreateReceiverSession",
-            CreateDisplay());
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
         var available = await presenter.InvokeAsync<AvailableReceiverDescriptor[]>(
             "GetAvailableReceivers");
 

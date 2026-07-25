@@ -116,42 +116,11 @@ public sealed class PointerHub(
         await base.OnDisconnectedAsync(exception).ConfigureAwait(false);
     }
 
-    public async Task<CreateSessionResponse> CreateReceiverSession(DisplayDescriptor display)
-        => await CreateReceiverSessionCore(display, new ClientProfile(), null).ConfigureAwait(false);
-
-    public async Task<CreateSessionResponse> CreateReceiverSessionWithProfile(
-        DisplayDescriptor display,
-        ClientProfile profile)
-        => await CreateReceiverSessionCore(display, profile, null).ConfigureAwait(false);
-
-    public async Task<CreateSessionResponse> CreateReceiverSessionWithSettings(
-        DisplayDescriptor display,
-        ClientProfile profile,
-        int maximumPresenterConnections)
-        => await CreateReceiverSessionCore(
-                display,
-                profile,
-                maximumPresenterConnections,
-                null)
-            .ConfigureAwait(false);
-
-    public async Task<CreateSessionResponse> CreateReceiverSessionWithClientSettings(
+    public async Task<CreateSessionResponse> CreateReceiverSession(
         DisplayDescriptor display,
         ClientProfile profile,
         int maximumPresenterConnections,
         string displayName)
-        => await CreateReceiverSessionCore(
-                display,
-                profile,
-                maximumPresenterConnections,
-                displayName)
-            .ConfigureAwait(false);
-
-    private async Task<CreateSessionResponse> CreateReceiverSessionCore(
-        DisplayDescriptor display,
-        ClientProfile profile,
-        int? maximumPresenterConnections,
-        string? displayName = null)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         try
@@ -252,17 +221,9 @@ public sealed class PointerHub(
         }
     }
 
-    public async Task<JoinResponse> RequestToJoinReceiver(DirectJoinRequest request)
-        => await RequestToJoinReceiverCore(request, null).ConfigureAwait(false);
-
-    public async Task<JoinResponse> RequestToJoinReceiverWithDisplayName(
+    public async Task<JoinResponse> RequestToJoinReceiver(
         DirectJoinRequest request,
         string displayName)
-        => await RequestToJoinReceiverCore(request, displayName).ConfigureAwait(false);
-
-    private async Task<JoinResponse> RequestToJoinReceiverCore(
-        DirectJoinRequest request,
-        string? displayName)
     {
         var clientInstanceId = GetRequiredClientInstanceId();
         if (!string.Equals(request.ClientInstanceId, clientInstanceId, StringComparison.Ordinal))

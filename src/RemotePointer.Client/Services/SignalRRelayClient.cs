@@ -238,7 +238,7 @@ public sealed class SignalRRelayClient : IRelayClient
         DiscardRecoveredCredential(ClientRole.Receiver);
         await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
         var response = await connection.InvokeAsync<CreateSessionResponse>(
-                "CreateReceiverSessionWithClientSettings",
+                "CreateReceiverSession",
                 display,
                 clientProfile,
                 maximumPresenterConnections,
@@ -277,7 +277,7 @@ public sealed class SignalRRelayClient : IRelayClient
             GetClientVersion(),
             clientProfile);
         var response = await connection.InvokeAsync<JoinResponse>(
-                "RequestToJoinReceiverWithDisplayName",
+                "RequestToJoinReceiver",
                 request,
                 displayName,
                 cancellationToken)
