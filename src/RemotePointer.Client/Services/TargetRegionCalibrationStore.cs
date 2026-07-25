@@ -2,16 +2,15 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using RemotePointer.Client.Configuration;
 using RemotePointer.Contracts.Coordinates;
 
 namespace RemotePointer.Client.Services;
 
 public sealed class TargetRegionCalibrationStore(string? directoryPath = null)
 {
-    private readonly string directoryPath = directoryPath ?? Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RemotePointer",
-        "Calibrations");
+    private readonly string directoryPath =
+        directoryPath ?? ClientDataDirectory.Resolve("Calibrations");
 
     public RectangleD? Load(string receiverIdentity)
     {

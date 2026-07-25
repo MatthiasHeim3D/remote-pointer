@@ -1,4 +1,5 @@
 using System.IO;
+using RemotePointer.Client.Configuration;
 
 namespace RemotePointer.Client.Services;
 
@@ -17,9 +18,7 @@ public sealed class ClientInstanceIdProvider : IClientInstanceIdProvider
                 return cachedIdentifier;
             }
 
-            var directory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RemotePointer");
+            var directory = ClientDataDirectory.Resolve();
             var path = Path.Combine(directory, "client-instance-id");
             if (File.Exists(path))
             {

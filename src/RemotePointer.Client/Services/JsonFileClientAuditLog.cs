@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using RemotePointer.Client.Configuration;
 using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
@@ -13,10 +14,7 @@ public sealed class JsonFileClientAuditLog : IClientAuditLog
 
     public JsonFileClientAuditLog(string? logDirectory = null, TimeProvider? timeProvider = null)
     {
-        this.logDirectory = logDirectory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RemotePointer",
-            "Logs");
+        this.logDirectory = logDirectory ?? ClientDataDirectory.Resolve("Logs");
         this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 

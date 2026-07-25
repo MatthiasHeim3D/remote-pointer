@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using RemotePointer.Client.Configuration;
 
 namespace RemotePointer.Client.Services;
 
@@ -25,10 +26,7 @@ public sealed class ProtectedServerPasswordStore : IServerPasswordStore
         this.dataProtector = dataProtector ?? throw new ArgumentNullException(nameof(dataProtector));
         this.auditLog = auditLog;
         filePath = Path.Combine(
-            directoryPath ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "RemotePointer",
-                "Sessions"),
+            directoryPath ?? ClientDataDirectory.Resolve("Sessions"),
             "server-password.key");
     }
 

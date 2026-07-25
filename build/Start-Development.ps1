@@ -1,5 +1,43 @@
+<#
+.SYNOPSIS
+    Starts the development relay and a number of desktop clients that can reach each other.
+
+.DESCRIPTION
+    Each client runs against its own throwaway data directory, so several of them behave like
+    separate users on separate machines: distinct identities, distinct preferences, distinct
+    saved credentials. Nothing is shared with each other or with an installed release.
+
+    Every client is seeded with the same relay address and server password, which is what makes
+    them visible to one another in the receiver directory. The directories are deleted when the
+    session ends unless -KeepClientData is given.
+
+.PARAMETER ClientCount
+    How many clients to start. Defaults to 2.
+
+.PARAMETER ServerPassword
+    The password all clients share. Must be at least 8 characters, matching the client's own rule.
+
+.PARAMETER KeepClientData
+    Leaves the per-client data directories in place for inspection instead of deleting them.
+
+.EXAMPLE
+    .\build\Start-Development.ps1 -ClientCount 3
+#>
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+    'PSAvoidUsingPlainTextForPassword',
+    'ServerPassword',
+    Justification = 'A shared development password the script prints on purpose so it can be ' +
+        'typed into a client. It guards nothing, and PBKDF2 needs the characters anyway.')]
 [CmdletBinding()]
-param()
+param(
+    [ValidateRange(1, 8)]
+    [int]$ClientCount = 2,
+
+    [ValidateNotNullOrEmpty()]
+    [string]$ServerPassword = 'remote-pointer-dev',
+
+    [switch]$KeepClientData
+)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -14,8 +52,25 @@ $clientExecutable = Join-Path $clientDirectory 'RemotePointer.Client.exe'
 $developmentServerUrl = 'https://localhost:7243'
 $serverPort = 7243
 $processes = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+$clientProcesses = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+$clientDataRoot = $null
+
+# Mirrors of the client's own constants. Assert-ClientCryptoConstant checks each one against the
+# source below, so a change there fails this script loudly instead of quietly putting the clients
+# into different relay groups.
+$passwordSaltText = 'RemotePointer.ServerPassword.v1'
+$passwordIterations = 210000
+$passwordKeyBytes = 32
+$protectionEntropyText = 'RemotePointer.SessionCredential.v1'
+$minimumPasswordLength = 8
+$dataDirectoryVariable = 'REMOTEPOINTER_DATA_DIRECTORY'
+$serverUrlVariable = 'REMOTEPOINTER_SERVER_BASEURL'
+
 $previousServerOverride = [Environment]::GetEnvironmentVariable(
-    'REMOTEPOINTER_SERVER_BASEURL',
+    $serverUrlVariable,
+    [EnvironmentVariableTarget]::Process)
+$previousDataDirectory = [Environment]::GetEnvironmentVariable(
+    $dataDirectoryVariable,
     [EnvironmentVariableTarget]::Process)
 
 function Test-TcpPort {
@@ -56,8 +111,134 @@ function Stop-OwnedProcess {
     }
 }
 
+function Assert-ClientCryptoConstant {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RelativePath,
+
+        [Parameter(Mandatory)]
+        [string]$Pattern,
+
+        [Parameter(Mandatory)]
+        [string]$Description
+    )
+
+    $path = Join-Path $repositoryRoot $RelativePath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Expected '$RelativePath' to exist so this script can verify $Description."
+    }
+
+    if (-not (Select-String -LiteralPath $path -Pattern $Pattern -SimpleMatch -Quiet)) {
+        throw (
+            "$RelativePath no longer contains $Description. This script reproduces the client's " +
+            'password derivation to seed a shared password; update both together.')
+    }
+}
+
+function Get-ServerPasswordGroupKey {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+        'PSAvoidUsingPlainTextForPassword',
+        'Password',
+        Justification = 'Mirrors the client derivation, which takes the password characters.')]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Password
+    )
+
+    # The relay only ever sees this derived key, never the password, and two clients share a
+    # group precisely when they derive the same value.
+    $salt = [System.Text.Encoding]::UTF8.GetBytes($passwordSaltText)
+    $passwordBytes = [System.Text.Encoding]::UTF8.GetBytes($Password.Trim())
+    $derive = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+        $passwordBytes,
+        $salt,
+        $passwordIterations,
+        [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+    try {
+        $keyBytes = $derive.GetBytes($passwordKeyBytes)
+    }
+    finally {
+        $derive.Dispose()
+    }
+
+    return [Convert]::ToBase64String($keyBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+}
+
+function New-ClientDataDirectory {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [string]$UserName,
+
+        [Parameter(Mandatory)]
+        [string]$GroupKey
+    )
+
+    $sessionDirectory = Join-Path $Path 'Sessions'
+    New-Item -ItemType Directory -Path $sessionDirectory -Force | Out-Null
+
+    $preferences = [ordered]@{
+        serverAddress            = $developmentServerUrl
+        userName                 = $UserName
+        profilePicturePath       = ''
+        maximumSenderConnections = 2
+        launchAtStartup          = $false
+        selectedDisplayId        = ''
+        showUsageHints           = $false
+        receiverAvailable        = $false
+        hasShownUsageHints       = $true
+    }
+    $preferencesJson = $preferences | ConvertTo-Json -Compress
+    [System.IO.File]::WriteAllText(
+        (Join-Path $Path 'user-settings.json'),
+        $preferencesJson,
+        [System.Text.UTF8Encoding]::new($false))
+
+    # Same shape the client writes: the derived key under DPAPI for the current Windows account,
+    # with the client's fixed entropy. The account's master key is untouched, so deleting these
+    # directories is the whole of the cleanup.
+    $entropy = [System.Text.Encoding]::UTF8.GetBytes($protectionEntropyText)
+    $plaintext = [System.Text.Encoding]::UTF8.GetBytes($GroupKey)
+    $protectedBytes = [System.Security.Cryptography.ProtectedData]::Protect(
+        $plaintext,
+        $entropy,
+        [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+    [System.IO.File]::WriteAllBytes(
+        (Join-Path $sessionDirectory 'server-password.key'),
+        $protectedBytes)
+}
+
 Push-Location $repositoryRoot
 try {
+    Add-Type -AssemblyName System.Security
+
+    if ($ServerPassword.Trim().Length -lt $minimumPasswordLength) {
+        throw "The server password must be at least $minimumPasswordLength characters."
+    }
+
+    Assert-ClientCryptoConstant `
+        -RelativePath 'src\RemotePointer.Client\Services\ServerPasswordKey.cs' `
+        -Pattern "`"$passwordSaltText`"" `
+        -Description 'the expected password salt'
+    Assert-ClientCryptoConstant `
+        -RelativePath 'src\RemotePointer.Client\Services\ServerPasswordKey.cs' `
+        -Pattern 'Iterations = 210_000' `
+        -Description 'the expected password iteration count'
+    Assert-ClientCryptoConstant `
+        -RelativePath 'src\RemotePointer.Client\Services\ServerPasswordKey.cs' `
+        -Pattern "KeyBytes = $passwordKeyBytes" `
+        -Description 'the expected derived key length'
+    Assert-ClientCryptoConstant `
+        -RelativePath 'src\RemotePointer.Client\Services\DpapiDataProtector.cs' `
+        -Pattern "`"$protectionEntropyText`"" `
+        -Description 'the expected data-protection entropy'
+    Assert-ClientCryptoConstant `
+        -RelativePath 'src\RemotePointer.Client\Configuration\ClientDataDirectory.cs' `
+        -Pattern "OverrideVariableName = `"$dataDirectoryVariable`"" `
+        -Description 'the expected data-directory override variable'
+
     if (Test-TcpPort -HostName 'localhost' -Port $serverPort) {
         throw "Port $serverPort is already in use. Stop the existing development server first."
     }
@@ -65,8 +246,8 @@ try {
     $existingClients = @(Get-Process -Name 'RemotePointer.Client' -ErrorAction SilentlyContinue)
     if ($existingClients.Count -gt 0) {
         Write-Warning (
-            'Remote Pointer is already running. Exit existing tray instances to avoid confusing them ' +
-            'with the two clients started by this script.')
+            'Remote Pointer is already running. Its settings are untouched by this script, but ' +
+            'its tray icon is easy to confuse with the development clients.')
     }
 
     Write-Host "Building RemotePointer.sln ($configuration development build)..." -ForegroundColor Cyan
@@ -115,27 +296,47 @@ try {
         Start-Sleep -Milliseconds 250
     }
 
-    # This process-only override ensures saved production settings cannot redirect
-    # either development client away from the local relay.
+    # This process-only override ensures saved production settings cannot redirect a
+    # development client away from the local relay.
     $env:REMOTEPOINTER_SERVER_BASEURL = $developmentServerUrl
 
-    Write-Host 'Starting two clients...' -ForegroundColor Cyan
-    $firstClient = Start-Process `
-        -FilePath $clientExecutable `
-        -WorkingDirectory $clientDirectory `
-        -PassThru
-    $processes.Add($firstClient)
-    $secondClient = Start-Process `
-        -FilePath $clientExecutable `
-        -WorkingDirectory $clientDirectory `
-        -PassThru
-    $processes.Add($secondClient)
+    $clientDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
+        "RemotePointer.Development\$([Guid]::NewGuid().ToString('N'))")
+    New-Item -ItemType Directory -Path $clientDataRoot -Force | Out-Null
+    $groupKey = Get-ServerPasswordGroupKey -Password $ServerPassword
+
+    $clientLabel = if ($ClientCount -eq 1) { 'client' } else { 'clients' }
+    Write-Host "Starting $ClientCount $clientLabel..." -ForegroundColor Cyan
+    for ($index = 1; $index -le $ClientCount; $index++) {
+        $dataDirectory = Join-Path $clientDataRoot "client-$index"
+        New-ClientDataDirectory `
+            -Path $dataDirectory `
+            -UserName "Dev Client $index" `
+            -GroupKey $groupKey
+
+        # Set immediately before each start: a child inherits this process's environment as it
+        # stands at that moment, which is what gives every client its own directory.
+        $env:REMOTEPOINTER_DATA_DIRECTORY = $dataDirectory
+        $client = Start-Process `
+            -FilePath $clientExecutable `
+            -WorkingDirectory $clientDirectory `
+            -PassThru
+        $processes.Add($client)
+        $clientProcesses.Add($client)
+    }
+
+    [Environment]::SetEnvironmentVariable(
+        $dataDirectoryVariable,
+        $previousDataDirectory,
+        [EnvironmentVariableTarget]::Process)
 
     Write-Host ''
     Write-Host "Server PID: $($server.Id)" -ForegroundColor Green
-    Write-Host "Client PIDs: $($firstClient.Id), $($secondClient.Id)" -ForegroundColor Green
-    Write-Host 'Close both clients or press Ctrl+C to stop the development session.'
+    Write-Host "Client PIDs: $(($clientProcesses | ForEach-Object { $_.Id }) -join ', ')" -ForegroundColor Green
+    Write-Host "Server password: $ServerPassword" -ForegroundColor Green
+    Write-Host "Client data: $clientDataRoot"
     Write-Host "Server logs: $logDirectory"
+    Write-Host 'Close every client or press Ctrl+C to stop the development session.'
 
     while ($true) {
         $server.Refresh()
@@ -143,9 +344,16 @@ try {
             throw "The development server stopped unexpectedly. See '$serverErrorLog'."
         }
 
-        $firstClient.Refresh()
-        $secondClient.Refresh()
-        if ($firstClient.HasExited -and $secondClient.HasExited) {
+        $running = $false
+        foreach ($client in $clientProcesses) {
+            $client.Refresh()
+            if (-not $client.HasExited) {
+                $running = $true
+                break
+            }
+        }
+
+        if (-not $running) {
             break
         }
 
@@ -159,8 +367,31 @@ finally {
     }
 
     [Environment]::SetEnvironmentVariable(
-        'REMOTEPOINTER_SERVER_BASEURL',
+        $serverUrlVariable,
         $previousServerOverride,
         [EnvironmentVariableTarget]::Process)
+    [Environment]::SetEnvironmentVariable(
+        $dataDirectoryVariable,
+        $previousDataDirectory,
+        [EnvironmentVariableTarget]::Process)
+
+    if ($clientDataRoot -and (Test-Path -LiteralPath $clientDataRoot)) {
+        if ($KeepClientData) {
+            Write-Host "Client data kept at $clientDataRoot" -ForegroundColor Yellow
+        }
+        else {
+            # Everything the clients protected lives under here, so removing it leaves nothing
+            # behind: DPAPI itself holds no per-file state to purge.
+            Remove-Item -LiteralPath $clientDataRoot -Recurse -Force -ErrorAction SilentlyContinue
+
+            # Drop the shared container too, but only once the last concurrent session has gone.
+            $sessionContainer = Split-Path -Parent $clientDataRoot
+            if ((Test-Path -LiteralPath $sessionContainer) -and
+                -not (Get-ChildItem -Force -LiteralPath $sessionContainer)) {
+                Remove-Item -LiteralPath $sessionContainer -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
     Pop-Location
 }

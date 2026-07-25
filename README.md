@@ -67,13 +67,18 @@ dotnet build RemotePointer.sln --configuration Release
 dotnet test RemotePointer.sln --configuration Release
 ```
 
-To try the whole thing on one machine — a local relay plus two client windows so you can play both roles — run:
+To try the whole thing on one machine — a local relay plus a couple of client windows so you can play both roles — run:
 
 ```powershell
 .\build\Start-Development.ps1
+.\build\Start-Development.ps1 -ClientCount 3   # or as many as you need
 ```
 
-It starts a local HTTPS relay and two clients and shuts everything down when both clients close.
+Each client gets its own throwaway data directory, so they behave like separate users with
+separate names, identities, and saved credentials, and none of them touch the settings of an
+installed copy. They all share one relay address and server password so they can see each other.
+Everything shuts down and the temporary directories are deleted when the last client closes; pass
+`-KeepClientData` to keep them for inspection.
 
 ## Documentation
 

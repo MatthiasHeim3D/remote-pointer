@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using RemotePointer.Client.Configuration;
 using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
@@ -24,10 +25,7 @@ public sealed class ProtectedSessionStore : IProtectedSessionStore
     {
         this.dataProtector = dataProtector ?? throw new ArgumentNullException(nameof(dataProtector));
         this.auditLog = auditLog;
-        this.sessionDirectory = sessionDirectory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RemotePointer",
-            "Sessions");
+        this.sessionDirectory = sessionDirectory ?? ClientDataDirectory.Resolve("Sessions");
         this.timeProvider = timeProvider ?? TimeProvider.System;
     }
 

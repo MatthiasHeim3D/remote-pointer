@@ -363,10 +363,8 @@ public sealed class ClientSettings
         }
     }
 
-    private static string GetDefaultUserPreferencesPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RemotePointer",
-        "user-settings.json");
+    private static string GetDefaultUserPreferencesPath() =>
+        ClientDataDirectory.Resolve("user-settings.json");
 
     private sealed record UserPreferences(
         string ServerAddress,
