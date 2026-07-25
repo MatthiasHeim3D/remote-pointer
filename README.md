@@ -45,6 +45,8 @@ While pointing is active:
 
 Everything you draw fades on its own after a couple of seconds — nothing is saved on either side. The help panel opens the first time you point and can be reopened any time with **H**; turn off *Show usage hints* in Settings to hide its badge.
 
+As a sender you see each shape twice: right away in your own target area, and again a moment later in the remote screen you are looking at. *Drawing opacity* in Settings dims your local copy so the returning one stays readable; it starts at 50% and never changes what the receiver sees.
+
 ## Requirements
 
 - **To use it:** Windows 11. The client is self-contained, so no separate .NET install is needed.

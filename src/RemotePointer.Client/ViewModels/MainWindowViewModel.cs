@@ -49,6 +49,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool isLaunchAtStartup;
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
+    private int drawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent;
     private bool isServerAddressVerified;
     private bool hasServerPassword;
     private bool isChangingServerPassword;
@@ -101,6 +102,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ?? false;
         showUsageHints = clientSettings?.Pointer.ShowUsageHints ?? true;
         hasShownUsageHints = clientSettings?.Pointer.HasShownUsageHints ?? false;
+        drawingOpacityPercent = PointerSettings.ClampDrawingOpacityPercent(
+            clientSettings?.Pointer.DrawingOpacityPercent
+            ?? PointerSettings.DefaultDrawingOpacityPercent);
         this.overlayService.StateChanged += OnOverlayStateChanged;
         this.targetRegionService = targetRegionService ?? new TargetRegionService();
         this.targetRegionService.UsageHintsShown += OnUsageHintsShown;
@@ -109,6 +113,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             presenterRelayClient,
             pointerTtlMilliseconds);
         Presenter.SetUsageHintsState(showUsageHints, hasShownUsageHints);
+        Presenter.SetDrawingOpacityPercent(drawingOpacityPercent);
         Presenter.PropertyChanged += OnPresenterPropertyChanged;
 
         receiverConnectionMessage = receiverRelayClient is null
@@ -540,6 +545,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => showUsageHints;
         set => SetProperty(ref showUsageHints, value);
     }
+
+    public int DrawingOpacityPercent
+    {
+        get => drawingOpacityPercent;
+        set
+        {
+            if (SetProperty(
+                    ref drawingOpacityPercent,
+                    PointerSettings.ClampDrawingOpacityPercent(value)))
+            {
+                RaisePropertyChanged(nameof(DrawingOpacityLabel));
+            }
+        }
+    }
+
+    public string DrawingOpacityLabel =>
+        DrawingOpacityPercent.ToString(CultureInfo.CurrentCulture) + "%";
+
+    public int MinimumDrawingOpacityPercent => PointerSettings.MinimumDrawingOpacityPercent;
+
+    public int MaximumDrawingOpacityPercent => PointerSettings.MaximumDrawingOpacityPercent;
 
     public string ConnectedPresenterCountLabel =>
         $"{ConnectedPresenters.Count} sender{(ConnectedPresenters.Count == 1 ? string.Empty : "s")} connected";
@@ -1342,8 +1368,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             IsLaunchAtStartup,
             SelectedMonitor?.Display.DisplayId,
             ShowUsageHints,
-            ReceiverAvailability == ReceiverAvailability.Available);
+            ReceiverAvailability == ReceiverAvailability.Available,
+            DrawingOpacityPercent);
         Presenter.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
+        Presenter.SetDrawingOpacityPercent(DrawingOpacityPercent);
         startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
         RaiseServerAddressCommandState();
     }
@@ -1382,6 +1410,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IsLaunchAtStartup = startupRegistrationService?.IsEnabled
             ?? clientSettings.Startup.LaunchAtStartup;
         ShowUsageHints = clientSettings.Pointer.ShowUsageHints;
+        DrawingOpacityPercent = clientSettings.Pointer.DrawingOpacityPercent;
 
         var savedMonitor = Monitors.FirstOrDefault(
             monitor => string.Equals(

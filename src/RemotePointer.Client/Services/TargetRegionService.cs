@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Overlays;
 using RemotePointer.Contracts.Coordinates;
 
@@ -15,6 +16,7 @@ public sealed class TargetRegionService : ITargetRegionService
     private double expectedAspectRatio = 16d / 9d;
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
+    private int drawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent;
     private TargetRegionWindow? window;
 
     public event EventHandler<TargetRegionStateChangedEventArgs>? StateChanged;
@@ -45,6 +47,12 @@ public sealed class TargetRegionService : ITargetRegionService
         this.hasShownUsageHints = hasShownUsageHints;
     }
 
+    public void SetDrawingOpacityPercent(int drawingOpacityPercent) =>
+        this.drawingOpacityPercent =
+            PointerSettings.ClampDrawingOpacityPercent(drawingOpacityPercent);
+
+    private double DrawingOpacity => drawingOpacityPercent / 100d;
+
     public void BeginCalibration(double expectedAspectRatio)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -63,7 +71,8 @@ public sealed class TargetRegionService : ITargetRegionService
             defaultRectangle,
             expectedAspectRatio,
             lockAspectRatio: true,
-            showUsageHints);
+            showUsageHints,
+            drawingOpacity: DrawingOpacity);
         window.CalibrationLocked += OnCalibrationLocked;
         window.CalibrationCancelled += OnCalibrationCancelled;
         window.Closed += OnWindowClosed;
@@ -130,7 +139,8 @@ public sealed class TargetRegionService : ITargetRegionService
             expectedAspectRatio,
             lockAspectRatio: false,
             showUsageHints,
-            expandUsageHintsInitially: !hasShownUsageHints);
+            expandUsageHintsInitially: !hasShownUsageHints,
+            drawingOpacity: DrawingOpacity);
         window.EnterPointingMode();
         if (!hasShownUsageHints)
         {

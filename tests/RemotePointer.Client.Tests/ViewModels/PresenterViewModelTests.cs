@@ -1,3 +1,4 @@
+using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
 using RemotePointer.Client.Tests.Fakes;
 using RemotePointer.Client.ViewModels;
@@ -299,6 +300,17 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
+    public void SetDrawingOpacityPercent_ForwardsPreferenceToInputArea()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new PresenterViewModel(service);
+
+        viewModel.SetDrawingOpacityPercent(35);
+
+        Assert.Equal(35, service.DrawingOpacityPercent);
+    }
+
+    [Fact]
     public void StateChanges_UpdatePointingAndStatusProperties()
     {
         using var service = new FakeTargetRegionService();
@@ -353,6 +365,9 @@ public sealed class PresenterViewModelTests
 
         public bool HasShownUsageHints { get; private set; }
 
+        public int DrawingOpacityPercent { get; private set; } =
+            PointerSettings.DefaultDrawingOpacityPercent;
+
         public void SetCalibrationIdentity(string? receiverIdentity) =>
             CalibrationIdentity = receiverIdentity;
 
@@ -361,6 +376,9 @@ public sealed class PresenterViewModelTests
             ShowUsageHints = showUsageHints;
             HasShownUsageHints = hasShownUsageHints;
         }
+
+        public void SetDrawingOpacityPercent(int drawingOpacityPercent) =>
+            DrawingOpacityPercent = drawingOpacityPercent;
 
         public void BeginCalibration(double expectedAspectRatio)
         {

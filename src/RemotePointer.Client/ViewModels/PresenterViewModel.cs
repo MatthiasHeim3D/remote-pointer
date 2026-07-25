@@ -289,6 +289,9 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints) =>
         targetRegionService.SetUsageHintsState(showUsageHints, hasShownUsageHints);
 
+    public void SetDrawingOpacityPercent(int drawingOpacityPercent) =>
+        targetRegionService.SetDrawingOpacityPercent(drawingOpacityPercent);
+
     public Task ApplyClientSettingsAsync(
         string displayName,
         string? profilePicturePath,

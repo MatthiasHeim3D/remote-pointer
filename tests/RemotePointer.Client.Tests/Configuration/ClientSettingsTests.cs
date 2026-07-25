@@ -232,6 +232,70 @@ public sealed class ClientSettingsTests
     }
 
     [Fact]
+    public void UserPreferences_RoundTripDrawingOpacity()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUserPreferences(
+            "https://saved.example.test",
+            "Ada",
+            null,
+            drawingOpacityPercent: 25);
+        var reloaded = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal(25, reloaded.Pointer.DrawingOpacityPercent);
+    }
+
+    [Fact]
+    public void Load_DefaultsDrawingOpacityWhenPreferencesPredateTheSetting()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        WriteUserPreferences(
+            directory.Path,
+            new
+            {
+                serverAddress = "https://saved.example.test",
+                userName = "Ada",
+                profilePicturePath = string.Empty,
+            });
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal(
+            PointerSettings.DefaultDrawingOpacityPercent,
+            settings.Pointer.DrawingOpacityPercent);
+    }
+
+    [Theory]
+    [InlineData(0, PointerSettings.DefaultDrawingOpacityPercent)]
+    [InlineData(-40, PointerSettings.DefaultDrawingOpacityPercent)]
+    [InlineData(3, PointerSettings.MinimumDrawingOpacityPercent)]
+    [InlineData(400, PointerSettings.MaximumDrawingOpacityPercent)]
+    public void Load_ClampsStoredDrawingOpacityIntoSupportedRange(
+        int storedPercent,
+        int expectedPercent)
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        WriteUserPreferences(
+            directory.Path,
+            new
+            {
+                serverAddress = "https://saved.example.test",
+                userName = "Ada",
+                profilePicturePath = string.Empty,
+                drawingOpacityPercent = storedPercent,
+            });
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal(expectedPercent, settings.Pointer.DrawingOpacityPercent);
+    }
+
+    [Fact]
     public void SaveUsageHintsShown_PersistsFirstUseState()
     {
         using var directory = new TemporaryDirectory();

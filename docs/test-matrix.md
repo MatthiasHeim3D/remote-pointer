@@ -70,11 +70,12 @@
 4. With ratio lock disabled, create a difference greater than 2%, and verify Lock requires the explicit Allow mismatch override.
 5. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.
 6. Enable pointing. Verify left-click highlights, left-drag draws a fading path, Shift+left-drag draws a fading line, Shift+left-click opens a text box finalized by Enter, right-drag draws a fading box, and Shift+right-drag draws a fading circle centered at the initial click. Confirm each appears locally and on the receiver. Verify the help panel includes the Escape shortcut and settings guidance, opens on first use, and starts collapsed on later uses. Confirm `H` always toggles the full panel, while disabling **Show usage hints** removes the collapsed help badge.
-7. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
-8. Click outside the rectangle and confirm the underlying application behaves normally.
-9. Press Escape and confirm normal clicking is restored immediately.
-10. Repeat entry and exit with `Ctrl+Alt+P`, including while another application is active.
-11. Repeat on mixed-DPI monitors and with a target rectangle on a monitor left of the primary display.
+7. With pointing active, change **Drawing opacity** in Settings and re-enter pointing. Confirm the sender's own shapes, ripples, and placed text notes are dimmed by the chosen percentage, that the receiver still renders them at full opacity, and that the value survives a client restart.
+8. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
+9. Click outside the rectangle and confirm the underlying application behaves normally.
+10. Press Escape and confirm normal clicking is restored immediately.
+11. Repeat entry and exit with `Ctrl+Alt+P`, including while another application is active.
+12. Repeat on mixed-DPI monitors and with a target rectangle on a monitor left of the primary display.
 
 ## Phase 5 manual procedure
 

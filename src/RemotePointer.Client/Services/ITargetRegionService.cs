@@ -14,6 +14,8 @@ public interface ITargetRegionService : IDisposable
 
     void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints);
 
+    void SetDrawingOpacityPercent(int drawingOpacityPercent);
+
     void BeginCalibration(double expectedAspectRatio);
 
     void UpdateExpectedAspectRatio(double expectedAspectRatio);

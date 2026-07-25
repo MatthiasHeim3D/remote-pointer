@@ -77,7 +77,8 @@ public sealed class ClientSettings
         bool? launchAtStartup = null,
         string? selectedDisplayId = null,
         bool? showUsageHints = null,
-        bool? receiverAvailable = null)
+        bool? receiverAvailable = null,
+        int? drawingOpacityPercent = null)
     {
         var normalizedServerAddress = NormalizeServerAddress(serverAddress);
         var normalizedUserName = userName.Trim();
@@ -108,6 +109,11 @@ public sealed class ClientSettings
         if (receiverAvailable.HasValue)
         {
             Receiver.IsAvailable = receiverAvailable.Value;
+        }
+        if (drawingOpacityPercent.HasValue)
+        {
+            Pointer.DrawingOpacityPercent = PointerSettings.ClampDrawingOpacityPercent(
+                drawingOpacityPercent.Value);
         }
         WriteUserPreferences();
     }
@@ -142,7 +148,8 @@ public sealed class ClientSettings
                 Receiver.SelectedDisplayId,
                 Pointer.ShowUsageHints,
                 Receiver.IsAvailable,
-                Pointer.HasShownUsageHints),
+                Pointer.HasShownUsageHints,
+                Pointer.DrawingOpacityPercent),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -291,6 +298,8 @@ public sealed class ClientSettings
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
         Pointer.ShowUsageHints = preferences.ShowUsageHints;
         Pointer.HasShownUsageHints = preferences.HasShownUsageHints;
+        Pointer.DrawingOpacityPercent = PointerSettings.ClampDrawingOpacityPercent(
+            preferences.DrawingOpacityPercent);
     }
 
     private static bool IsSupportedUserName(string? userName) =>
@@ -375,7 +384,8 @@ public sealed class ClientSettings
         string SelectedDisplayId = "",
         bool ShowUsageHints = true,
         bool ReceiverAvailable = false,
-        bool HasShownUsageHints = false);
+        bool HasShownUsageHints = false,
+        int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent);
 }
 
 public sealed class ServerSettings
@@ -393,6 +403,12 @@ public sealed class ServerSettings
 
 public sealed class PointerSettings
 {
+    public const int MinimumDrawingOpacityPercent = 10;
+
+    public const int MaximumDrawingOpacityPercent = 100;
+
+    public const int DefaultDrawingOpacityPercent = 50;
+
     public int DefaultTtlMilliseconds { get; init; } = 2_000;
 
     public int AnimationMilliseconds { get; init; } = 900;
@@ -402,6 +418,18 @@ public sealed class PointerSettings
     public bool ShowUsageHints { get; set; } = true;
 
     public bool HasShownUsageHints { get; set; }
+
+    /// <summary>
+    /// How opaque the sender's own shapes are drawn inside the input area. The receiver always
+    /// renders at full opacity; this only softens the local copy so it competes less with the
+    /// same drawing coming back through the shared video feed.
+    /// </summary>
+    public int DrawingOpacityPercent { get; set; } = DefaultDrawingOpacityPercent;
+
+    public static int ClampDrawingOpacityPercent(int percent) => Math.Clamp(
+        percent <= 0 ? DefaultDrawingOpacityPercent : percent,
+        MinimumDrawingOpacityPercent,
+        MaximumDrawingOpacityPercent);
 }
 
 public sealed class PrivacySettings

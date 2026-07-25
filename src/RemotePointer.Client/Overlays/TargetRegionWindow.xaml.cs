@@ -50,7 +50,8 @@ public partial class TargetRegionWindow : Window
         double expectedAspectRatio,
         bool lockAspectRatio,
         bool showUsageHints = true,
-        bool expandUsageHintsInitially = false)
+        bool expandUsageHintsInitially = false,
+        double drawingOpacity = 1d)
     {
         if (!double.IsFinite(expectedAspectRatio) || expectedAspectRatio <= 0d)
         {
@@ -61,8 +62,14 @@ public partial class TargetRegionWindow : Window
         ExpectedAspectRatio = expectedAspectRatio;
         ShowUsageHints = showUsageHints;
         ExpandUsageHintsInitially = expandUsageHintsInitially;
+        DrawingOpacity = double.IsFinite(drawingOpacity)
+            ? Math.Clamp(drawingOpacity, 0d, 1d)
+            : 1d;
 
         InitializeComponent();
+        // Every shape the sender draws lives on this canvas, so one canvas-level opacity
+        // multiplies through them without touching the fade animations on the shapes.
+        RippleCanvas.Opacity = DrawingOpacity;
         pointerVisuals = new PointerVisualRenderer(RippleCanvas);
         gestureUpdateTimer = new DispatcherTimer(DispatcherPriority.Input)
         {
@@ -88,6 +95,8 @@ public partial class TargetRegionWindow : Window
     public bool ShowUsageHints { get; }
 
     public bool ExpandUsageHintsInitially { get; }
+
+    public double DrawingOpacity { get; }
 
     public void EnterPointingMode()
     {

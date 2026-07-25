@@ -207,6 +207,30 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task DrawingOpacity_IsClampedAndPersistedWhenSettingsClose()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings);
+
+        Assert.Equal(
+            PointerSettings.DefaultDrawingOpacityPercent,
+            viewModel.DrawingOpacityPercent);
+
+        viewModel.DrawingOpacityPercent = 250;
+        Assert.Equal(PointerSettings.MaximumDrawingOpacityPercent, viewModel.DrawingOpacityPercent);
+
+        viewModel.DrawingOpacityPercent = 30;
+        Assert.Equal("30%", viewModel.DrawingOpacityLabel);
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(30, testSettings.Settings.Pointer.DrawingOpacityPercent);
+    }
+
+    [Fact]
     public void MissingServer_ShowsMainScreenWithSetupGuidance()
     {
         using var overlay = new FakeOverlayService();
