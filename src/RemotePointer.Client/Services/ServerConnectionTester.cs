@@ -5,7 +5,13 @@ namespace RemotePointer.Client.Services;
 
 public sealed class ServerConnectionTester : IServerConnectionTester
 {
-    private static readonly HttpClient HttpClient = new()
+    // The handler is shared for the lifetime of the process, so connections are recycled to
+    // pick up DNS changes for a relay host that moves.
+    private static readonly HttpClient HttpClient = new(
+        new SocketsHttpHandler
+        {
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        })
     {
         Timeout = Timeout.InfiniteTimeSpan,
     };

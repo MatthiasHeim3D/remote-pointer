@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows.Input;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
@@ -445,11 +446,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return parts.Length switch
             {
                 0 => "?",
-                1 => parts[0][..1].ToUpperInvariant(),
-                _ => string.Concat(parts[0][0], parts[^1][0]).ToUpperInvariant(),
+                1 => FirstCharacter(parts[0]),
+                _ => $"{FirstCharacter(parts[0])}{FirstCharacter(parts[^1])}",
             };
         }
     }
+
+    /// <summary>
+    /// Takes a whole text element rather than a single char, so a name starting with an emoji
+    /// or any other character outside the basic plane is not split into half a surrogate pair.
+    /// </summary>
+    internal static string FirstCharacter(string value) =>
+        (StringInfo.GetNextTextElement(value) is { Length: > 0 } element
+            ? element
+            : "?").ToUpperInvariant();
 
     public bool CanSetReceiverAvailability => receiverRelayClient is not null;
 

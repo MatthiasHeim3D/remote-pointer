@@ -10,6 +10,25 @@ namespace RemotePointer.Client.Tests.ViewModels;
 
 public sealed class MainWindowViewModelTests
 {
+    [Theory]
+    [InlineData("Ada", "A")]
+    [InlineData("ada lovelace", "AL")]
+    [InlineData("\U0001F600 Grin", "\U0001F600G")]
+    [InlineData("\U0001F600", "\U0001F600")]
+    public void FirstCharacter_KeepsCharactersOutsideTheBasicPlaneIntact(
+        string userName,
+        string expected)
+    {
+        var parts = userName.Split(
+            ' ',
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var initials = parts.Length == 1
+            ? MainWindowViewModel.FirstCharacter(parts[0])
+            : $"{MainWindowViewModel.FirstCharacter(parts[0])}{MainWindowViewModel.FirstCharacter(parts[^1])}";
+
+        Assert.Equal(expected, initials);
+    }
+
     [Fact]
     public void MissingServer_ShowsMainScreenWithSetupGuidance()
     {
