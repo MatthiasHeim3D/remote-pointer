@@ -46,4 +46,27 @@ public sealed class SequenceNumberTrackerTests
     {
         Assert.False(new SequenceNumberTracker().TryAccept(-1));
     }
+
+    [Fact]
+    public void TryAccept_RejectsAnImplausibleForwardJump()
+    {
+        var tracker = new SequenceNumberTracker();
+
+        Assert.True(tracker.TryAccept(1_000));
+        Assert.False(tracker.TryAccept(long.MaxValue));
+        Assert.False(
+            tracker.TryAccept(1_000 + SequenceNumberTracker.MaximumForwardGap + 1));
+        Assert.True(tracker.TryAccept(1_001));
+    }
+
+    [Fact]
+    public void TryAccept_AcceptsAnyStartingPointAndNormalProgress()
+    {
+        var tracker = new SequenceNumberTracker();
+        var sessionStart = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1_024L;
+
+        Assert.True(tracker.TryAccept(sessionStart));
+        Assert.True(tracker.TryAccept(sessionStart + 1));
+        Assert.True(tracker.TryAccept(sessionStart + SequenceNumberTracker.MaximumForwardGap));
+    }
 }
