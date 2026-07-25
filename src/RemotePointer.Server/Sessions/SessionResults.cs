@@ -60,7 +60,8 @@ public sealed record SessionTerminationResult(
     string? PresenterConnectionId = null,
     string? ReceiverConnectionId = null,
     SessionStateMessage? State = null,
-    IReadOnlyList<string>? PresenterConnectionIds = null);
+    IReadOnlyList<string>? PresenterConnectionIds = null,
+    string? CancelledPresenterRequestConnectionId = null);
 
 public sealed record ConnectionDisconnectResult(
     string SessionId,

@@ -650,6 +650,45 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void PendingPresenterEnd_WithdrawsRequestAndReleasesTheReceiver()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        var join = JoinPresenter(context, created);
+
+        var result = context.Manager.EndSession(created.SessionId, "presenter-connection");
+
+        Assert.True(result.ReceiverPreserved);
+        Assert.Equal("presenter-connection", result.CancelledPresenterRequestConnectionId);
+        Assert.Contains("presenter-connection", result.ConnectionIds);
+        Assert.False(result.State!.Approved);
+        Assert.Equal(1, context.Manager.ActiveSessionCount);
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(context.Manager.GetAvailableReceivers()).SessionId);
+        Assert.Equal("presenter-connection", join.Presenter!.ConnectionId);
+        var nextJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "next-presenter", "1.0.0"),
+            "next-presenter-connection",
+            "Next Presenter");
+        Assert.True(nextJoin.Response.Accepted);
+    }
+
+    [Fact]
+    public void PendingPresenterEnd_CannotEndTheReceiverSession()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = CreateReceiver(context);
+        _ = JoinPresenter(context, created);
+
+        context.Manager.EndSession(created.SessionId, "presenter-connection");
+
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.EndSession(created.SessionId, "presenter-connection"));
+        Assert.Equal(1, context.Manager.ActiveSessionCount);
+    }
+
+    [Fact]
     public void ReceiverEnd_RemovesReceiverAndPresenter()
     {
         var context = CreateContext(receiverDiscoveryEnabled: true);

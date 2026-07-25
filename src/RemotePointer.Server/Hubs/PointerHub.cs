@@ -471,6 +471,16 @@ public sealed class PointerHub(
             var result = sessionManager.EndSession(sessionId, Context.ConnectionId);
             if (result.ReceiverPreserved && result.State is not null)
             {
+                var cancelledRequestConnectionId =
+                    result.CancelledPresenterRequestConnectionId;
+                if (cancelledRequestConnectionId is not null
+                    && result.ReceiverConnectionId is not null)
+                {
+                    await Clients.Client(result.ReceiverConnectionId)
+                        .PresenterJoinCancelled(cancelledRequestConnectionId)
+                        .ConfigureAwait(false);
+                }
+
                 foreach (var presenterConnectionId in GetPresenterConnectionIds(result))
                 {
                     await Groups.RemoveFromGroupAsync(
@@ -478,7 +488,13 @@ public sealed class PointerHub(
                             GroupName(sessionId))
                         .ConfigureAwait(false);
                     await Clients.Client(presenterConnectionId)
-                        .SessionEnded("Disconnected from the receiver.")
+                        .SessionEnded(
+                            string.Equals(
+                                presenterConnectionId,
+                                cancelledRequestConnectionId,
+                                StringComparison.Ordinal)
+                                ? "Connection request withdrawn."
+                                : "Disconnected from the receiver.")
                         .ConfigureAwait(false);
                 }
 

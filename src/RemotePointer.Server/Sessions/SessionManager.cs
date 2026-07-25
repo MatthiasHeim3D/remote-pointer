@@ -661,18 +661,22 @@ public sealed class SessionManager : ISessionManager
         lock (syncRoot)
         {
             var membership = GetMembership(connectionId);
-            if (!membership.Approved
-                || !string.Equals(membership.SessionId, sessionId, StringComparison.Ordinal))
+            if (!string.Equals(membership.SessionId, sessionId, StringComparison.Ordinal)
+                || (!membership.Approved && membership.Role != ClientRole.Presenter))
             {
                 throw new SessionOperationException(
                     "session_member_required",
-                    "Only an approved session member can end the session.");
+                    "Only a session member can end the session.");
             }
 
             var session = GetActiveSession(sessionId);
             if (membership.Role == ClientRole.Presenter)
             {
-                return DisconnectPresenterNoLock(session, connectionId);
+                // A presenter waiting for approval is still bound to the session, so it can
+                // withdraw its own request without waiting for the receiver to answer.
+                return membership.Approved
+                    ? DisconnectPresenterNoLock(session, connectionId)
+                    : CancelPendingPresenterNoLock(session, connectionId);
             }
 
             return TerminateSessionNoLock(session);
@@ -1019,6 +1023,35 @@ public sealed class SessionManager : ISessionManager
             ReceiverConnectionId: session.Receiver.ConnectionId,
             State: CreateState(session),
             PresenterConnectionIds: presenterConnectionIds);
+    }
+
+    private SessionTerminationResult CancelPendingPresenterNoLock(
+        SessionRecord session,
+        string presenterConnectionId)
+    {
+        if (session.PendingPresenter is null
+            || !string.Equals(
+                session.PendingPresenter.ConnectionId,
+                presenterConnectionId,
+                StringComparison.Ordinal))
+        {
+            throw new SessionOperationException(
+                "presenter_not_pending",
+                "This connection no longer has a pending request.");
+        }
+
+        connections.Remove(presenterConnectionId);
+        session.PendingPresenter = null;
+        return new SessionTerminationResult(
+            session.Id,
+            [presenterConnectionId],
+            session.PointerCount,
+            ReceiverPreserved: true,
+            PresenterConnectionId: presenterConnectionId,
+            ReceiverConnectionId: session.Receiver.ConnectionId,
+            State: CreateState(session),
+            PresenterConnectionIds: [presenterConnectionId],
+            CancelledPresenterRequestConnectionId: presenterConnectionId);
     }
 
     private SessionTerminationResult DisconnectPresenterNoLock(
