@@ -957,6 +957,40 @@ public sealed class SessionManagerTests
                 CreatePointer(InitialTime, approved.Created.SessionId, 1)));
     }
 
+    [Fact]
+    public void PresenterThatChangedItsPassword_StillReportsTheGroupItsSessionIsListedIn()
+    {
+        var context = CreateContext(requireServerPassword: true);
+        context.Manager.SetConnectionGroup("receiver-connection", "shared-key");
+        context.Manager.SetConnectionGroup("presenter-connection", "shared-key");
+        var approved = CreateApprovedSession(context);
+
+        // An approved presenter keeps its place when it changes its own password, so from here
+        // its connection group and the group its session is published in disagree.
+        context.Manager.SetConnectionGroup("presenter-connection", "private-key");
+        var ended = context.Manager.EndSession(
+            approved.Created.SessionId,
+            "presenter-connection");
+
+        Assert.Equal("private-key", context.Manager.GetConnectionGroup("presenter-connection"));
+        Assert.Equal("shared-key", ended.GroupKey);
+        Assert.True(ended.ReceiverPreserved);
+    }
+
+    [Fact]
+    public void CollectedSession_ReportsTheGroupThatHasToRereadTheDirectory()
+    {
+        var context = CreateContext(requireServerPassword: true);
+        context.Manager.SetConnectionGroup("receiver-connection", "shared-key");
+        _ = CreateReceiver(context);
+
+        context.TimeProvider.Advance(TimeSpan.FromHours(9));
+        var collected = Assert.Single(context.Manager.CollectExpiredSessions());
+
+        Assert.Equal("shared-key", collected.GroupKey);
+        Assert.Equal(0, context.Manager.ActiveSessionCount);
+    }
+
     private static TestContext CreateContext(
         int maximumPresentersPerReceiver = 16,
         bool requireServerPassword = false)

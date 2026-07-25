@@ -624,6 +624,51 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task LastSenderDisconnecting_BringsBackTheAvailableClientList()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var receiverRelay = CreateReceiverRelay();
+        var presenterRelay = new FakeRelayClient
+        {
+            AvailableReceivers = [new AvailableReceiverDescriptor("peer-session", "Peer PC")],
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            receiverRelayClient: receiverRelay,
+            presenterRelayClient: presenterRelay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetReceiverAvailabilityAsync(ReceiverAvailability.Available);
+        Assert.Single(viewModel.Presenter.AvailableReceivers);
+
+        receiverRelay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                ReceiverDiscoverable: true,
+                ConnectedPresenters: [new ConnectedPresenterDescriptor("Peer PC")]));
+        Assert.Empty(viewModel.Presenter.AvailableReceivers);
+
+        receiverRelay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                false,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                ReceiverDiscoverable: true,
+                ConnectedPresenters: []));
+
+        Assert.False(viewModel.HasConnectedPresenter);
+        Assert.True(viewModel.Presenter.SenderRoleEnabled);
+        Assert.Equal(
+            "peer-session",
+            Assert.Single(viewModel.Presenter.AvailableReceivers).SessionId);
+    }
+
+    [Fact]
     public void RestoredReceiverState_NotifiesThatDisconnectAllBecameEnabled()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);

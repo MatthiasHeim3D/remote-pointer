@@ -110,7 +110,7 @@ public sealed class PointerHub(
             }
         }
 
-        await NotifyDirectoryChangedAsync(groupKey).ConfigureAwait(false);
+        await NotifyDirectoryChangedAsync(groupKey, disconnect?.GroupKey).ConfigureAwait(false);
         if (exception is null)
         {
             logger.LogInformation(
@@ -481,7 +481,7 @@ public sealed class PointerHub(
                 result.SessionId,
                 result.ReceiverPreserved,
                 result.PointerCount);
-            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -519,7 +519,7 @@ public sealed class PointerHub(
                 "Receiver disconnected all presenters. SessionId={SessionId} PointerCount={PointerCount}",
                 result.SessionId,
                 result.PointerCount);
-            await NotifyDirectoryChangedAsync().ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -604,18 +604,34 @@ public sealed class PointerHub(
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
-    private static string GroupName(string sessionId) => $"session:{sessionId}";
+    internal static string GroupName(string sessionId) => $"session:{sessionId}";
 
     /// <summary>
     /// Directory changes reach only the clients that share the same server password. Nobody
     /// else can see the affected receivers, and one client's connection churn no longer costs
     /// a directory read on every other connection.
     /// </summary>
-    private static string DirectoryGroupName(string groupKey) => $"directory:{groupKey}";
+    internal static string DirectoryGroupName(string groupKey) => $"directory:{groupKey}";
 
     private Task NotifyDirectoryChangedAsync() =>
         NotifyDirectoryChangedAsync(sessionManager.GetConnectionGroup(Context.ConnectionId));
 
     private Task NotifyDirectoryChangedAsync(string groupKey) =>
         Clients.Group(DirectoryGroupName(groupKey)).ReceiverDirectoryChanged();
+
+    /// <summary>
+    /// Notifies both directories a change touched, skipping the second when it is the same one.
+    /// A connection normally ends in the group its session was published under, but an approved
+    /// presenter that changed its server password does not, and the free slot it leaves behind
+    /// belongs to the session's group rather than to the one it walked off with.
+    /// </summary>
+    private async Task NotifyDirectoryChangedAsync(string groupKey, string? sessionGroupKey)
+    {
+        await NotifyDirectoryChangedAsync(groupKey).ConfigureAwait(false);
+        if (sessionGroupKey is not null
+            && !string.Equals(sessionGroupKey, groupKey, StringComparison.Ordinal))
+        {
+            await NotifyDirectoryChangedAsync(sessionGroupKey).ConfigureAwait(false);
+        }
+    }
 }

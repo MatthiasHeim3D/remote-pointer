@@ -19,7 +19,9 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private readonly ITargetRegionService targetRegionService;
     private readonly RelayCommand togglePointingCommand;
     private int capturedPointerCount;
+    private bool directoryReadPending;
     private bool disposed;
+    private bool isReadingDirectory;
     private DisplayDescriptor? receiverDisplay;
     private AvailableReceiverDescriptor? selectedReceiver;
     private bool isError;
@@ -260,6 +262,12 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             ? Task.CompletedTask
             : RefreshAvailableReceiversAsync();
 
+    /// <summary>
+    /// Follows the receiver role: this client cannot send while it is receiving, so the listing
+    /// is dropped while the sender role is off and read again as soon as it comes back. Without
+    /// that read the listing would stay empty after the last sender disconnects, because the
+    /// relay only announces what changed in the directory and nothing there did.
+    /// </summary>
     public void SetSenderRoleEnabled(bool enabled)
     {
         SenderRoleEnabled = enabled;
@@ -268,7 +276,10 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             AvailableReceivers.Clear();
             SelectedReceiver = null;
             RaisePropertyChanged(nameof(ReceiverDiscoveryMessage));
+            return;
         }
+
+        RequestDirectoryRead();
     }
 
     /// <summary>
@@ -356,16 +367,65 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private async Task RefreshAvailableReceiversAsync()
+    /// <summary>
+    /// True while this client both wants a listing and is allowed one. A session owns the panel
+    /// while it lasts, and the receiver role turns the sender off entirely, so a read is
+    /// pointless in either state — but the directory keeps moving underneath, which is why a
+    /// read that cannot run now is remembered rather than skipped.
+    /// </summary>
+    private bool CanReadDirectory =>
+        relayClient is not null && SenderRoleEnabled && !IsSessionApproved && !IsJoinPending;
+
+    /// <summary>
+    /// Records that the listing is stale and reads it when that is possible. Every notification
+    /// the relay sends lands here, including the ones that arrive while a session holds the
+    /// panel: those are honoured the moment it is released, so the listing never depends on a
+    /// notification arriving in a particular order relative to the session state it describes.
+    /// </summary>
+    private void RequestDirectoryRead()
     {
-        if (relayClient is null || !SenderRoleEnabled)
+        directoryReadPending = true;
+        _ = ReadDirectoryAsync();
+    }
+
+    private Task RefreshAvailableReceiversAsync()
+    {
+        directoryReadPending = true;
+        return ReadDirectoryAsync();
+    }
+
+    /// <summary>
+    /// Drains the pending read, one call at a time. Overlapping reads would race to publish
+    /// their snapshots and the older one could win, so a read that arrives while another is in
+    /// flight only marks the listing stale again and lets the running loop pick it up.
+    /// </summary>
+    private async Task ReadDirectoryAsync()
+    {
+        if (isReadingDirectory)
         {
             return;
         }
 
+        isReadingDirectory = true;
         try
         {
-            var receivers = await relayClient.GetAvailableReceiversAsync();
+            while (directoryReadPending && CanReadDirectory)
+            {
+                directoryReadPending = false;
+                await ReadAvailableReceiversAsync();
+            }
+        }
+        finally
+        {
+            isReadingDirectory = false;
+        }
+    }
+
+    private async Task ReadAvailableReceiversAsync()
+    {
+        try
+        {
+            var receivers = await relayClient!.GetAvailableReceiversAsync();
             var selectedSessionId = SelectedReceiver?.SessionId;
             AvailableReceivers.Clear();
             foreach (var receiver in receivers)
@@ -391,10 +451,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         _ = sender;
         _ = e;
-        if (!IsSessionApproved && !IsJoinPending && SenderRoleEnabled)
-        {
-            _ = RefreshAvailableReceiversAsync();
-        }
+        RequestDirectoryRead();
     }
 
     private async Task JoinDiscoveredReceiverAsync(AvailableReceiverDescriptor? receiver)
@@ -436,6 +493,9 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     {
         if (!response.Accepted)
         {
+            // A refused request usually means the listing was already out of date — the
+            // receiver went invisible, filled up, or took another request first.
+            RequestDirectoryRead();
             SetStatus(response.Reason ?? "The join request was rejected.", true);
             return;
         }
@@ -555,11 +615,11 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
     private void OnConnectionStatusChanged(object? sender, RelayConnectionStatusChangedEventArgs e)
     {
         ConnectionMessage = e.Message;
-        if (e.Status == RelayConnectionStatus.Connected
-            && SenderRoleEnabled
-            && !IsSessionApproved)
+        if (e.Status == RelayConnectionStatus.Connected)
         {
-            _ = RefreshAvailableReceiversAsync();
+            // A connection that dropped missed every notification sent while it was away, so
+            // the listing it carries is only a guess until it is read again.
+            RequestDirectoryRead();
         }
     }
 
@@ -635,6 +695,9 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         RaisePropertyChanged(nameof(ReceiverDisplayShape));
         pendingAcknowledgements.Clear();
         sequenceNumber = Math.Max(sequenceNumber, CreateSequenceBase());
+        // The panel shows the listing again from here, and it went unread for the whole
+        // session, so it is read now rather than waiting for the next thing to change.
+        RequestDirectoryRead();
     }
 
     private void RaiseNetworkCommandStates()

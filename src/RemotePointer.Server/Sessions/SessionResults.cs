@@ -57,10 +57,17 @@ public sealed record ResumeSessionResult(
     SessionStateMessage State,
     string? ReplacedConnectionId);
 
+/// <summary>
+/// <paramref name="GroupKey"/> is the group the affected session was published under, which is
+/// not always the group of the connection that caused the change: an approved presenter that
+/// changes its server password keeps its place in the session it was admitted to. It is the
+/// directory that gained or lost an entry, so it is the one to notify.
+/// </summary>
 public sealed record SessionTerminationResult(
     string SessionId,
     IReadOnlyList<string> ConnectionIds,
     long PointerCount,
+    string GroupKey,
     bool ReceiverPreserved = false,
     string? PresenterConnectionId = null,
     string? ReceiverConnectionId = null,
@@ -74,4 +81,5 @@ public sealed record ConnectionDisconnectResult(
     IReadOnlyList<string> PresenterConnectionIdsToEnd,
     string? ReceiverConnectionId,
     SessionStateMessage? State,
+    string GroupKey,
     string? CancelledPresenterRequestConnectionId = null);

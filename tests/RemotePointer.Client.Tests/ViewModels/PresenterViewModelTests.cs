@@ -84,6 +84,54 @@ public sealed class PresenterViewModelTests
     }
 
     [Fact]
+    public async Task ReturningSenderRole_ReloadsTheListingItDroppedWhileReceiving()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            AvailableReceivers = [new AvailableReceiverDescriptor("peer-session", "Peer PC")],
+        };
+        using var viewModel = new PresenterViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        Assert.Single(viewModel.AvailableReceivers);
+
+        viewModel.SetSenderRoleEnabled(false);
+        Assert.Empty(viewModel.AvailableReceivers);
+
+        viewModel.SetSenderRoleEnabled(true);
+
+        Assert.Equal("peer-session", Assert.Single(viewModel.AvailableReceivers).SessionId);
+    }
+
+    [Fact]
+    public async Task DirectoryChangeDuringASession_IsHonouredWhenTheSessionEnds()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new PresenterViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(1)));
+        relay.AvailableReceivers =
+        [
+            new AvailableReceiverDescriptor("listed-while-busy", "Late receiver"),
+        ];
+
+        relay.RaiseReceiverDirectoryChanged();
+        Assert.Empty(viewModel.AvailableReceivers);
+
+        relay.RaiseSessionEnded("Disconnected from the receiver.");
+
+        Assert.Equal(
+            "listed-while-busy",
+            Assert.Single(viewModel.AvailableReceivers).SessionId);
+    }
+
+    [Fact]
     public void ApprovedPointer_IsSentAndAcknowledgementLatencyIsShown()
     {
         using var service = new FakeTargetRegionService();

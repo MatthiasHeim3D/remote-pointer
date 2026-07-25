@@ -18,8 +18,15 @@ public sealed class SessionExpirationService(
         {
             foreach (var session in sessionManager.CollectExpiredSessions())
             {
-                await hubContext.Clients.Group($"session:{session.SessionId}")
+                await hubContext.Clients.Group(PointerHub.GroupName(session.SessionId))
                     .SessionEnded("The session expired.")
+                    .ConfigureAwait(false);
+                // A collected session leaves the directory without any client having asked for
+                // it, so the peers that were listing it are told to read it again. Nothing else
+                // would tell them, and they would go on offering a receiver that cannot be
+                // joined until something unrelated changed.
+                await hubContext.Clients.Group(PointerHub.DirectoryGroupName(session.GroupKey))
+                    .ReceiverDirectoryChanged()
                     .ConfigureAwait(false);
                 logger.LogInformation(
                     AuditEventIds.SessionExpired,

@@ -788,7 +788,8 @@ public sealed class SessionManager : ISessionManager
                     ClientRole.Receiver,
                     presenterConnectionIds,
                     ReceiverConnectionId: null,
-                    CreateState(session));
+                    CreateState(session),
+                    session.GroupKey);
             }
 
             connections.Remove(connectionId);
@@ -814,6 +815,7 @@ public sealed class SessionManager : ISessionManager
                 PresenterConnectionIdsToEnd: [],
                 session.Receiver.ConnectionId,
                 CreateState(session),
+                session.GroupKey,
                 cancelledPresenterRequestConnectionId);
         }
     }
@@ -1067,7 +1069,11 @@ public sealed class SessionManager : ISessionManager
             connections.Remove(connectionId);
         }
 
-        return new SessionTerminationResult(session.Id, connectionIds, session.PointerCount);
+        return new SessionTerminationResult(
+            session.Id,
+            connectionIds,
+            session.PointerCount,
+            session.GroupKey);
     }
 
     private SessionTerminationResult DisconnectPresentersNoLock(SessionRecord session)
@@ -1092,6 +1098,7 @@ public sealed class SessionManager : ISessionManager
             session.Id,
             presenterConnectionIds,
             session.PointerCount,
+            session.GroupKey,
             ReceiverPreserved: true,
             PresenterConnectionId: presenterConnectionIds.FirstOrDefault(),
             ReceiverConnectionId: session.Receiver.ConnectionId,
@@ -1120,6 +1127,7 @@ public sealed class SessionManager : ISessionManager
             session.Id,
             [presenterConnectionId],
             session.PointerCount,
+            session.GroupKey,
             ReceiverPreserved: true,
             PresenterConnectionId: presenterConnectionId,
             ReceiverConnectionId: session.Receiver.ConnectionId,
@@ -1139,6 +1147,7 @@ public sealed class SessionManager : ISessionManager
             session.Id,
             [presenterConnectionId],
             session.PointerCount,
+            session.GroupKey,
             ReceiverPreserved: true,
             PresenterConnectionId: presenterConnectionId,
             ReceiverConnectionId: session.Receiver.ConnectionId,
