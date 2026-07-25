@@ -358,7 +358,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             relayClient.PointerDisplayed -= OnPointerDisplayed;
             relayClient.SessionEnded -= OnSessionEnded;
             relayClient.ReceiverDirectoryChanged -= OnReceiverDirectoryChanged;
-            relayClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            RelayClientShutdown.Complete(relayClient);
         }
 
         targetRegionService.Dispose();

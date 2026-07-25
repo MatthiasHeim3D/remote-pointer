@@ -657,7 +657,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             receiverRelayClient.SessionApproved -= OnReceiverSessionApproved;
             receiverRelayClient.PointerReceived -= OnPointerReceived;
             receiverRelayClient.SessionEnded -= OnReceiverSessionEnded;
-            receiverRelayClient.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            RelayClientShutdown.Complete(receiverRelayClient);
         }
 
         overlayService.Dispose();
