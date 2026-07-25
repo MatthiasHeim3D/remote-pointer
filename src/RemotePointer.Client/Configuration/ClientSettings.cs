@@ -1,7 +1,6 @@
 using System.IO;
 using System.Security;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Windows.Media.Imaging;
 namespace RemotePointer.Client.Configuration;
 
@@ -290,13 +289,12 @@ public sealed class ClientSettings
             ? preferences.UserName
             : string.Empty;
         Profile.PicturePath = preferences.ProfilePicturePath ?? string.Empty;
-        var maximumAnnotatorConnections = preferences.EffectiveMaximumAnnotatorConnections;
         Host.MaximumAnnotatorConnections = Math.Clamp(
-            maximumAnnotatorConnections <= 0 ? 2 : maximumAnnotatorConnections,
+            preferences.MaximumAnnotatorConnections <= 0 ? 2 : preferences.MaximumAnnotatorConnections,
             1,
             16);
         Host.SelectedDisplayId = preferences.SelectedDisplayId ?? string.Empty;
-        Host.IsAvailable = preferences.EffectiveHostAvailable;
+        Host.IsAvailable = preferences.HostAvailable;
         Startup.LaunchAtStartup = preferences.LaunchAtStartup;
         Pointer.ShowUsageHints = preferences.ShowUsageHints;
         Pointer.HasShownUsageHints = preferences.HasShownUsageHints;
@@ -381,37 +379,13 @@ public sealed class ClientSettings
         string ServerAddress,
         string UserName,
         string ProfilePicturePath,
-        int? MaximumAnnotatorConnections = null,
+        int MaximumAnnotatorConnections = 2,
         bool LaunchAtStartup = false,
         string SelectedDisplayId = "",
         bool ShowUsageHints = true,
-        bool? HostAvailable = null,
+        bool HostAvailable = false,
         bool HasShownUsageHints = false,
-        int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent)
-    {
-        /// <summary>
-        /// The annotator limit under the name it had before the sender/annotator rename. A file
-        /// written by an older client still uses it, and without reading it here an upgrade
-        /// would silently drop the user's choice back to the default.
-        /// </summary>
-        [JsonPropertyName("maximumSenderConnections")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public int? MaximumSenderConnections { get; init; }
-
-        /// <summary>
-        /// Host availability under the name it had before the receiver/host rename.
-        /// </summary>
-        [JsonPropertyName("receiverAvailable")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public bool? ReceiverAvailable { get; init; }
-
-        // The current name wins when both are present, so the first save after an upgrade
-        // settles the file on the new spelling and the legacy value stops being consulted.
-        public int EffectiveMaximumAnnotatorConnections =>
-            MaximumAnnotatorConnections ?? MaximumSenderConnections ?? 2;
-
-        public bool EffectiveHostAvailable => HostAvailable ?? ReceiverAvailable ?? false;
-    }
+        int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent);
 }
 
 public sealed class ServerSettings
