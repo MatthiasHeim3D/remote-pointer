@@ -172,6 +172,10 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         ? "Connected"
         : "Request sent. Waiting for approval.";
 
+    public string EndSessionActionLabel => IsSessionApproved
+        ? "Disconnect from receiver"
+        : "Cancel connection request";
+
     public string StateLabel => State.ToString();
 
     public string StatusMessage
@@ -205,6 +209,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             {
                 RaiseNetworkCommandStates();
                 RaisePropertyChanged(nameof(SenderConnectionStatusLabel));
+                RaisePropertyChanged(nameof(EndSessionActionLabel));
             }
         }
     }
@@ -220,6 +225,7 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
                 calibrateCommand.RaiseCanExecuteChanged();
                 togglePointingCommand.RaiseCanExecuteChanged();
                 RaisePropertyChanged(nameof(SenderConnectionStatusLabel));
+                RaisePropertyChanged(nameof(EndSessionActionLabel));
             }
         }
     }
@@ -461,16 +467,25 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
             return;
         }
 
+        var wasApproved = IsSessionApproved;
         targetRegionService.ExitPointingMode();
         try
         {
             await relayClient.EndSessionAsync();
             ClearSessionState();
-            SetStatus("Disconnected from the receiver.", false);
+            SetStatus(
+                wasApproved
+                    ? "Disconnected from the receiver."
+                    : "Connection request cancelled.",
+                false);
         }
         catch (Exception exception)
         {
-            SetStatus($"The relay could not confirm disconnection: {exception.Message}", true);
+            SetStatus(
+                wasApproved
+                    ? $"The relay could not confirm disconnection: {exception.Message}"
+                    : $"The connection request could not be cancelled: {exception.Message}",
+                true);
         }
     }
 

@@ -36,6 +36,31 @@ public sealed class PresenterViewModelTests
         Assert.Equal(
             "Request sent. Waiting for approval.",
             viewModel.SenderConnectionStatusLabel);
+        Assert.Equal("Cancel connection request", viewModel.EndSessionActionLabel);
+        Assert.True(viewModel.EndSessionCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task PendingRequest_CanBeCancelledFromTheSenderPanel()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(true),
+            AvailableReceivers = [new AvailableReceiverDescriptor("session-visible", "Receiver PC")],
+        };
+        using var viewModel = new PresenterViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        viewModel.JoinDiscoveredReceiverCommand.Execute(null);
+        Assert.True(viewModel.IsJoinPending);
+
+        viewModel.EndSessionCommand.Execute(null);
+
+        Assert.Equal(1, relay.EndCount);
+        Assert.False(viewModel.IsJoinPending);
+        Assert.False(viewModel.IsError);
+        Assert.Equal("Connection request cancelled.", viewModel.StatusMessage);
+        Assert.False(viewModel.EndSessionCommand.CanExecute(null));
     }
 
     [Fact]

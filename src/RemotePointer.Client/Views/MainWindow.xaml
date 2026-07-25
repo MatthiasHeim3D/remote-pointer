@@ -573,12 +573,17 @@
                                 Foreground="White"
                                 Command="{Binding Presenter.EndSessionCommand}"
                                 Content="&#xE711;"
-                                ToolTip="Disconnect from receiver">
+                                ToolTip="{Binding Presenter.EndSessionActionLabel}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Presenter.IsSessionApproved}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <!-- Waiting for approval is the other state this panel
+                                             shows, and the request can be taken back from here. -->
+                                        <DataTrigger Binding="{Binding Presenter.IsJoinPending}" Value="True">
                                             <Setter Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                     </Style.Triggers>

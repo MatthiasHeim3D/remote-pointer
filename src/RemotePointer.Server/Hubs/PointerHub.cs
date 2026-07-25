@@ -493,7 +493,7 @@ public sealed class PointerHub(
                                 presenterConnectionId,
                                 cancelledRequestConnectionId,
                                 StringComparison.Ordinal)
-                                ? "Connection request withdrawn."
+                                ? "Connection request cancelled."
                                 : "Disconnected from the receiver.")
                         .ConfigureAwait(false);
                 }
