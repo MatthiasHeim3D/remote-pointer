@@ -171,6 +171,36 @@ public sealed class SignalRRelayClientTests
         await recoveredReceiver.EndSessionAsync();
     }
 
+    [Fact]
+    public async Task ChangedServerPassword_ReachesTheRelayBeforeTheNextOperation()
+    {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+        var server = factory.Server;
+        await using var receiver = new SignalRRelayClient(
+            CreateSettings(server.BaseAddress),
+            new FixedClientInstanceIdProvider("receiver-client"),
+            server.CreateHandler,
+            HttpTransportType.LongPolling);
+        await using var peer = new SignalRRelayClient(
+            CreateSettings(server.BaseAddress),
+            new FixedClientInstanceIdProvider("peer-client"),
+            server.CreateHandler,
+            HttpTransportType.LongPolling);
+        var peerRelisted = CompletionSource<bool>();
+        peer.ReceiverDirectoryChanged += (_, _) => peerRelisted.TrySetResult(true);
+        var created = await receiver.CreateReceiverSessionAsync(CreateDisplay());
+        Assert.Single(await peer.GetAvailableReceiversAsync());
+
+        // The receiver does nothing else afterwards: presenting the key has to be what carries
+        // the change to the relay, not whatever hub call happens to come next.
+        await receiver.SetServerPasswordKeyAsync("a-different-group-key");
+
+        Assert.True(await peerRelisted.Task.WaitAsync(TestTimeout));
+        Assert.Empty(await peer.GetAvailableReceiversAsync());
+        Assert.False((await peer.RequestToJoinReceiverAsync(created.SessionId)).Accepted);
+    }
+
     private static ClientSettings CreateSettings(Uri baseAddress) => new()
     {
         Server = new ServerSettings

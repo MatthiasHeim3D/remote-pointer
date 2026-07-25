@@ -83,7 +83,17 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public string? ServerPasswordKey { get; private set; }
 
-    public void SetServerPasswordKey(string? key) => ServerPasswordKey = key;
+    public int ServerPasswordKeyUpdateCount { get; private set; }
+
+    public Task SetServerPasswordKeyAsync(
+        string? key,
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        ServerPasswordKey = key;
+        ServerPasswordKeyUpdateCount++;
+        return Task.CompletedTask;
+    }
 
     public Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
         CancellationToken cancellationToken = default)

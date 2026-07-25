@@ -85,9 +85,15 @@ public sealed class SessionManager : ISessionManager
             connectionGroups.TryGetValue(connectionId, out var previous);
             previous ??= OpenGroupKey;
             connectionGroups[connectionId] = normalized;
+            if (string.Equals(previous, normalized, StringComparison.Ordinal))
+            {
+                return new RelayGroupChange(normalized, null);
+            }
+
             return new RelayGroupChange(
                 normalized,
-                string.Equals(previous, normalized, StringComparison.Ordinal) ? null : previous);
+                previous,
+                MoveConnectionSessionNoLock(connectionId, normalized));
         }
     }
 
@@ -623,11 +629,18 @@ public sealed class SessionManager : ISessionManager
                 };
                 session.Presenters[connectionId] = connectedPresenter;
             }
-            if (participant.Role == ClientRole.Receiver
-                && !string.IsNullOrWhiteSpace(applicationInstanceId))
+            if (participant.Role == ClientRole.Receiver)
             {
-                EnsureIdentifier(applicationInstanceId, nameof(applicationInstanceId));
-                session.ApplicationInstanceId = applicationInstanceId;
+                if (!string.IsNullOrWhiteSpace(applicationInstanceId))
+                {
+                    EnsureIdentifier(applicationInstanceId, nameof(applicationInstanceId));
+                    session.ApplicationInstanceId = applicationInstanceId;
+                }
+
+                // The resuming connection presented its password before it resumed, and a
+                // client whose password changed while it was away must not come back into
+                // the group it left.
+                session.GroupKey = GetConnectionGroupNoLock(connectionId);
             }
             connections.Add(
                 connectionId,
@@ -924,6 +937,46 @@ public sealed class SessionManager : ISessionManager
         connectionGroups.TryGetValue(connectionId, out var groupKey) ? groupKey : OpenGroupKey;
 
     /// <summary>
+    /// Carries a session across with the receiver that changed its server password. A session
+    /// keeps the key it was published under otherwise, which would leave the receiver listed
+    /// and joinable under the password it just left. A pending request that no longer shares
+    /// the session's group is cancelled from either side: approving one would form a session
+    /// across the boundary the password draws. An already approved presenter keeps its place,
+    /// because the receiver admitted it by name and ends it with Disconnect all senders.
+    /// </summary>
+    private SessionTerminationResult? MoveConnectionSessionNoLock(
+        string connectionId,
+        string groupKey)
+    {
+        if (!connections.TryGetValue(connectionId, out var membership)
+            || !sessions.TryGetValue(membership.SessionId, out var session))
+        {
+            return null;
+        }
+
+        if (membership.Role == ClientRole.Receiver)
+        {
+            session.GroupKey = groupKey;
+        }
+        else if (membership.Approved)
+        {
+            return null;
+        }
+
+        var pending = session.PendingPresenter;
+        if (pending is null
+            || string.Equals(
+                session.GroupKey,
+                GetConnectionGroupNoLock(pending.ConnectionId),
+                StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return CancelPendingPresenterNoLock(session, pending.ConnectionId);
+    }
+
+    /// <summary>
     /// Rejects a client that has not presented a server password on a relay that requires one,
     /// so an unidentified connection can neither publish itself nor see or reach anyone else.
     /// </summary>
@@ -1147,7 +1200,7 @@ public sealed class SessionManager : ISessionManager
 
         internal int MaximumPresenterConnections { get; set; } = maximumPresenterConnections;
 
-        internal string GroupKey { get; } = groupKey;
+        internal string GroupKey { get; set; } = groupKey;
 
         internal bool AbandonmentResolved { get; set; }
 

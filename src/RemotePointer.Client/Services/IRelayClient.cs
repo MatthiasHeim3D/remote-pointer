@@ -33,8 +33,13 @@ public interface IRelayClient : IAsyncDisposable
     Task<RelayCapabilities> GetRelayCapabilitiesAsync(
         CancellationToken cancellationToken = default);
 
-    /// <summary>Sets the derived group key to present on this and every later connection.</summary>
-    void SetServerPasswordKey(string? key);
+    /// <summary>
+    /// Sets the derived group key to present on this and every later connection, and presents
+    /// it right away when the connection is live. The relay keeps a connection in the group its
+    /// last key derived to, so a key that is only stored locally leaves this client listed to,
+    /// and joinable from, the password it just left.
+    /// </summary>
+    Task SetServerPasswordKeyAsync(string? key, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AvailableReceiverDescriptor>> GetAvailableReceiversAsync(
         CancellationToken cancellationToken = default);

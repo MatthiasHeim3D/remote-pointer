@@ -82,7 +82,7 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public void StoredServerPassword_SuppressesTheWarningAndAllowsRemoval()
+    public async Task StoredServerPassword_SuppressesTheWarningAndAllowsRemoval()
     {
         using var overlay = new FakeOverlayService();
         var relay = new FakeRelayClient();
@@ -98,12 +98,13 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.ShowServerPasswordWarning);
         Assert.True(viewModel.ClearServerPasswordCommand.CanExecute(null));
 
-        viewModel.ClearServerPassword();
+        await viewModel.ClearServerPasswordAsync();
 
         Assert.False(viewModel.HasServerPassword);
         Assert.True(viewModel.ShowServerPasswordWarning);
         Assert.Null(settings.Server.PasswordKey);
         Assert.Null(relay.ServerPasswordKey);
+        Assert.Equal(1, relay.ServerPasswordKeyUpdateCount);
     }
 
     [Fact]

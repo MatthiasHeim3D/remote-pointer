@@ -271,7 +271,20 @@ public sealed class PresenterViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void SetServerPasswordKey(string? key) => relayClient?.SetServerPasswordKey(key);
+    /// <summary>
+    /// The listing this view model shows belongs to the old password until the relay is told
+    /// otherwise, so the key goes out first and the directory is read again behind it.
+    /// </summary>
+    public async Task SetServerPasswordKeyAsync(string? key)
+    {
+        if (relayClient is null)
+        {
+            return;
+        }
+
+        await relayClient.SetServerPasswordKeyAsync(key);
+        await RefreshAvailableReceiversAsync();
+    }
 
     public void SetUsageHintsState(bool showUsageHints, bool hasShownUsageHints) =>
         targetRegionService.SetUsageHintsState(showUsageHints, hasShownUsageHints);

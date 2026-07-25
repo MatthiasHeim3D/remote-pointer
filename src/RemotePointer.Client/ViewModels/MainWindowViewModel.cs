@@ -172,8 +172,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
             IsAvailabilityMenuOpen = !IsAvailabilityMenuOpen;
         });
-        ClearServerPasswordCommand = new RelayCommand(
-            _ => ClearServerPassword(),
+        ClearServerPasswordCommand = new AsyncRelayCommand(
+            _ => ClearServerPasswordAsync(),
             _ => HasServerPassword);
         incrementMaximumSendersCommand = new RelayCommand(
             _ => MaximumSenderConnections++,
@@ -1463,28 +1463,46 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         var key = await Task.Run(() => ServerPasswordKey.Derive(draft));
         ServerPasswordInput = string.Empty;
-        ApplyServerPasswordKey(key);
         serverPasswordStore?.Save(key);
         HasServerPassword = true;
+        await ApplyServerPasswordKeyAsync(key);
     }
 
-    public void ClearServerPassword()
+    public async Task ClearServerPasswordAsync()
     {
         ServerPasswordInput = string.Empty;
-        ApplyServerPasswordKey(null);
         serverPasswordStore?.Clear();
         HasServerPassword = false;
+        await ApplyServerPasswordKeyAsync(null);
     }
 
-    private void ApplyServerPasswordKey(string? key)
+    /// <summary>
+    /// Both roles hold their own relay connection and the relay groups each one separately, so
+    /// a password change has to reach both before this client stops being visible and reachable
+    /// under the previous one.
+    /// </summary>
+    private async Task ApplyServerPasswordKeyAsync(string? key)
     {
         if (clientSettings is not null)
         {
             clientSettings.Server.PasswordKey = key;
         }
 
-        receiverRelayClient?.SetServerPasswordKey(key);
-        Presenter.SetServerPasswordKey(key);
+        try
+        {
+            if (receiverRelayClient is not null)
+            {
+                await receiverRelayClient.SetServerPasswordKeyAsync(key);
+            }
+
+            await Presenter.SetServerPasswordKeyAsync(key);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(
+                $"The server password was saved, but the relay could not be updated: {exception.Message}",
+                true);
+        }
     }
 
     private void RaiseServerPasswordProperties()
@@ -1493,7 +1511,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RaisePropertyChanged(nameof(ServerPasswordWarning));
         RaisePropertyChanged(nameof(ServerPasswordStatus));
         RaisePropertyChanged(nameof(EmptyClientListMessage));
-        (ClearServerPasswordCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (ClearServerPasswordCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
     }
 
     private void RaiseAvailabilityProperties()

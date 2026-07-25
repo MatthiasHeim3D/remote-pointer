@@ -686,6 +686,79 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
+    public async Task ChangedServerPassword_HidesTheReceiverFromItsFormerPeerAndTellsItToRelist()
+    {
+        using var factory = CreateFactory(requireServerPassword: true);
+        await using var receiver = CreateConnection(factory, "moving-receiver", "Receiver");
+        await using var peer = CreateConnection(factory, "staying-peer", "Peer");
+        var peerRelisted = CompletionSource<bool>();
+        peer.On("ReceiverDirectoryChanged", () => peerRelisted.TrySetResult(true));
+        await receiver.StartAsync();
+        await peer.StartAsync();
+        await receiver.InvokeAsync("EnterRelayGroup", "first-password-key");
+        await peer.InvokeAsync("EnterRelayGroup", "first-password-key");
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSession",
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
+        Assert.Single(await peer.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
+
+        await receiver.InvokeAsync("EnterRelayGroup", "second-password-key");
+
+        Assert.True(await peerRelisted.Task.WaitAsync(TestTimeout));
+        Assert.Empty(await peer.InvokeAsync<AvailableReceiverDescriptor[]>("GetAvailableReceivers"));
+        var staleJoin = await peer.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "staying-peer", "1.0.0"),
+            string.Empty);
+        Assert.False(staleJoin.Accepted);
+    }
+
+    [Fact]
+    public async Task ChangedServerPassword_CancelsAJoinRequestItLeavesBehind()
+    {
+        using var factory = CreateFactory(requireServerPassword: true);
+        await using var receiver = CreateConnection(factory, "moving-receiver", "Receiver");
+        await using var peer = CreateConnection(factory, "requesting-peer", "Peer");
+        var pending = CompletionSource<PresenterDescriptor>();
+        var cancelled = CompletionSource<string>();
+        var peerEnded = CompletionSource<string>();
+        receiver.On<PresenterDescriptor>("PresenterJoinRequested", pending.SetResult);
+        receiver.On<string>("PresenterJoinCancelled", cancelled.SetResult);
+        peer.On<string>("SessionEnded", peerEnded.SetResult);
+        await receiver.StartAsync();
+        await peer.StartAsync();
+        await receiver.InvokeAsync("EnterRelayGroup", "first-password-key");
+        await peer.InvokeAsync("EnterRelayGroup", "first-password-key");
+        var created = await receiver.InvokeAsync<CreateSessionResponse>(
+            "CreateReceiverSession",
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
+        Assert.True((await peer.InvokeAsync<JoinResponse>(
+            "RequestToJoinReceiver",
+            new DirectJoinRequest(created.SessionId, "requesting-peer", "1.0.0"),
+            string.Empty)).Accepted);
+        var requested = await pending.Task.WaitAsync(TestTimeout);
+
+        await receiver.InvokeAsync("EnterRelayGroup", "second-password-key");
+
+        Assert.Equal(requested.ConnectionId, await cancelled.Task.WaitAsync(TestTimeout));
+        Assert.Contains(
+            "server password",
+            await peerEnded.Task.WaitAsync(TestTimeout),
+            StringComparison.Ordinal);
+        await Assert.ThrowsAsync<HubException>(
+            () => receiver.InvokeAsync(
+                "ApprovePresenter",
+                created.SessionId,
+                requested.ConnectionId));
+    }
+
+    [Fact]
     public async Task ServerPassword_IsNotRequiredOnAnOpenRelay()
     {
         using var factory = CreateFactory();

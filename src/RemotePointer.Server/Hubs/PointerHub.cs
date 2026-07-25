@@ -34,6 +34,20 @@ public sealed class PointerHub(
                     Context.ConnectionId,
                     DirectoryGroupName(change.GroupKey))
                 .ConfigureAwait(false);
+            if (change.CancelledJoinRequest is not null)
+            {
+                await CancelJoinRequestAsync(change.CancelledJoinRequest).ConfigureAwait(false);
+            }
+
+            if (change.PreviousGroupKey is not null)
+            {
+                // Both directories change when a client moves between them: the one it left
+                // can no longer see the receiver it published, and the one it joined can. The
+                // caller is already in the new group, so this is also what refreshes its own
+                // listing after a password change.
+                await NotifyDirectoryChangedAsync(change.PreviousGroupKey).ConfigureAwait(false);
+                await NotifyDirectoryChangedAsync(change.GroupKey).ConfigureAwait(false);
+            }
         }
         catch (SessionOperationException exception)
         {
@@ -511,6 +525,31 @@ public sealed class PointerHub(
         {
             throw ToHubException(exception, "DisconnectAllConnections");
         }
+    }
+
+    private async Task CancelJoinRequestAsync(SessionTerminationResult cancellation)
+    {
+        var presenterConnectionId = cancellation.CancelledPresenterRequestConnectionId;
+        if (presenterConnectionId is null)
+        {
+            return;
+        }
+
+        await Clients.Client(presenterConnectionId)
+            .SessionEnded("The server password changed, so the connection request was cancelled.")
+            .ConfigureAwait(false);
+        if (cancellation.ReceiverConnectionId is not null)
+        {
+            await Clients.Client(cancellation.ReceiverConnectionId)
+                .PresenterJoinCancelled(presenterConnectionId)
+                .ConfigureAwait(false);
+        }
+
+        logger.LogInformation(
+            AuditEventIds.SessionEnded,
+            "Join request cancelled across a server password change. SessionId={SessionId} PresenterConnectionId={PresenterConnectionId}",
+            cancellation.SessionId,
+            presenterConnectionId);
     }
 
     private HubException ToHubException(SessionOperationException exception, string operation)

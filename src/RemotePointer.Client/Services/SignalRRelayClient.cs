@@ -18,6 +18,12 @@ public sealed class SignalRRelayClient : IRelayClient
     private const int TransitionSettleMilliseconds = 5_000;
     private const int TransitionPollMilliseconds = 50;
 
+    /// <summary>
+    /// The key that puts a connection in the relay's shared open pool. It is what a client
+    /// presents to leave a password group after the password is cleared.
+    /// </summary>
+    private const string OpenGroupKey = "";
+
     private readonly SemaphoreSlim connectionGate = new(1, 1);
     private readonly IClientAuditLog? auditLog;
     private readonly HubConnection connection;
@@ -32,7 +38,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private bool disposed;
     private SessionCredential? credential;
     private string? groupKey;
-    private bool groupKeyEntered;
+    private string? enteredGroupKey;
     private string? sessionId;
     private RelayConnectionStatus status = RelayConnectionStatus.Disconnected;
 
@@ -185,12 +191,31 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
     }
 
-    public void SetServerPasswordKey(string? key)
+    public async Task SetServerPasswordKeyAsync(
+        string? key,
+        CancellationToken cancellationToken = default)
     {
         lock (stateLock)
         {
             groupKey = string.IsNullOrWhiteSpace(key) ? null : key;
-            groupKeyEntered = false;
+        }
+
+        // A connection that is not up yet presents the key when it starts. A live one has to
+        // present it now, because the relay scopes the directory per connection: until it
+        // does, this client is still listed to — and reachable from — the password it left.
+        if (disposed || connection.State != HubConnectionState.Connected)
+        {
+            return;
+        }
+
+        await connectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnterGroupAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            connectionGate.Release();
         }
     }
 
@@ -562,11 +587,12 @@ public sealed class SignalRRelayClient : IRelayClient
 
         connection.Reconnecting += exception =>
         {
-            // The relay tracks the group per connection, so a new connection has to present
-            // the key again before it can see or reach anything.
+            // The relay tracks the group per connection, and a reconnect brings a new one that
+            // starts in the open pool, so the key has to be presented again before this client
+            // can see or reach anything.
             lock (stateLock)
             {
-                groupKeyEntered = false;
+                enteredGroupKey = null;
             }
 
             SetStatus(
@@ -579,7 +605,7 @@ public sealed class SignalRRelayClient : IRelayClient
         {
             lock (stateLock)
             {
-                groupKeyEntered = false;
+                enteredGroupKey = null;
             }
 
             if (!disposed)
@@ -629,7 +655,7 @@ public sealed class SignalRRelayClient : IRelayClient
         string? keyToEnter;
         lock (stateLock)
         {
-            keyToEnter = groupKeyEntered ? null : groupKey;
+            keyToEnter = GetGroupKeyToEnterNoLock();
         }
 
         if (keyToEnter is null || connection.State != HubConnectionState.Connected)
@@ -641,18 +667,29 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
         lock (stateLock)
         {
-            if (string.Equals(groupKey, keyToEnter, StringComparison.Ordinal))
-            {
-                groupKeyEntered = true;
-            }
+            // This is now the key the relay holds for the connection. A password changed while
+            // the call was in flight simply leaves one to present, and the comparison finds it.
+            enteredGroupKey = keyToEnter;
         }
+    }
+
+    /// <summary>
+    /// The key this connection still owes the relay, or null when the relay already holds the
+    /// current one. A connection starts in the relay's open pool, so a client that never set a
+    /// password owes nothing; one that cleared its password owes the empty key that returns it
+    /// there, or the relay would keep it in the group its old password derived to.
+    /// </summary>
+    private string? GetGroupKeyToEnterNoLock()
+    {
+        var desired = groupKey ?? (enteredGroupKey is null ? null : OpenGroupKey);
+        return string.Equals(desired, enteredGroupKey, StringComparison.Ordinal) ? null : desired;
     }
 
     private bool IsGroupEntryCurrent()
     {
         lock (stateLock)
         {
-            return groupKey is null || groupKeyEntered;
+            return GetGroupKeyToEnterNoLock() is null;
         }
     }
 

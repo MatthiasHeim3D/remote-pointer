@@ -227,6 +227,104 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void ChangedServerPassword_TakesThePublishedReceiverOutOfTheOldGroup()
+    {
+        var context = CreateContext(requireServerPassword: true);
+        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
+        var created = CreateReceiver(context);
+        context.Manager.SetConnectionGroup("former-peer-connection", "group-one");
+        Assert.Single(context.Manager.GetAvailableReceivers(null, "former-peer-connection"));
+
+        context.Manager.SetConnectionGroup("receiver-connection", "group-two");
+
+        Assert.Empty(context.Manager.GetAvailableReceivers(null, "former-peer-connection"));
+        var staleJoin = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, "former-peer-client", "1.0.0"),
+            "former-peer-connection",
+            "Former Peer");
+        Assert.False(staleJoin.Response.Accepted);
+
+        context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(context.Manager.GetAvailableReceivers(null, "new-peer-connection")).SessionId);
+    }
+
+    [Fact]
+    public void ChangedServerPassword_CancelsAJoinRequestThatNoLongerSharesTheGroup()
+    {
+        var context = CreateContext(requireServerPassword: true);
+        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
+        var created = CreateReceiver(context);
+        context.Manager.SetConnectionGroup("presenter-connection", "group-one");
+        var join = JoinPresenter(context, created);
+        Assert.True(join.Response.Accepted);
+
+        var change = context.Manager.SetConnectionGroup("receiver-connection", "group-two");
+
+        Assert.Equal(
+            "presenter-connection",
+            change.CancelledJoinRequest?.CancelledPresenterRequestConnectionId);
+        Assert.Equal("receiver-connection", change.CancelledJoinRequest?.ReceiverConnectionId);
+
+        // The request is gone from both sides: the receiver is listable again, and the former
+        // requester is unbound rather than left waiting on an approval it can no longer get.
+        context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
+        Assert.Single(context.Manager.GetAvailableReceivers(null, "new-peer-connection"));
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.ApprovePresenter(
+                created.SessionId,
+                "presenter-connection",
+                "receiver-connection"));
+    }
+
+    [Fact]
+    public void ChangedServerPassword_KeepsAPresenterTheReceiverAlreadyApproved()
+    {
+        var context = CreateContext(requireServerPassword: true);
+        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
+        var created = CreateReceiver(context);
+        context.Manager.SetConnectionGroup("presenter-connection", "group-one");
+        var join = JoinPresenter(context, created);
+        _ = context.Manager.ApprovePresenter(
+            created.SessionId,
+            join.Presenter!.ConnectionId,
+            "receiver-connection");
+
+        var change = context.Manager.SetConnectionGroup("presenter-connection", "group-two");
+
+        Assert.Null(change.CancelledJoinRequest);
+        var relayed = context.Manager.AcceptPointer(
+            "presenter-connection",
+            CreatePointer(InitialTime, created.SessionId, 0));
+        Assert.Equal(PointerRelayDisposition.Accepted, relayed.Disposition);
+    }
+
+    [Fact]
+    public void ResumedReceiver_PublishesUnderThePasswordItsConnectionPresented()
+    {
+        var context = CreateContext(requireServerPassword: true);
+        context.Manager.SetConnectionGroup("receiver-connection", "group-one");
+        var created = CreateReceiver(context);
+        _ = context.Manager.Disconnect("receiver-connection");
+
+        context.Manager.SetConnectionGroup("resumed-connection", "group-two");
+        _ = context.Manager.ResumeSession(
+            "resumed-connection",
+            new SessionResumeRequest(
+                created.SessionId,
+                ClientRole.Receiver,
+                "receiver-client",
+                created.Credential.SessionToken,
+                created.Credential.ReconnectToken));
+
+        context.Manager.SetConnectionGroup("former-peer-connection", "group-one");
+        context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
+        Assert.Empty(context.Manager.GetAvailableReceivers(null, "former-peer-connection"));
+        Assert.Single(context.Manager.GetAvailableReceivers(null, "new-peer-connection"));
+    }
+
+    [Fact]
     public void ServerPassword_IsRequiredBeforeAnythingIsPublishedOrListed()
     {
         var context = CreateContext(requireServerPassword: true);
