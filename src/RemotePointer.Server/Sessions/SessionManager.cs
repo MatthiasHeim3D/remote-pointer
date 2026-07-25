@@ -103,11 +103,7 @@ public sealed class SessionManager : ISessionManager
                 profile.PicturePng is null ? null : [.. profile.PicturePng],
                 receiver,
                 sessionOptions.SequenceWindowSize,
-                maximumPresenterConnections,
-                new PointerTokenBucket(
-                    rateLimitOptions.EventsPerSecond,
-                    rateLimitOptions.BurstSize,
-                    now));
+                maximumPresenterConnections);
             session.IsDiscoverable = sessionOptions.ReceiverDiscoveryEnabled;
 
             sessions.Add(sessionId, session);
@@ -410,7 +406,11 @@ public sealed class SessionManager : ISessionManager
                 new ConnectedPresenter(
                     pending,
                     participant,
-                    new SequenceNumberTracker(session.SequenceWindowSize)));
+                    new SequenceNumberTracker(session.SequenceWindowSize),
+                    new PointerTokenBucket(
+                        rateLimitOptions.EventsPerSecond,
+                        rateLimitOptions.BurstSize,
+                        timeProvider.GetUtcNow())));
             session.PendingPresenter = null;
             connections[presenterConnectionId] = new ConnectionMembership(
                 session.Id,
@@ -504,7 +504,10 @@ public sealed class SessionManager : ISessionManager
                     "presenter_not_connected",
                     "The presenter is no longer connected to this session.");
             }
-            if (!session.RateLimiter.TryAcquire(now))
+            // The budget is per presenter: each one sends its own gesture stream at the
+            // client's update rate, so a shared session budget would throttle everybody as
+            // soon as two senders drew at the same time.
+            if (!presenter.RateLimiter.TryAcquire(now))
             {
                 throw new SessionOperationException(
                     "pointer_rate_exceeded",
@@ -1102,8 +1105,7 @@ public sealed class SessionManager : ISessionManager
         byte[]? profilePicturePng,
         Participant receiver,
         int sequenceWindowSize,
-        int maximumPresenterConnections,
-        PointerTokenBucket rateLimiter)
+        int maximumPresenterConnections)
     {
         internal string Id { get; } = id;
 
@@ -1128,8 +1130,6 @@ public sealed class SessionManager : ISessionManager
         internal int SequenceWindowSize { get; } = sequenceWindowSize;
 
         internal int MaximumPresenterConnections { get; set; } = maximumPresenterConnections;
-
-        internal PointerTokenBucket RateLimiter { get; } = rateLimiter;
 
         internal bool PairingCodeConsumed { get; set; }
 
@@ -1203,13 +1203,16 @@ public sealed class SessionManager : ISessionManager
     private sealed class ConnectedPresenter(
         PresenterDescriptor descriptor,
         Participant participant,
-        SequenceNumberTracker sequenceNumbers)
+        SequenceNumberTracker sequenceNumbers,
+        PointerTokenBucket rateLimiter)
     {
         internal PresenterDescriptor Descriptor { get; set; } = descriptor;
 
         internal Participant Participant { get; } = participant;
 
         internal SequenceNumberTracker SequenceNumbers { get; } = sequenceNumbers;
+
+        internal PointerTokenBucket RateLimiter { get; } = rateLimiter;
     }
 
     private sealed class Participant(

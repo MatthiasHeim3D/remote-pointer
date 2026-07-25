@@ -356,6 +356,39 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
+    public void BurstRateLimit_IsTrackedPerPresenter()
+    {
+        var context = CreateContext(receiverDiscoveryEnabled: true);
+        var created = context.Manager.CreateReceiverSession(
+            CreateDisplay(),
+            "receiver-connection",
+            "receiver-client",
+            "Receiver",
+            maximumPresenterConnections: 2);
+        ApproveDirectPresenter(context, created, "presenter-one");
+        ApproveDirectPresenter(context, created, "presenter-two");
+
+        for (var sequence = 0; sequence < 30; sequence++)
+        {
+            Assert.Equal(
+                PointerRelayDisposition.Accepted,
+                context.Manager.AcceptPointer(
+                    "presenter-one-connection",
+                    CreatePointer(InitialTime, created.SessionId, sequence)).Disposition);
+        }
+
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.AcceptPointer(
+                "presenter-one-connection",
+                CreatePointer(InitialTime, created.SessionId, 30)));
+        Assert.Equal(
+            PointerRelayDisposition.Accepted,
+            context.Manager.AcceptPointer(
+                "presenter-two-connection",
+                CreatePointer(InitialTime, created.SessionId, 0)).Disposition);
+    }
+
+    [Fact]
     public void RateLimit_RefillsOverTime()
     {
         var context = CreateContext();
@@ -761,6 +794,21 @@ public sealed class SessionManagerTests
             CreateJoin(created.PairingCode, "presenter-client"),
             "presenter-connection",
             "Presenter Machine");
+
+    private static void ApproveDirectPresenter(
+        TestContext context,
+        CreateSessionResponse created,
+        string clientInstanceId)
+    {
+        var join = context.Manager.RequestToJoinReceiver(
+            new DirectJoinRequest(created.SessionId, clientInstanceId, "1.0.0"),
+            $"{clientInstanceId}-connection",
+            clientInstanceId);
+        _ = context.Manager.ApprovePresenter(
+            created.SessionId,
+            join.Presenter!.ConnectionId,
+            "receiver-connection");
+    }
 
     private static ApprovedContext CreateApprovedSession(TestContext context)
     {
