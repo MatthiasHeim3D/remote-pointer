@@ -59,22 +59,35 @@ When `Sessions:ReceiverDiscoveryEnabled` is true, an active receiver can explici
 
 Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a process-scoped `applicationInstanceId`, and an optional approval `displayName`. The process-scoped identity prevents a running client from discovering or joining its own receiver session while still allowing separate client processes on the same machine. Implemented client-to-server methods are:
 
+- `GetRelayCapabilities()`
+- `GetAvailableReceivers()`
 - `CreateReceiverSession(DisplayDescriptor)`
 - `CreateReceiverSessionWithProfile(DisplayDescriptor, ClientProfile)`
 - `CreateReceiverSessionWithSettings(DisplayDescriptor, ClientProfile, maximumPresenterConnections)`
-- `GetRelayCapabilities()`
-- `GetAvailableReceivers()`
+- `CreateReceiverSessionWithClientSettings(DisplayDescriptor, ClientProfile, maximumPresenterConnections, displayName)`
 - `SetReceiverDiscoverable(sessionId, discoverable)`
 - `RequestToJoinSession(JoinRequest)`
 - `RequestToJoinReceiver(DirectJoinRequest)`
-- `ApprovePresenter(sessionId, presenterConnectionId)`
+- `RequestToJoinReceiverWithDisplayName(DirectJoinRequest, displayName)`
 - `UpdateReceiverDisplay(sessionId, DisplayDescriptor)`
+- `UpdateReceiverClientSettings(sessionId, displayName, ClientProfile, maximumPresenterConnections)`
+- `ApprovePresenter(sessionId, presenterConnectionId)`
+- `RejectPresenter(sessionId, presenterConnectionId)`
 - `SendPointer(PointerEventMessage)`
 - `AcknowledgePointer(PointerAcknowledgement)`
 - `ResumeSession(SessionResumeRequest)`
 - `EndSession(sessionId)`
+- `DisconnectAllConnections(sessionId)`
 
-Implemented server-to-client methods are `PresenterJoinRequested`, `SessionCredentialIssued`, `SessionApproved`, `ReceiverDisplayChanged`, `PointerReceived`, `PointerDisplayed`, and `SessionEnded`.
+The four session-creation methods and the two direct-join methods are successive
+revisions of the same operation, kept so an older client can still reach a newer
+relay. The desktop client always calls the longest form. A receiver that omits a
+maximum presenter count receives the client default, reduced to the relay's own
+maximum where that is lower.
+
+Implemented server-to-client methods are `PresenterJoinRequested`, `PresenterJoinCancelled`, `SessionCredentialIssued`, `SessionApproved`, `ReceiverDisplayChanged`, `PointerReceived`, `PointerDisplayed`, `SessionEnded`, and `ReceiverDirectoryChanged`. `ReceiverDirectoryChanged` is broadcast to every connected client whenever the directory could have changed, and carries no payload: a client that cares re-reads the directory with `GetAvailableReceivers`.
+
+`EndSession` means different things by role. The receiver ends the whole session; an approved presenter leaves it; a presenter still waiting for approval withdraws its request, which the relay reports to the receiver as `PresenterJoinCancelled` so the approval prompt closes.
 
 The desktop client uses automatic reconnect delays from `appsettings.json`. An active receiver may resume its offline session shell with `SessionResumeRequest`; the returned credential contains the rotated reconnect token. Disconnecting the receiver immediately revokes every approved and pending presenter, and disconnecting a presenter revokes that presenter credential, so presenter access always requires a new request after either endpoint connection is lost. A failed resume clears local session state.
 
