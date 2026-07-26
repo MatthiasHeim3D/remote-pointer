@@ -159,6 +159,67 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
+    public void HostPause_StopsSendingAndMarksTheInputAreaPaused()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        relay.RaiseAnnotationPaused(true);
+        service.RaisePointer(new NormalizedPoint(0.5d, 0.5d));
+
+        Assert.True(viewModel.IsPaused);
+        Assert.True(service.IsAnnotationPaused);
+        Assert.Equal("Paused by host", viewModel.ConnectionStatusLabel);
+        Assert.Null(relay.SentPointer);
+
+        relay.RaiseAnnotationPaused(false);
+        service.RaisePointer(new NormalizedPoint(0.5d, 0.5d));
+
+        Assert.False(viewModel.IsPaused);
+        Assert.False(service.IsAnnotationPaused);
+        Assert.Equal("Connected", viewModel.ConnectionStatusLabel);
+        Assert.NotNull(relay.SentPointer);
+    }
+
+    [Fact]
+    public void ResumedSession_RestoresThePauseTheHostSetBeforeTheDrop()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Credential = new SessionCredential(
+                "session-1",
+                ClientRole.Annotator,
+                "annotator-1",
+                new string('s', 32),
+                new string('r', 32),
+                DateTimeOffset.UtcNow.AddHours(8)),
+        };
+        using var viewModel = new AnnotatorViewModel(service, relay);
+
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8),
+                ConnectedAnnotators:
+                [
+                    new ConnectedAnnotatorDescriptor("Annotator", null, "annotator-1", true),
+                ]));
+
+        Assert.True(viewModel.IsPaused);
+        Assert.True(service.IsAnnotationPaused);
+    }
+
+    [Fact]
     public void ReconnectingPointer_IsDroppedInsteadOfQueued()
     {
         using var service = new FakeTargetRegionService();
@@ -427,6 +488,10 @@ public sealed class AnnotatorViewModelTests
 
         public void SetDrawingOpacityPercent(int drawingOpacityPercent) =>
             DrawingOpacityPercent = drawingOpacityPercent;
+
+        public bool IsAnnotationPaused { get; private set; }
+
+        public void SetAnnotationPaused(bool paused) => IsAnnotationPaused = paused;
 
         public void BeginCalibration(double expectedAspectRatio)
         {

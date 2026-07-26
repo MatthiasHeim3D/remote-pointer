@@ -73,6 +73,21 @@ public interface ISessionManager
         string sessionId,
         string hostConnectionId);
 
+    SessionTerminationResult DisconnectAnnotator(
+        string sessionId,
+        string hostConnectionId,
+        string annotatorId);
+
+    /// <summary>
+    /// Pauses or resumes one annotator, or every connected annotator when
+    /// <paramref name="annotatorId"/> is null.
+    /// </summary>
+    AnnotatorPauseResult SetAnnotatorPaused(
+        string sessionId,
+        string hostConnectionId,
+        string? annotatorId,
+        bool paused);
+
     SessionTerminationResult EndSession(string sessionId, string connectionId);
 
     IReadOnlyList<SessionTerminationResult> CollectExpiredSessions();

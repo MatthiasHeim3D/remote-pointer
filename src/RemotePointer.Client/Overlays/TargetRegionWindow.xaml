@@ -253,6 +253,29 @@
                 </TextBlock>
             </Border>
 
+            <!-- Sits above the drawing canvases so a pause is unmistakable, and stays out of
+                 hit testing so it never becomes the reason input is ignored. -->
+            <Grid x:Name="PausedOverlay"
+                  IsHitTestVisible="False"
+                  Opacity="0.55"
+                  Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Orientation="Vertical">
+                    <TextBlock HorizontalAlignment="Center"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="72"
+                               Foreground="#F5F5F5"
+                               Text="&#xE769;" />
+                    <TextBlock Margin="0,10,0,0"
+                               HorizontalAlignment="Center"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Foreground="#F5F5F5"
+                               Text="Paused by the host" />
+                </StackPanel>
+            </Grid>
+
             <primitives:Thumb x:Name="ResizeThumb"
                               Width="26"
                               Height="26"

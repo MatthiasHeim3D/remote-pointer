@@ -146,6 +146,8 @@ public sealed class SignalRRelayClient : IRelayClient
 
     public event EventHandler<RelaySessionEndedEventArgs>? SessionEnded;
 
+    public event EventHandler<RelayAnnotationPausedEventArgs>? AnnotationPausedChanged;
+
     public string ServerUrl { get; }
 
     public RelayConnectionStatus Status
@@ -415,6 +417,39 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
     }
 
+    public async Task DisconnectAnnotatorAsync(
+        string annotatorId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(annotatorId);
+        var currentSessionId = SessionId
+            ?? throw new InvalidOperationException("This host is not available on the relay.");
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        await connection.InvokeAsync(
+                "DisconnectAnnotator",
+                currentSessionId,
+                annotatorId,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task SetAnnotatorPausedAsync(
+        string? annotatorId,
+        bool paused,
+        CancellationToken cancellationToken = default)
+    {
+        var currentSessionId = SessionId
+            ?? throw new InvalidOperationException("This host is not available on the relay.");
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        await connection.InvokeAsync(
+                "SetAnnotatorPaused",
+                currentSessionId,
+                string.IsNullOrWhiteSpace(annotatorId) ? null : annotatorId,
+                paused,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<bool> SendPointerAsync(
         PointerEventMessage pointerEvent,
         CancellationToken cancellationToken = default)
@@ -559,6 +594,12 @@ public sealed class SignalRRelayClient : IRelayClient
             "PointerReceived",
             pointerEvent => Publish(
                 () => PointerReceived?.Invoke(this, new RelayPointerEventArgs(pointerEvent))));
+        connection.On<bool>(
+            "AnnotationPaused",
+            paused => Publish(
+                () => AnnotationPausedChanged?.Invoke(
+                    this,
+                    new RelayAnnotationPausedEventArgs(paused))));
         connection.On<PointerAcknowledgement>(
             "PointerDisplayed",
             acknowledgement => Publish(

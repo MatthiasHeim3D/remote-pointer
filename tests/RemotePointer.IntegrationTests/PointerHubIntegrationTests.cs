@@ -379,7 +379,8 @@ public sealed class PointerHubIntegrationTests
 
         await annotator.InvokeAsync("SendPointer", firstPointer);
         var received = await firstPointerReceived.Task.WaitAsync(TestTimeout);
-        Assert.Equal(firstPointer, received);
+        // The relay stamps the sending annotator onto the event it forwards.
+        Assert.Equal(firstPointer with { AnnotatorId = "annotator-client" }, received);
 
         var acknowledgement = new PointerAcknowledgement(
             firstPointer.EventId,

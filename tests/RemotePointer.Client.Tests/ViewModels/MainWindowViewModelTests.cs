@@ -577,6 +577,97 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ConnectedAnnotatorRow_PausesDisconnectsAndTracksAnnotating()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1")));
+        var row = Assert.Single(viewModel.ConnectedAnnotators);
+
+        Assert.Equal("Connected", row.StatusLabel);
+        Assert.False(row.IsAnnotating);
+        Assert.False(viewModel.HasMultipleConnectedAnnotators);
+
+        relay.RaisePointer(CreatePointerFrom("annotator-1"));
+
+        Assert.True(row.IsAnnotating);
+
+        row.TogglePauseCommand.Execute(null);
+
+        Assert.Equal(("annotator-1", true), Assert.Single(relay.PauseRequests));
+
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1", true)));
+
+        // The same row is reused, so the pause lands on it rather than replacing it.
+        Assert.Same(row, Assert.Single(viewModel.ConnectedAnnotators));
+        Assert.True(row.IsPaused);
+        Assert.Equal("Paused", row.StatusLabel);
+        Assert.False(row.IsAnnotating);
+
+        row.DisconnectCommand.Execute(null);
+
+        Assert.Equal("annotator-1", Assert.Single(relay.DisconnectedAnnotatorIds));
+    }
+
+    [Fact]
+    public async Task SecondConnectedAnnotator_RevealsTheBulkPauseAndDisconnectButtons()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1"),
+                new ConnectedAnnotatorDescriptor("Annotator Two", null, "annotator-2")));
+
+        Assert.True(viewModel.HasMultipleConnectedAnnotators);
+        Assert.Equal("Pause all", viewModel.PauseAllActionLabel);
+
+        viewModel.TogglePauseAllCommand.Execute(null);
+
+        Assert.Equal((null, true), Assert.Single(relay.PauseRequests));
+
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1", true),
+                new ConnectedAnnotatorDescriptor("Annotator Two", null, "annotator-2", true)));
+
+        Assert.True(viewModel.AreAllAnnotatorsPaused);
+        Assert.Equal("Resume all", viewModel.PauseAllActionLabel);
+
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator Two", null, "annotator-2", true)));
+
+        Assert.Equal(
+            "annotator-2",
+            Assert.Single(viewModel.ConnectedAnnotators).AnnotatorId);
+        Assert.False(viewModel.HasMultipleConnectedAnnotators);
+    }
+
+    [Fact]
     public async Task ConnectedAnnotator_EnablesHostDisconnectAllCommand()
     {
         var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
@@ -1002,6 +1093,27 @@ public sealed class MainWindowViewModelTests
             new PhysicalRectangle(isPrimary ? 0 : -width, 0, width, 1_080),
             new PhysicalRectangle(isPrimary ? 0 : -width, 0, width, 1_040),
             isPrimary);
+
+    private static SessionStateMessage CreateHostState(
+        MonitorDescriptor monitor,
+        params ConnectedAnnotatorDescriptor[] annotators) => new(
+        "session-1",
+        annotators.Length > 0,
+        monitor.Display,
+        DateTimeOffset.UtcNow.AddHours(1),
+        HostDiscoverable: true,
+        ConnectedAnnotators: annotators);
+
+    private static PointerEventMessage CreatePointerFrom(string annotatorId) => new(
+        Guid.NewGuid(),
+        "session-1",
+        1,
+        0.25d,
+        0.75d,
+        PointerKind.Click,
+        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        2_000,
+        AnnotatorId: annotatorId);
 
     private static FakeRelayClient CreateHostRelay()
     {

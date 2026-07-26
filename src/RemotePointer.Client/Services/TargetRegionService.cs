@@ -13,6 +13,7 @@ public sealed class TargetRegionService : ITargetRegionService
     private RectangleD? calibratedRectangle;
     private string? calibrationIdentity;
     private bool disposed;
+    private bool isAnnotationPaused;
     private double expectedAspectRatio = 16d / 9d;
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
@@ -50,6 +51,13 @@ public sealed class TargetRegionService : ITargetRegionService
     public void SetDrawingOpacityPercent(int drawingOpacityPercent) =>
         this.drawingOpacityPercent =
             PointerSettings.ClampDrawingOpacityPercent(drawingOpacityPercent);
+
+    public void SetAnnotationPaused(bool paused)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        isAnnotationPaused = paused;
+        window?.SetAnnotationPaused(paused);
+    }
 
     private double DrawingOpacity => drawingOpacityPercent / 100d;
 
@@ -142,6 +150,7 @@ public sealed class TargetRegionService : ITargetRegionService
             expandUsageHintsInitially: !hasShownUsageHints,
             drawingOpacity: DrawingOpacity);
         window.EnterPointingMode();
+        window.SetAnnotationPaused(isAnnotationPaused);
         if (!hasShownUsageHints)
         {
             hasShownUsageHints = true;

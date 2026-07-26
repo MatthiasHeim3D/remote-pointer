@@ -991,6 +991,109 @@ public sealed class SessionManagerTests
         Assert.Equal(0, context.Manager.ActiveSessionCount);
     }
 
+    [Fact]
+    public void PausedAnnotator_StopsRelayingPointersUntilItIsResumed()
+    {
+        var context = CreateContext();
+        var approved = CreateApprovedSession(context);
+
+        var paused = context.Manager.SetAnnotatorPaused(
+            approved.Created.SessionId,
+            "host-connection",
+            "annotator-client",
+            paused: true);
+
+        Assert.True(paused.Paused);
+        Assert.Equal([approved.AnnotatorConnectionId], paused.AnnotatorConnectionIds);
+        Assert.True(Assert.Single(paused.State.ConnectedAnnotators!).IsPaused);
+        Assert.Equal(
+            "annotator-client",
+            Assert.Single(paused.State.ConnectedAnnotators!).AnnotatorId);
+
+        var dropped = context.Manager.AcceptPointer(
+            approved.AnnotatorConnectionId,
+            CreatePointer(InitialTime, approved.Created.SessionId, 0));
+
+        Assert.Equal(PointerRelayDisposition.Paused, dropped.Disposition);
+
+        var resumed = context.Manager.SetAnnotatorPaused(
+            approved.Created.SessionId,
+            "host-connection",
+            "annotator-client",
+            paused: false);
+        var relayed = context.Manager.AcceptPointer(
+            approved.AnnotatorConnectionId,
+            CreatePointer(InitialTime, approved.Created.SessionId, 1));
+
+        Assert.False(Assert.Single(resumed.State.ConnectedAnnotators!).IsPaused);
+        Assert.Equal(PointerRelayDisposition.Accepted, relayed.Disposition);
+        Assert.Equal("annotator-client", relayed.AnnotatorId);
+    }
+
+    [Fact]
+    public void PauseWithoutAnAnnotatorId_AppliesToEveryConnectedAnnotator()
+    {
+        var context = CreateContext(maximumAnnotatorsPerHost: 2);
+        var created = CreateHost(context);
+        ApproveDirectAnnotator(context, created, "annotator-one");
+        ApproveDirectAnnotator(context, created, "annotator-two");
+
+        var paused = context.Manager.SetAnnotatorPaused(
+            created.SessionId,
+            "host-connection",
+            annotatorId: null,
+            paused: true);
+
+        Assert.Equal(2, paused.AnnotatorConnectionIds.Count);
+        Assert.All(
+            paused.State.ConnectedAnnotators!,
+            annotator => Assert.True(annotator.IsPaused));
+    }
+
+    [Fact]
+    public void DisconnectAnnotator_EndsOnlyTheNamedAnnotator()
+    {
+        var context = CreateContext(maximumAnnotatorsPerHost: 2);
+        var created = CreateHost(context);
+        ApproveDirectAnnotator(context, created, "annotator-one");
+        ApproveDirectAnnotator(context, created, "annotator-two");
+
+        var disconnected = context.Manager.DisconnectAnnotator(
+            created.SessionId,
+            "host-connection",
+            "annotator-one");
+
+        Assert.True(disconnected.HostPreserved);
+        Assert.Equal(["annotator-one-connection"], disconnected.AnnotatorConnectionIds!);
+        Assert.Equal(
+            "annotator-two",
+            Assert.Single(disconnected.State!.ConnectedAnnotators!).AnnotatorId);
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.DisconnectAnnotator(
+                created.SessionId,
+                "host-connection",
+                "annotator-one"));
+    }
+
+    [Fact]
+    public void PauseOrDisconnectOfOneAnnotator_RequiresTheHostConnection()
+    {
+        var context = CreateContext();
+        var approved = CreateApprovedSession(context);
+
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.SetAnnotatorPaused(
+                approved.Created.SessionId,
+                approved.AnnotatorConnectionId,
+                "annotator-client",
+                paused: true));
+        Assert.ThrowsAny<InvalidOperationException>(
+            () => context.Manager.DisconnectAnnotator(
+                approved.Created.SessionId,
+                approved.AnnotatorConnectionId,
+                "annotator-client"));
+    }
+
     private static TestContext CreateContext(
         int maximumAnnotatorsPerHost = 16,
         bool requireServerPassword = false)

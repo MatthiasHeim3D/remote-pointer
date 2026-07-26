@@ -20,6 +20,12 @@ public interface IRelayClient : IAsyncDisposable
 
     event EventHandler<RelaySessionEndedEventArgs>? SessionEnded;
 
+    /// <summary>
+    /// Raised on an annotator when the host pauses or resumes it. Its session stays up; only its
+    /// pointer events stop being relayed.
+    /// </summary>
+    event EventHandler<RelayAnnotationPausedEventArgs>? AnnotationPausedChanged;
+
     event EventHandler? HostDirectoryChanged;
 
     string ServerUrl { get; }
@@ -79,6 +85,19 @@ public interface IRelayClient : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     Task DisconnectAllConnectionsAsync(CancellationToken cancellationToken = default);
+
+    Task DisconnectAnnotatorAsync(
+        string annotatorId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Pauses or resumes one annotator, or every connected one when <paramref name="annotatorId"/>
+    /// is null.
+    /// </summary>
+    Task SetAnnotatorPausedAsync(
+        string? annotatorId,
+        bool paused,
+        CancellationToken cancellationToken = default);
 
     Task<bool> SendPointerAsync(
         PointerEventMessage pointerEvent,

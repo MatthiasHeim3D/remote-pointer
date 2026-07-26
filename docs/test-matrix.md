@@ -23,7 +23,8 @@
 | Host directory | Host visibility choice, directory filtering, direct request, mandatory approval |
 | Server password | Stable key derivation, minimum length, protected round trip, corrupt-file discard, group-scoped listing and joins, enforced and open relay modes, client warning states, settings entry states for change/apply/cancel |
 | Display synchronization | Approval sends dimensions, host changes push to annotator, aspect/local display changes invalidate calibration |
-| Relay authorization | Host-only approval, annotator-only send, host-only acknowledgement |
+| Relay authorization | Host-only approval, annotator-only send, host-only acknowledgement, host-only pause and per-annotator disconnect |
+| Annotator pause | Paused events dropped rather than relayed, pause-all across annotators, resume restores relaying, pause survives into resumed session state, annotator input area blocked while paused |
 | Session lifecycle | Creation, approval, active expiry, termination, disconnect revocation, empty host-shell resume |
 | Pointer defenses | TTL, sequence duplicate suppression, implausible forward-jump rejection, configurable token refill/burst metered per annotator, production defaults of 90/s and 180 |
 | In-memory SignalR | Join/approve/send/acknowledge, peer revocation on disconnect, fresh-request enforcement, termination, unauthorized annotator |
@@ -84,13 +85,15 @@
 3. Select the host and request access. Confirm the host shows the annotator's machine name and that calibration remains disabled until approval.
 4. Approve the annotator, calibrate the shared desktop region, and enable pointing.
 5. Click the four corners and center. Confirm equivalent host positions, a local ripple, and a displayed acknowledgement latency.
-6. Use **Disconnect all connections** on the host and confirm annotator pointing exits while the host returns to the available list. Request and approve access again, disconnect from the annotator, then choose **Invisible** on the host and confirm it no longer appears in the list.
-7. During an active session, interrupt relay connectivity and click while the UI shows Reconnecting. Confirm those clicks are reported as dropped and do not appear after reconnection.
-8. Restore connectivity within the reconnect window. Confirm the host can return, the previous annotator is no longer connected, and pointing remains unavailable until that annotator submits a new request and is approved again.
-9. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
-10. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
-11. Set the host to **Invisible** and confirm it leaves the directory on the other client and cannot be joined. Set it back to **Available** and confirm the visible-host flow works again.
-12. While approved, change the host resolution and confirm the annotator's displayed dimensions update. Change the host aspect ratio and confirm stale calibration is invalidated. Change the annotator's local display configuration and confirm recalibration is required there as well.
+6. Pause the annotator from its row on the host. Confirm the annotator's input area dims to a pause symbol, its clicks and drags produce nothing on either side, and its row reads **Paused**. Resume it and confirm pointing works again and the annotating indicator lights while it draws. Then disconnect it from its row and confirm annotator pointing exits while the host returns to the available list.
+7. With two annotators approved, confirm **Pause all** and **Disconnect all** appear, pause both, and confirm the button offers **Resume all**.
+8. Use **Disconnect all** on the host and confirm annotator pointing exits while the host returns to the available list. Request and approve access again, disconnect from the annotator, then choose **Invisible** on the host and confirm it no longer appears in the list.
+9. During an active session, interrupt relay connectivity and click while the UI shows Reconnecting. Confirm those clicks are reported as dropped and do not appear after reconnection.
+10. Restore connectivity within the reconnect window. Confirm the host can return, the previous annotator is no longer connected, and pointing remains unavailable until that annotator submits a new request and is approved again.
+11. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
+12. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
+13. Set the host to **Invisible** and confirm it leaves the directory on the other client and cannot be joined. Set it back to **Available** and confirm the visible-host flow works again.
+14. While approved, change the host resolution and confirm the annotator's displayed dimensions update. Change the host aspect ratio and confirm stale calibration is invalidated. Change the annotator's local display configuration and confirm recalibration is required there as well.
 
 ## Phase 6 manual procedure
 

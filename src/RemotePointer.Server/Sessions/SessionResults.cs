@@ -28,12 +28,31 @@ public enum PointerRelayDisposition
 {
     Accepted,
     IgnoredSequence,
+
+    /// <summary>
+    /// The host paused this annotator. Its events are dropped rather than rejected: pausing is a
+    /// host courtesy, not a protocol violation, and an event already in flight when the pause
+    /// arrived should not surface as an error on the annotator.
+    /// </summary>
+    Paused,
 }
 
+/// <summary>
+/// <paramref name="AnnotatorId"/> is the client instance id of the annotator the event came from;
+/// the hub stamps it onto the message it forwards so the host can attribute the drawing.
+/// </summary>
 public sealed record PointerRelayResult(
     PointerRelayDisposition Disposition,
     string SessionId,
-    string? HostConnectionId);
+    string? HostConnectionId,
+    string? AnnotatorId = null);
+
+public sealed record AnnotatorPauseResult(
+    string SessionId,
+    IReadOnlyList<string> AnnotatorConnectionIds,
+    string? HostConnectionId,
+    SessionStateMessage State,
+    bool Paused);
 
 public sealed record AcknowledgementRelayResult(
     string SessionId,

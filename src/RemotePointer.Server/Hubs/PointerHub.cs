@@ -355,8 +355,10 @@ public sealed class PointerHub(
             if (result.Disposition == PointerRelayDisposition.Accepted
                 && result.HostConnectionId is not null)
             {
+                // Stamped here rather than trusted from the annotator: the host uses it to say
+                // which of its annotators is drawing, and only the relay knows that for certain.
                 await Clients.Client(result.HostConnectionId)
-                    .PointerReceived(pointerEvent)
+                    .PointerReceived(pointerEvent with { AnnotatorId = result.AnnotatorId })
                     .ConfigureAwait(false);
             }
         }
@@ -524,6 +526,86 @@ public sealed class PointerHub(
         catch (SessionOperationException exception)
         {
             throw ToHubException(exception, "DisconnectAllConnections");
+        }
+    }
+
+    public async Task DisconnectAnnotator(string sessionId, string annotatorId)
+    {
+        try
+        {
+            var result = sessionManager.DisconnectAnnotator(
+                sessionId,
+                Context.ConnectionId,
+                annotatorId);
+            foreach (var annotatorConnectionId in GetAnnotatorConnectionIds(result))
+            {
+                await Groups.RemoveFromGroupAsync(
+                        annotatorConnectionId,
+                        GroupName(sessionId))
+                    .ConfigureAwait(false);
+                await Clients.Client(annotatorConnectionId)
+                    .SessionEnded("Disconnected by the host.")
+                    .ConfigureAwait(false);
+            }
+
+            if (result.HostConnectionId is not null && result.State is not null)
+            {
+                await Clients.Client(result.HostConnectionId)
+                    .SessionApproved(result.State)
+                    .ConfigureAwait(false);
+            }
+
+            logger.LogInformation(
+                AuditEventIds.SessionEnded,
+                "Host disconnected an annotator. SessionId={SessionId} AnnotatorClientInstanceId={ClientInstanceId}",
+                result.SessionId,
+                annotatorId);
+            await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "DisconnectAnnotator");
+        }
+    }
+
+    /// <summary>
+    /// Pauses or resumes one annotator, or all of them when <paramref name="annotatorId"/> is
+    /// null. The paused annotator is told as well, so it can show that its input is going
+    /// nowhere instead of drawing into a stream the relay drops.
+    /// </summary>
+    public async Task SetAnnotatorPaused(string sessionId, string? annotatorId, bool paused)
+    {
+        try
+        {
+            var result = sessionManager.SetAnnotatorPaused(
+                sessionId,
+                Context.ConnectionId,
+                annotatorId,
+                paused);
+            foreach (var annotatorConnectionId in result.AnnotatorConnectionIds)
+            {
+                await Clients.Client(annotatorConnectionId)
+                    .AnnotationPaused(paused)
+                    .ConfigureAwait(false);
+            }
+
+            if (result.HostConnectionId is not null)
+            {
+                await Clients.Client(result.HostConnectionId)
+                    .SessionApproved(result.State)
+                    .ConfigureAwait(false);
+            }
+
+            logger.LogInformation(
+                AuditEventIds.AnnotatorPauseChanged,
+                "Host changed annotator pause state. SessionId={SessionId} AnnotatorClientInstanceId={ClientInstanceId} Paused={Paused}",
+                result.SessionId,
+                annotatorId ?? "*",
+                paused);
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "SetAnnotatorPaused");
         }
     }
 

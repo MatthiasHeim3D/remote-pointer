@@ -36,6 +36,7 @@ public partial class TargetRegionWindow : Window
     private bool gestureUpdatePending;
     private long lastGestureSentAt;
     private bool isPointingMode;
+    private bool isAnnotationPaused;
     private bool isUsageHelpCollapsed;
     private bool isResizeDragActive;
     private NativePoint resizeDragStartCursor;
@@ -302,9 +303,50 @@ public partial class TargetRegionWindow : Window
             showCollapsedHint && isCollapsed ? Visibility.Visible : Visibility.Collapsed
         );
 
+    /// <summary>
+    /// Shows or clears the paused state the host controls. Whatever was being drawn when the
+    /// pause arrived is dropped rather than finished, because its closing event would never
+    /// reach the host.
+    /// </summary>
+    public void SetAnnotationPaused(bool paused)
+    {
+        if (isAnnotationPaused == paused)
+        {
+            return;
+        }
+
+        isAnnotationPaused = paused;
+        PausedOverlay.Visibility = paused ? Visibility.Visible : Visibility.Collapsed;
+        if (paused)
+        {
+            AbandonActiveGesture();
+        }
+
+        if (isPointingMode)
+        {
+            Cursor = paused ? Cursors.No : Cursors.Cross;
+        }
+    }
+
+    private void AbandonActiveGesture()
+    {
+        RemoveTextEditor();
+        if (activePointerButton is not null)
+        {
+            ReleaseMouseCapture();
+            activePointerButton = null;
+        }
+
+        gestureUpdateTimer.Stop();
+        isPointerGestureActive = false;
+        activeGestureId = Guid.Empty;
+        pendingPathPoints.Clear();
+        gestureUpdatePending = false;
+    }
+
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!isPointingMode || activePointerButton is not null)
+        if (!isPointingMode || isAnnotationPaused || activePointerButton is not null)
         {
             return;
         }
@@ -340,7 +382,10 @@ public partial class TargetRegionWindow : Window
 
     private void OnPreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (!isPointingMode || activePointerButton is null || activeTextEditor is not null)
+        if (!isPointingMode
+            || isAnnotationPaused
+            || activePointerButton is null
+            || activeTextEditor is not null)
         {
             return;
         }
@@ -378,7 +423,7 @@ public partial class TargetRegionWindow : Window
 
     private void OnPreviewMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (!isPointingMode || activePointerButton != e.ChangedButton)
+        if (!isPointingMode || isAnnotationPaused || activePointerButton != e.ChangedButton)
         {
             return;
         }

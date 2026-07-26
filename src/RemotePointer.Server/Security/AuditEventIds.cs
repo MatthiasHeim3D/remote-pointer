@@ -14,6 +14,7 @@ public static class AuditEventIds
     public static readonly EventId SessionResumed = new(1104, nameof(SessionResumed));
     public static readonly EventId SessionEnded = new(1105, nameof(SessionEnded));
     public static readonly EventId SessionExpired = new(1106, nameof(SessionExpired));
+    public static readonly EventId AnnotatorPauseChanged = new(1107, nameof(AnnotatorPauseChanged));
     public static readonly EventId OperationRejected = new(1200, nameof(OperationRejected));
     public static readonly EventId UnhandledHubError = new(1900, nameof(UnhandledHubError));
 }

@@ -18,6 +18,8 @@ public interface IPointerClient
 
     Task PointerDisplayed(PointerAcknowledgement acknowledgement);
 
+    Task AnnotationPaused(bool paused);
+
     Task SessionEnded(string reason);
 
     Task HostDirectoryChanged();

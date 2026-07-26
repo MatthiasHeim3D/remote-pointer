@@ -41,6 +41,11 @@ public sealed class RelayAcknowledgementEventArgs(PointerAcknowledgement acknowl
     public PointerAcknowledgement Acknowledgement { get; } = acknowledgement;
 }
 
+public sealed class RelayAnnotationPausedEventArgs(bool paused) : EventArgs
+{
+    public bool Paused { get; } = paused;
+}
+
 public sealed class RelaySessionEndedEventArgs(string reason, bool expired) : EventArgs
 {
     public string Reason { get; } = reason;

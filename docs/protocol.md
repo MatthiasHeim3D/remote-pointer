@@ -84,12 +84,20 @@ Clients connect to `/hubs/pointer` with a persistent `clientInstanceId`, a proce
 - `ResumeSession(SessionResumeRequest)`
 - `EndSession(sessionId)`
 - `DisconnectAllConnections(sessionId)`
+- `DisconnectAnnotator(sessionId, annotatorId)`
+- `SetAnnotatorPaused(sessionId, annotatorId, paused)`
 
 A blank `displayName` falls back to the one supplied as a connection parameter. A
 host that requests more annotator connections than the relay allows is rejected
 rather than reduced, so the limit it asks for is the limit it gets.
 
-Implemented server-to-client methods are `AnnotatorJoinRequested`, `AnnotatorJoinCancelled`, `SessionCredentialIssued`, `SessionApproved`, `HostDisplayChanged`, `PointerReceived`, `PointerDisplayed`, `SessionEnded`, and `HostDirectoryChanged`. `HostDirectoryChanged` is broadcast whenever the directory could have changed — including when the relay collects an expired session, which no client asked for — and carries no payload: a client that cares re-reads the directory with `GetAvailableHosts`. It reaches the group the affected session was published in, which is not always the group of the connection that caused the change, because an approved annotator that changes its server password keeps its place in the session it was admitted to. A client that cannot act on a notification when it arrives, because a session of its own owns the listing, re-reads the directory when that session ends rather than dropping the notification.
+The `annotatorId` both host methods take is the annotator's `clientInstanceId`, reported to the host in `ConnectedAnnotatorDescriptor`. It is used rather than the relay connection id because it survives the annotator reconnecting. `SetAnnotatorPaused` with a null `annotatorId` applies to every connected annotator.
+
+Implemented server-to-client methods are `AnnotatorJoinRequested`, `AnnotatorJoinCancelled`, `SessionCredentialIssued`, `SessionApproved`, `HostDisplayChanged`, `PointerReceived`, `PointerDisplayed`, `AnnotationPaused`, `SessionEnded`, and `HostDirectoryChanged`. `HostDirectoryChanged` is broadcast whenever the directory could have changed — including when the relay collects an expired session, which no client asked for — and carries no payload: a client that cares re-reads the directory with `GetAvailableHosts`. It reaches the group the affected session was published in, which is not always the group of the connection that caused the change, because an approved annotator that changes its server password keeps its place in the session it was admitted to. A client that cannot act on a notification when it arrives, because a session of its own owns the listing, re-reads the directory when that session ends rather than dropping the notification.
+
+A pause is not a disconnect: the annotator keeps its session, its credential, and its place in the host's list, and only its pointer events stop being relayed. The relay drops them silently rather than rejecting them, so an event already in flight when the pause took effect does not surface as an error, and the paused annotator is told through `AnnotationPaused` so it can show that its input is going nowhere. The pause is stored on the annotator record, so it survives a reconnect and is repeated to the resuming annotator in the `SessionApproved` state.
+
+The relay stamps `PointerEventMessage.AnnotatorId` with the sending annotator on the way to the host; whatever an annotator puts there is replaced, so the host can attribute a drawing to a listed annotator without trusting the sender.
 
 `EndSession` means different things by role. The host ends the whole session; an approved annotator leaves it; an annotator still waiting for approval withdraws its request, which the relay reports to the host as `AnnotatorJoinCancelled` so the approval prompt closes.
 

@@ -21,6 +21,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public event EventHandler<RelaySessionEndedEventArgs>? SessionEnded;
 
+    public event EventHandler<RelayAnnotationPausedEventArgs>? AnnotationPausedChanged;
+
     public event EventHandler? HostDirectoryChanged;
 
     public string ServerUrl { get; init; } = "https://relay.example";
@@ -59,6 +61,10 @@ internal sealed class FakeRelayClient : IRelayClient
     public AnnotatorDescriptor? RejectedAnnotator { get; private set; }
 
     public int DisconnectAllConnectionsCount { get; private set; }
+
+    public List<string> DisconnectedAnnotatorIds { get; } = [];
+
+    public List<(string? AnnotatorId, bool Paused)> PauseRequests { get; } = [];
 
     public PointerEventMessage? SentPointer { get; private set; }
 
@@ -218,6 +224,25 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.CompletedTask;
     }
 
+    public Task DisconnectAnnotatorAsync(
+        string annotatorId,
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        DisconnectedAnnotatorIds.Add(annotatorId);
+        return Task.CompletedTask;
+    }
+
+    public Task SetAnnotatorPausedAsync(
+        string? annotatorId,
+        bool paused,
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        PauseRequests.Add((annotatorId, paused));
+        return Task.CompletedTask;
+    }
+
     public Task<bool> SendPointerAsync(
         PointerEventMessage pointerEvent,
         CancellationToken cancellationToken = default)
@@ -298,6 +323,9 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public void RaiseAcknowledgement(PointerAcknowledgement acknowledgement) =>
         PointerDisplayed?.Invoke(this, new RelayAcknowledgementEventArgs(acknowledgement));
+
+    public void RaiseAnnotationPaused(bool paused) =>
+        AnnotationPausedChanged?.Invoke(this, new RelayAnnotationPausedEventArgs(paused));
 
     public void RaiseSessionEnded(string reason, bool expired = false)
     {

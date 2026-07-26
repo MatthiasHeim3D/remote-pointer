@@ -832,35 +832,10 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="42"
-                                Height="42"
-                                Background="#173B2A"
-                                CornerRadius="7">
-                            <TextBlock HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       FontFamily="Segoe MDL2 Assets"
-                                       FontSize="20"
-                                       Foreground="#6CCB7F"
-                                       Text="&#xE8B7;" />
-                        </Border>
-                        <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-                            <TextBlock FontSize="18"
-                                       FontWeight="SemiBold"
-                                       Text="Receiving pointers" />
-                            <TextBlock FontSize="11"
-                                       Foreground="#6CCB7F"
-                                       Text="{Binding ConnectedAnnotatorCountLabel}" />
-                        </StackPanel>
-                    </StackPanel>
-                    <TextBlock Grid.Row="1"
-                               Margin="0,18,0,8"
-                               Foreground="#AFAFAF"
-                               Text="Connected annotators" />
-                    <ListBox Grid.Row="2"
+                    <!-- Sized to its rows rather than to the panel: a single annotator sits
+                         directly above its buttons instead of across a stretched gap. -->
+                    <ListBox MaxHeight="216"
                              ItemsSource="{Binding ConnectedAnnotators}"
                              Background="Transparent"
                              BorderThickness="0"
@@ -869,70 +844,107 @@
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                <Setter Property="IsHitTestVisible" Value="False" />
-                                <Setter Property="Margin" Value="0,0,0,6" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Focusable" Value="False" />
                             </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Height="48"
-                                        Padding="11,0"
-                                        Background="#2D2D2D"
-                                        CornerRadius="6">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="32" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Width="28"
-                                                Height="28"
-                                                Background="#3A3A3A"
-                                                CornerRadius="14">
-                                            <Grid>
-                                                <TextBlock HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"
-                                                           FontFamily="Segoe MDL2 Assets"
-                                                           Foreground="#60CDFF"
-                                                           Visibility="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
-                                                           Text="&#xE77B;" />
-                                                <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
-                                                    <Ellipse.Fill>
-                                                        <ImageBrush ImageSource="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
-                                                                    Stretch="UniformToFill" />
-                                                    </Ellipse.Fill>
-                                                </Ellipse>
-                                            </Grid>
-                                        </Border>
-                                        <TextBlock Grid.Column="1"
-                                                   Margin="9,0"
-                                                   VerticalAlignment="Center"
+                                <Grid Height="52">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="42" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="42"
+                                            Height="42"
+                                            Background="#343434"
+                                            CornerRadius="21">
+                                        <Grid>
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="Segoe MDL2 Assets"
+                                                       FontSize="18"
+                                                       Foreground="#60CDFF"
+                                                       Visibility="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                                       Text="&#xE77B;" />
+                                            <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                                <Ellipse.Fill>
+                                                    <ImageBrush ImageSource="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                                                Stretch="UniformToFill" />
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Grid.Column="1"
+                                                Margin="10,0,8,0"
+                                                VerticalAlignment="Center">
+                                        <TextBlock FontSize="16"
                                                    FontWeight="SemiBold"
                                                    Foreground="#F5F5F5"
                                                    Text="{Binding DisplayName}"
                                                    TextTrimming="CharacterEllipsis" />
-                                        <StackPanel Grid.Column="2"
-                                                    VerticalAlignment="Center"
-                                                    Orientation="Horizontal">
-                                            <Ellipse Width="8" Height="8" Fill="#6CCB7F" />
-                                            <TextBlock Margin="6,0,0,0"
-                                                       FontSize="10"
-                                                       Foreground="#AFAFAF"
-                                                       Text="Receiving" />
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
+                                        <TextBlock FontSize="10"
+                                                   Foreground="{Binding StatusColor}"
+                                                   Text="{Binding StatusLabel}" />
+                                    </StackPanel>
+                                    <!-- Lit only while this annotator's pointer events are
+                                         still arriving. -->
+                                    <TextBlock Grid.Column="2"
+                                               Margin="0,0,6,0"
+                                               VerticalAlignment="Center"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               FontSize="15"
+                                               Foreground="#60CDFF"
+                                               Text="&#xE70F;"
+                                               ToolTip="Annotating now"
+                                               Visibility="{Binding IsAnnotating, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button Grid.Column="3"
+                                            Width="32"
+                                            Height="32"
+                                            FontSize="14"
+                                            Style="{StaticResource IconButtonStyle}"
+                                            Command="{Binding TogglePauseCommand}"
+                                            Content="{Binding PauseActionIcon}"
+                                            ToolTip="{Binding PauseActionLabel}"
+                                            Visibility="{Binding CanControl, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button Grid.Column="4"
+                                            Width="32"
+                                            Height="32"
+                                            FontSize="14"
+                                            Style="{StaticResource IconButtonStyle}"
+                                            Foreground="#FF8A80"
+                                            Command="{Binding DisconnectCommand}"
+                                            Content="&#xE711;"
+                                            ToolTip="{Binding DisconnectActionLabel}"
+                                            Visibility="{Binding CanControl, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <Button Grid.Row="3"
-                            Height="42"
-                            Margin="0,14,0,0"
-                            Style="{StaticResource PrimaryButtonStyle}"
-                            Background="#C42B1C"
-                            Foreground="White"
-                            Command="{Binding DisconnectAllConnectionsCommand}"
-                            Content="Disconnect all annotators" />
+                    <!-- Only worth showing once the per-annotator buttons would mean repeating
+                         the same click for every row. -->
+                    <StackPanel Grid.Row="1"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal"
+                                Visibility="{Binding HasMultipleConnectedAnnotators, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Button Height="38"
+                                Margin="0,0,8,0"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Command="{Binding TogglePauseAllCommand}"
+                                Content="{Binding PauseAllActionLabel}" />
+                        <Button Height="38"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Background="#C42B1C"
+                                Foreground="White"
+                                Command="{Binding DisconnectAllConnectionsCommand}"
+                                Content="Disconnect all" />
+                    </StackPanel>
                 </Grid>
             </Grid>
 

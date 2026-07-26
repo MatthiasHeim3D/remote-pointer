@@ -501,6 +501,15 @@ public sealed class SessionManager : ISessionManager
                     "annotator_not_connected",
                     "The annotator is no longer connected to this session.");
             }
+
+            if (annotator.IsPaused)
+            {
+                return new PointerRelayResult(
+                    PointerRelayDisposition.Paused,
+                    session.Id,
+                    session.Host.ConnectionId,
+                    annotator.Participant.ClientInstanceId);
+            }
             // The budget is per annotator: each one sends its own gesture stream at the
             // client's update rate, so a shared session budget would throttle everybody as
             // soon as two annotators drew at the same time.
@@ -516,7 +525,8 @@ public sealed class SessionManager : ISessionManager
                 return new PointerRelayResult(
                     PointerRelayDisposition.IgnoredSequence,
                     session.Id,
-                    session.Host.ConnectionId);
+                    session.Host.ConnectionId,
+                    annotator.Participant.ClientInstanceId);
             }
 
             session.PointerCount++;
@@ -524,7 +534,8 @@ public sealed class SessionManager : ISessionManager
             return new PointerRelayResult(
                 PointerRelayDisposition.Accepted,
                 session.Id,
-                session.Host.ConnectionId);
+                session.Host.ConnectionId,
+                annotator.Participant.ClientInstanceId);
         }
     }
 
@@ -713,6 +724,92 @@ public sealed class SessionManager : ISessionManager
             }
 
             return DisconnectAnnotatorsNoLock(session);
+        }
+    }
+
+    public SessionTerminationResult DisconnectAnnotator(
+        string sessionId,
+        string hostConnectionId,
+        string annotatorId)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
+        EnsureIdentifier(annotatorId, nameof(annotatorId));
+
+        lock (syncRoot)
+        {
+            var session = GetActiveSession(sessionId);
+            EnsureMembership(
+                hostConnectionId,
+                sessionId,
+                ClientRole.Host,
+                requireApproved: true);
+            var annotatorConnectionId = FindAnnotatorConnectionIdNoLock(session, annotatorId)
+                ?? throw new SessionOperationException(
+                    "annotator_not_connected",
+                    "That annotator is no longer connected to this host.");
+            return DisconnectAnnotatorNoLock(session, annotatorConnectionId);
+        }
+    }
+
+    /// <summary>
+    /// A paused annotator keeps its session, its credential, and its place in the host's list;
+    /// only its pointer events stop being relayed. That is what separates pausing from
+    /// disconnecting: the host can lift it again without the annotator asking to join twice.
+    /// </summary>
+    public AnnotatorPauseResult SetAnnotatorPaused(
+        string sessionId,
+        string hostConnectionId,
+        string? annotatorId,
+        bool paused)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+        EnsureIdentifier(hostConnectionId, nameof(hostConnectionId));
+        if (annotatorId is not null)
+        {
+            EnsureIdentifier(annotatorId, nameof(annotatorId));
+        }
+
+        lock (syncRoot)
+        {
+            var session = GetActiveSession(sessionId);
+            EnsureMembership(
+                hostConnectionId,
+                sessionId,
+                ClientRole.Host,
+                requireApproved: true);
+            var affected = annotatorId is null
+                ? session.Annotators.Values.ToArray()
+                : session.Annotators.Values
+                    .Where(annotator => string.Equals(
+                        annotator.Participant.ClientInstanceId,
+                        annotatorId,
+                        StringComparison.Ordinal))
+                    .ToArray();
+            if (affected.Length == 0)
+            {
+                throw new SessionOperationException(
+                    "annotator_not_connected",
+                    "No matching annotator is connected to this host.");
+            }
+
+            var notify = new List<string>();
+            foreach (var annotator in affected)
+            {
+                if (annotator.IsPaused != paused && annotator.Participant.ConnectionId is { } id)
+                {
+                    notify.Add(id);
+                }
+
+                annotator.IsPaused = paused;
+            }
+
+            return new AnnotatorPauseResult(
+                session.Id,
+                notify,
+                session.Host.ConnectionId,
+                CreateState(session),
+                paused);
         }
     }
 
@@ -944,7 +1041,7 @@ public sealed class SessionManager : ISessionManager
     /// and joinable under the password it just left. A pending request that no longer shares
     /// the session's group is cancelled from either side: approving one would form a session
     /// across the boundary the password draws. An already approved annotator keeps its place,
-    /// because the host admitted it by name and ends it with Disconnect all annotators.
+    /// because the host admitted it by name and ends it from its connected-annotator list.
     /// </summary>
     private SessionTerminationResult? MoveConnectionSessionNoLock(
         string connectionId,
@@ -1155,6 +1252,16 @@ public sealed class SessionManager : ISessionManager
             AnnotatorConnectionIds: [annotatorConnectionId]);
     }
 
+    private static string? FindAnnotatorConnectionIdNoLock(
+        SessionRecord session,
+        string annotatorId) =>
+        session.Annotators.Values
+            .FirstOrDefault(annotator => string.Equals(
+                annotator.Participant.ClientInstanceId,
+                annotatorId,
+                StringComparison.Ordinal))
+            ?.Participant.ConnectionId;
+
     private static SessionStateMessage CreateState(SessionRecord session) => new(
         session.Id,
         Approved: session.Annotators.Count > 0,
@@ -1166,7 +1273,9 @@ public sealed class SessionManager : ISessionManager
                 annotator.Descriptor.DisplayName,
                 annotator.Descriptor.ProfilePicturePng is null
                     ? null
-                    : [.. annotator.Descriptor.ProfilePicturePng]))
+                    : [.. annotator.Descriptor.ProfilePicturePng],
+                annotator.Participant.ClientInstanceId,
+                annotator.IsPaused))
             .OrderBy(annotator => annotator.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray(),
         session.Host.ClientInstanceId,
@@ -1293,6 +1402,12 @@ public sealed class SessionManager : ISessionManager
         internal SequenceNumberTracker SequenceNumbers { get; } = sequenceNumbers;
 
         internal PointerTokenBucket RateLimiter { get; } = rateLimiter;
+
+        /// <summary>
+        /// Set by the host, and carried across a reconnect because the annotator record outlives
+        /// the connection: resuming must not hand back the drawing rights the host took away.
+        /// </summary>
+        internal bool IsPaused { get; set; }
     }
 
     private sealed class Participant(

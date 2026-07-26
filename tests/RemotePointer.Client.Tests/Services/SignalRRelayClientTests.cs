@@ -72,7 +72,9 @@ public sealed class SignalRRelayClientTests
         Assert.True(approved.Approved);
         Assert.Equal(ClientRole.Annotator, annotator.Credential?.Role);
         Assert.True(await annotator.SendPointerAsync(pointer));
-        Assert.Equal(pointer, await pointerReceived.Task.WaitAsync(TestTimeout));
+        Assert.Equal(
+            pointer with { AnnotatorId = "annotator-client" },
+            await pointerReceived.Task.WaitAsync(TestTimeout));
 
         var acknowledgement = new PointerAcknowledgement(
             pointer.EventId,

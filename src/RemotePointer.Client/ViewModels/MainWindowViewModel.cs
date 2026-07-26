@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows.Input;
+using System.Windows.Threading;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
@@ -12,11 +13,22 @@ namespace RemotePointer.Client.ViewModels;
 
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
+    /// <summary>
+    /// How long after the last pointer event an annotator still counts as annotating. A gesture
+    /// pauses between strokes, so a short window would flicker the indicator off mid-drawing.
+    /// </summary>
+    private const long AnnotatingIdleMilliseconds = 1_500;
+
+    private const int AnnotatingPollMilliseconds = 300;
+
     private readonly AsyncRelayCommand applyServerPasswordCommand;
     private readonly AsyncRelayCommand approveAnnotatorCommand;
     private readonly SemaphoreSlim availabilityUpdateGate = new(1, 1);
     private readonly RelayCommand changeServerPasswordCommand;
     private readonly AsyncRelayCommand disconnectAllConnectionsCommand;
+    private readonly AsyncRelayCommand togglePauseAllCommand;
+    private readonly Dictionary<string, long> lastPointerReceivedAt = new(StringComparer.Ordinal);
+    private readonly DispatcherTimer annotatingTimer;
     private readonly AsyncRelayCommand setHostAvailabilityCommand;
     private readonly AsyncRelayCommand testServerConnectionCommand;
     private readonly IMonitorService monitorService;
@@ -141,6 +153,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         disconnectAllConnectionsCommand = new AsyncRelayCommand(
             _ => DisconnectAllConnectionsAsync(),
             _ => hostRelayClient is not null && HasConnectedAnnotator && HasHostSession);
+        togglePauseAllCommand = new AsyncRelayCommand(
+            _ => SetAllAnnotatorsPausedAsync(!AreAllAnnotatorsPaused),
+            _ => hostRelayClient is not null && HasConnectedAnnotator && HasHostSession);
+        // Annotating is inferred from the pointer stream rather than announced, so it needs a
+        // clock to decide when a stream that simply stopped has gone quiet.
+        annotatingTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(AnnotatingPollMilliseconds),
+        };
+        annotatingTimer.Tick += OnAnnotatingTimerTick;
         setHostAvailabilityCommand = new AsyncRelayCommand(
             async availability =>
             {
@@ -206,7 +228,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<MonitorDescriptor> Monitors { get; } = [];
 
-    public ObservableCollection<ConnectedAnnotatorDescriptor> ConnectedAnnotators { get; } = [];
+    public ObservableCollection<ConnectedAnnotatorViewModel> ConnectedAnnotators { get; } = [];
 
     public AnnotatorViewModel Annotator { get; }
 
@@ -572,6 +594,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public string ConnectedAnnotatorCountLabel =>
         $"{ConnectedAnnotators.Count} annotator{(ConnectedAnnotators.Count == 1 ? string.Empty : "s")} connected";
 
+    /// <summary>
+    /// The bulk buttons only earn their place once a single row's own buttons cannot do the job.
+    /// </summary>
+    public bool HasMultipleConnectedAnnotators => ConnectedAnnotators.Count > 1;
+
+    public bool AreAllAnnotatorsPaused =>
+        ConnectedAnnotators.Count > 0 && ConnectedAnnotators.All(annotator => annotator.IsPaused);
+
+    public string PauseAllActionLabel => AreAllAnnotatorsPaused ? "Resume all" : "Pause all";
+
     public string FlyoutConnectionMessage => HasConnectedAnnotator
         ? ConnectedAnnotatorCountLabel
         : Annotator.ConnectionMessage;
@@ -608,6 +640,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand ApproveAnnotatorCommand => approveAnnotatorCommand;
 
     public ICommand DisconnectAllConnectionsCommand => disconnectAllConnectionsCommand;
+
+    public ICommand TogglePauseAllCommand => togglePauseAllCommand;
 
     public ICommand SetHostAvailabilityCommand => setHostAvailabilityCommand;
 
@@ -802,6 +836,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         disposed = true;
         CancelAvailabilityRetry();
+        annotatingTimer.Stop();
+        annotatingTimer.Tick -= OnAnnotatingTimerTick;
         overlayService.StateChanged -= OnOverlayStateChanged;
         if (hostRelayClient is not null)
         {
@@ -1024,19 +1060,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void OnHostSessionApproved(object? sender, RelaySessionStateEventArgs e)
     {
         var annotatorDisconnected = HasConnectedAnnotator && !e.State.Approved;
-        ConnectedAnnotators.Clear();
-        foreach (var annotator in e.State.ConnectedAnnotators ?? [])
+        var descriptors = e.State.ConnectedAnnotators ?? [];
+        if (e.State.Approved && descriptors.Length == 0)
         {
-            ConnectedAnnotators.Add(annotator);
+            descriptors = [new ConnectedAnnotatorDescriptor("Connected annotator")];
         }
 
-        if (e.State.Approved && ConnectedAnnotators.Count == 0)
-        {
-            ConnectedAnnotators.Add(new ConnectedAnnotatorDescriptor("Connected annotator"));
-        }
-
-        RaisePropertyChanged(nameof(ConnectedAnnotatorCountLabel));
-        RaisePropertyChanged(nameof(FlyoutConnectionMessage));
+        ApplyConnectedAnnotators(descriptors);
+        RaiseConnectedAnnotatorProperties();
         HasConnectedAnnotator = ConnectedAnnotators.Count > 0;
         if (hostRelayClient?.Credential?.Role == ClientRole.Host)
         {
@@ -1081,6 +1112,182 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             false);
     }
 
+    /// <summary>
+    /// Reuses the row that already stands for an annotator instead of replacing it, so the
+    /// annotating indicator does not blink off every time the relay resends session state.
+    /// </summary>
+    private void ApplyConnectedAnnotators(IReadOnlyList<ConnectedAnnotatorDescriptor> descriptors)
+    {
+        var unclaimed = ConnectedAnnotators.ToList();
+        var rows = new List<ConnectedAnnotatorViewModel>(descriptors.Count);
+        foreach (var descriptor in descriptors)
+        {
+            // An annotator the relay named is matched by that name; an unnamed one can only be
+            // matched to another unnamed row, and claimed rows are never matched twice.
+            var match = unclaimed.FirstOrDefault(
+                annotator => string.Equals(
+                    annotator.AnnotatorId,
+                    descriptor.AnnotatorId,
+                    StringComparison.Ordinal));
+            if (match is null)
+            {
+                rows.Add(new ConnectedAnnotatorViewModel(
+                    descriptor,
+                    ToggleAnnotatorPausedAsync,
+                    DisconnectAnnotatorAsync));
+                continue;
+            }
+
+            unclaimed.Remove(match);
+            match.Update(descriptor);
+            rows.Add(match);
+        }
+
+        foreach (var departed in unclaimed)
+        {
+            lastPointerReceivedAt.Remove(departed.AnnotatorId);
+        }
+
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var currentIndex = ConnectedAnnotators.IndexOf(rows[index]);
+            if (currentIndex < 0)
+            {
+                ConnectedAnnotators.Insert(index, rows[index]);
+            }
+            else if (currentIndex != index)
+            {
+                ConnectedAnnotators.Move(currentIndex, index);
+            }
+        }
+
+        // Everything the relay no longer reports has been pushed past the rows it does.
+        while (ConnectedAnnotators.Count > rows.Count)
+        {
+            ConnectedAnnotators.RemoveAt(ConnectedAnnotators.Count - 1);
+        }
+
+        UpdateAnnotatingIndicators();
+    }
+
+    private void RaiseConnectedAnnotatorProperties()
+    {
+        RaisePropertyChanged(nameof(ConnectedAnnotatorCountLabel));
+        RaisePropertyChanged(nameof(HasMultipleConnectedAnnotators));
+        RaisePropertyChanged(nameof(PauseAllActionLabel));
+        RaisePropertyChanged(nameof(FlyoutConnectionMessage));
+        togglePauseAllCommand.RaiseCanExecuteChanged();
+    }
+
+    private async Task ToggleAnnotatorPausedAsync(ConnectedAnnotatorViewModel annotator)
+    {
+        if (hostRelayClient is null || !HasHostSession)
+        {
+            return;
+        }
+
+        var paused = !annotator.IsPaused;
+        try
+        {
+            await hostRelayClient.SetAnnotatorPausedAsync(annotator.AnnotatorId, paused);
+            SetStatus(
+                paused
+                    ? $"Paused {annotator.DisplayName}."
+                    : $"{annotator.DisplayName} can annotate again.",
+                false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"{annotator.DisplayName} could not be paused: {exception.Message}", true);
+        }
+    }
+
+    private async Task SetAllAnnotatorsPausedAsync(bool paused)
+    {
+        if (hostRelayClient is null || !HasConnectedAnnotator || !HasHostSession)
+        {
+            return;
+        }
+
+        try
+        {
+            await hostRelayClient.SetAnnotatorPausedAsync(null, paused);
+            SetStatus(
+                paused
+                    ? "Paused every connected annotator."
+                    : "Every connected annotator can annotate again.",
+                false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus($"The annotators could not be paused: {exception.Message}", true);
+        }
+    }
+
+    private async Task DisconnectAnnotatorAsync(ConnectedAnnotatorViewModel annotator)
+    {
+        if (hostRelayClient is null || !HasHostSession)
+        {
+            return;
+        }
+
+        try
+        {
+            await hostRelayClient.DisconnectAnnotatorAsync(annotator.AnnotatorId);
+            SetStatus($"Disconnected {annotator.DisplayName}.", false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus(
+                $"{annotator.DisplayName} could not be disconnected: {exception.Message}",
+                true);
+        }
+    }
+
+    private void OnAnnotatingTimerTick(object? sender, EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        UpdateAnnotatingIndicators();
+    }
+
+    private void UpdateAnnotatingIndicators()
+    {
+        var now = Environment.TickCount64;
+        var anyAnnotating = false;
+        foreach (var annotator in ConnectedAnnotators)
+        {
+            var annotating = lastPointerReceivedAt.TryGetValue(
+                    annotator.AnnotatorId,
+                    out var lastEvent)
+                && now - lastEvent <= AnnotatingIdleMilliseconds;
+            annotator.IsAnnotating = annotating;
+            anyAnnotating |= annotating;
+        }
+
+        // The timer exists only to notice a stream going quiet, so it runs only while there is
+        // one to notice.
+        if (anyAnnotating)
+        {
+            annotatingTimer.Start();
+        }
+        else
+        {
+            annotatingTimer.Stop();
+        }
+    }
+
+    private void MarkAnnotating(string? annotatorId)
+    {
+        if (string.IsNullOrEmpty(annotatorId))
+        {
+            return;
+        }
+
+        lastPointerReceivedAt[annotatorId] = Environment.TickCount64;
+        UpdateAnnotatingIndicators();
+    }
+
     private async void OnPointerReceived(object? sender, RelayPointerEventArgs e)
     {
         try
@@ -1100,6 +1307,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 return;
             }
+
+            MarkAnnotating(e.PointerEvent.AnnotatorId);
 
             if (!string.Equals(
                     hostSessionId,
@@ -1434,8 +1643,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         hostSessionId = null;
         ConnectedAnnotators.Clear();
-        RaisePropertyChanged(nameof(ConnectedAnnotatorCountLabel));
-        RaisePropertyChanged(nameof(FlyoutConnectionMessage));
+        lastPointerReceivedAt.Clear();
+        annotatingTimer.Stop();
+        RaiseConnectedAnnotatorProperties();
         HasConnectedAnnotator = false;
         if (!preserveAvailability)
         {

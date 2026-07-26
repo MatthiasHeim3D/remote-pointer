@@ -26,6 +26,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
     private AvailableHostDescriptor? selectedHost;
     private bool isError;
     private bool isJoinPending;
+    private bool isPaused;
     private bool isSessionApproved;
     private bool senderRoleEnabled = true;
     private string lastAcknowledgement = "No remote marker acknowledgement yet.";
@@ -66,6 +67,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             relayClient.PointerDisplayed += OnPointerDisplayed;
             relayClient.SessionEnded += OnSessionEnded;
             relayClient.HostDirectoryChanged += OnHostDirectoryChanged;
+            relayClient.AnnotationPausedChanged += OnAnnotationPausedChanged;
         }
 
         calibrateCommand = new RelayCommand(
@@ -151,8 +153,25 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
 
     public string PointingActionIcon => IsPointing ? "\uE71A" : "\uE768";
 
+    /// <summary>
+    /// True while the host has this annotator paused. The session stays up and the target region
+    /// stays calibrated; the input it captures simply goes nowhere until the host lifts it.
+    /// </summary>
+    public bool IsPaused
+    {
+        get => isPaused;
+        private set
+        {
+            if (SetProperty(ref isPaused, value))
+            {
+                RaisePropertyChanged(nameof(ConnectionStatusLabel));
+                targetRegionService.SetAnnotationPaused(value);
+            }
+        }
+    }
+
     public string ConnectionStatusLabel => IsSessionApproved
-        ? "Connected"
+        ? IsPaused ? "Paused by host" : "Connected"
         : "Request sent. Waiting for approval.";
 
     public string EndSessionActionLabel => IsSessionApproved
@@ -359,6 +378,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             relayClient.PointerDisplayed -= OnPointerDisplayed;
             relayClient.SessionEnded -= OnSessionEnded;
             relayClient.HostDirectoryChanged -= OnHostDirectoryChanged;
+            relayClient.AnnotationPausedChanged -= OnAnnotationPausedChanged;
             RelayClientShutdown.Complete(relayClient);
         }
 
@@ -580,6 +600,12 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (IsPaused)
+        {
+            // The relay drops these anyway; not sending keeps a paused annotator off the wire.
+            return;
+        }
+
         var sentAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var pointerEvent = new PointerEventMessage(
             Guid.NewGuid(),
@@ -632,6 +658,9 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
 
         IsJoinPending = false;
         IsSessionApproved = true;
+        // A resumed session carries the pause the host set before the connection dropped, and
+        // the relay repeats it only in this state message.
+        IsPaused = FindOwnEntry(e.State)?.IsPaused ?? IsPaused;
         CurrentHostName = e.State.HostDisplayName ?? CurrentHostName;
         CurrentHostProfilePicturePng = e.State.HostProfilePicturePng
             is null ? null : [.. e.State.HostProfilePicturePng];
@@ -643,6 +672,29 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         }
 
         SetStatus("Host approved this annotator. Calibrate the target area.", false);
+    }
+
+    private ConnectedAnnotatorDescriptor? FindOwnEntry(SessionStateMessage state)
+    {
+        var ownId = relayClient?.Credential?.ClientInstanceId;
+        return string.IsNullOrEmpty(ownId)
+            ? null
+            : (state.ConnectedAnnotators ?? []).FirstOrDefault(
+                annotator => string.Equals(
+                    annotator.AnnotatorId,
+                    ownId,
+                    StringComparison.Ordinal));
+    }
+
+    private void OnAnnotationPausedChanged(object? sender, RelayAnnotationPausedEventArgs e)
+    {
+        _ = sender;
+        IsPaused = e.Paused;
+        SetStatus(
+            e.Paused
+                ? "The host paused this annotator. Your input is not being sent."
+                : "The host resumed this annotator. Your input is being sent again.",
+            false);
     }
 
     private void OnHostDisplayChanged(
@@ -688,6 +740,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
     {
         IsJoinPending = false;
         IsSessionApproved = false;
+        IsPaused = false;
         targetRegionService.SetCalibrationIdentity(null);
         hostDisplay = null;
         CurrentHostName = "Connected host";

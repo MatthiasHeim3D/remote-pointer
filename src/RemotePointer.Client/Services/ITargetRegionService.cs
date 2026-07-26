@@ -16,6 +16,12 @@ public interface ITargetRegionService : IDisposable
 
     void SetDrawingOpacityPercent(int drawingOpacityPercent);
 
+    /// <summary>
+    /// Marks the target region as paused by the host: it stops capturing input and says so, but
+    /// stays open and calibrated so pointing resumes the moment the host lifts the pause.
+    /// </summary>
+    void SetAnnotationPaused(bool paused);
+
     void BeginCalibration(double expectedAspectRatio);
 
     void UpdateExpectedAspectRatio(double expectedAspectRatio);
