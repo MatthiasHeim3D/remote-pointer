@@ -40,7 +40,9 @@ public partial class HostOverlayWindow : Window
         displayId = monitor.Display.DisplayId;
 
         InitializeComponent();
-        pointerVisuals = new PointerVisualRenderer(MarkerCanvas);
+        // Everything drawn here crossed the relay, so it arrives in whatever clumps the
+        // network delivered rather than at the rate it was drawn at.
+        pointerVisuals = new PointerVisualRenderer(MarkerCanvas, smoothRemoteGestures: true);
         SourceInitialized += OnSourceInitialized;
     }
 
