@@ -314,32 +314,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>
-    /// True while this client holds a live session in either role — annotators approved on this
-    /// host, or this client approved on a remote host. Being in a session outranks availability
-    /// in the profile bar, so both roles report it the same way.
-    /// </summary>
-    public bool IsConnected => HasConnectedAnnotator || Annotator.IsSessionApproved;
-
+    // The profile bar reports availability only. Being in a session is shown per client — on the
+    // annotator's host row and on the host's annotator rows — so it is not repeated here.
     public string AvailabilityLabel => !IsServerAvailable
         ? "Server unavailable"
-        : IsConnected
-            ? "Connected"
-            : HostAvailability == HostAvailability.Invisible
-                ? "Invisible"
-                : "Available";
+        : HostAvailability == HostAvailability.Invisible
+            ? "Invisible"
+            : "Available";
 
     public string AvailabilityColor => !IsServerAvailable
         ? "#8B8B8B"
-        : IsConnected
-            ? "#6CCB7F"
-            : HostAvailability == HostAvailability.Invisible
-                ? "#8B8B8B"
-                : "#6CCB7F";
-
-    public string AvailabilityLabelColor => IsServerAvailable && IsConnected
-        ? "#6CCB7F"
-        : "#AFAFAF";
+        : HostAvailability == HostAvailability.Invisible
+            ? "#8B8B8B"
+            : "#6CCB7F";
 
     public bool IsServerAvailable =>
         hostRelayClient?.Status is RelayConnectionStatus.Connected
@@ -1054,12 +1041,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             or nameof(AnnotatorViewModel.IsJoinPending))
         {
             approveAnnotatorCommand.RaiseCanExecuteChanged();
-        }
-
-        // Joining a host is the annotator-side half of IsConnected.
-        if (e.PropertyName == nameof(AnnotatorViewModel.IsSessionApproved))
-        {
-            RaiseAvailabilityProperties();
         }
 
         if (e.PropertyName == nameof(AnnotatorViewModel.ConnectionMessage))
@@ -1872,10 +1853,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void RaiseAvailabilityProperties()
     {
-        RaisePropertyChanged(nameof(IsConnected));
         RaisePropertyChanged(nameof(AvailabilityLabel));
         RaisePropertyChanged(nameof(AvailabilityColor));
-        RaisePropertyChanged(nameof(AvailabilityLabelColor));
     }
 
     private void RaiseHostSessionProperties()

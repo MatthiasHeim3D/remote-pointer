@@ -1407,7 +1407,7 @@
                                            Text="{Binding UserName}"
                                            TextTrimming="CharacterEllipsis" />
                                 <TextBlock FontSize="10"
-                                           Foreground="{Binding AvailabilityLabelColor}"
+                                           Foreground="#AFAFAF"
                                            Text="{Binding AvailabilityLabel}" />
                             </StackPanel>
                         </StackPanel>
