@@ -30,9 +30,7 @@ public partial class ConnectionApprovalWindow : Window
     {
         _ = sender;
         _ = e;
-        var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - Width - 12;
-        Top = workArea.Bottom - Height - 12;
+        FlyoutPlacement.PlaceInBottomCorner(this);
         Activate();
     }
 

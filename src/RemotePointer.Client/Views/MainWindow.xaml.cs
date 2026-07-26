@@ -318,6 +318,11 @@ public partial class MainWindow : Window
         PositionFlyout();
         Activate();
         Focus();
+
+        // Showing a window that was hidden when the display scale changed resizes it a beat after
+        // Show returns, which leaves the placement above measuring the old size. Corner it again
+        // once that has settled.
+        _ = Dispatcher.InvokeAsync(PositionFlyout, DispatcherPriority.Loaded);
     }
 
     private void ExitFromTray()
@@ -452,10 +457,34 @@ public partial class MainWindow : Window
         approvalWindow.Show();
     }
 
-    private void PositionFlyout()
+    private void PositionFlyout() => FlyoutPlacement.PlaceInBottomCorner(this);
+
+    /// <summary>
+    /// Anything that resizes the window leaves it hanging off the corner it was placed against,
+    /// including the rescale Windows applies after a display-scale change. Re-cornering on every
+    /// size change keeps that invariant without each caller having to remember it. Placement only
+    /// moves the window, so this cannot feed back into itself.
+    /// </summary>
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - Width - 12;
-        Top = workArea.Bottom - Height - 12;
+        _ = sender;
+        _ = e;
+        if (IsVisible)
+        {
+            PositionFlyout();
+        }
+    }
+
+    /// <summary>
+    /// Windows moves the window when the display scale changes, which leaves it off the corner.
+    /// The flyout is re-cornered on every show, so this only matters while it is open.
+    /// </summary>
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        if (IsLoaded)
+        {
+            PositionFlyout();
+        }
     }
 }

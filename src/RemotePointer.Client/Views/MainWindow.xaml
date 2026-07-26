@@ -15,6 +15,7 @@
         ShowInTaskbar="False"
         Topmost="True"
         PreviewMouseDown="OnPreviewMouseDown"
+        SizeChanged="OnSizeChanged"
         Deactivated="OnDeactivated">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
