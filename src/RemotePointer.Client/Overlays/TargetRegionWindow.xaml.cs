@@ -39,7 +39,10 @@ public partial class TargetRegionWindow : Window
     private bool isAnnotationPaused;
     private bool isUsageHelpCollapsed;
     private bool isResizeDragActive;
+    private TargetRegionCorner resizeDragCorner;
     private NativePoint resizeDragStartCursor;
+    private double resizeDragStartLeft;
+    private double resizeDragStartTop;
     private double resizeDragStartWidth;
     private double resizeDragStartHeight;
     private double resizeDragDpiScaleX = 1d;
@@ -105,7 +108,6 @@ public partial class TargetRegionWindow : Window
         isUsageHelpCollapsed = !ExpandUsageHintsInitially;
         CalibrationPanel.Visibility = Visibility.Collapsed;
         UpdateUsageHelpVisibility();
-        ResizeThumb.Visibility = Visibility.Collapsed;
         OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92));
         OuterBorder.BorderThickness = new Thickness(2d);
         OuterBorder.Background = Brushes.Transparent;
@@ -141,12 +143,16 @@ public partial class TargetRegionWindow : Window
         object sender,
         System.Windows.Controls.Primitives.DragStartedEventArgs e)
     {
-        if (isAnnotatingMode || !NativeMethods.GetCursorPos(out resizeDragStartCursor))
+        if (isAnnotatingMode
+            || !TryGetResizeCorner(sender, out resizeDragCorner)
+            || !NativeMethods.GetCursorPos(out resizeDragStartCursor))
         {
             isResizeDragActive = false;
             return;
         }
 
+        resizeDragStartLeft = Left;
+        resizeDragStartTop = Top;
         resizeDragStartWidth = ActualWidth > 0d ? ActualWidth : Width;
         resizeDragStartHeight = ActualHeight > 0d ? ActualHeight : Height;
         var dpi = VisualTreeHelper.GetDpi(this);
@@ -168,17 +174,31 @@ public partial class TargetRegionWindow : Window
 
         var horizontalChange = (currentCursor.X - (double)resizeDragStartCursor.X) / resizeDragDpiScaleX;
         var verticalChange = (currentCursor.Y - (double)resizeDragStartCursor.Y) / resizeDragDpiScaleY;
-        var resized = TargetRegionGeometry.Resize(
-            resizeDragStartWidth,
-            resizeDragStartHeight,
+        var resized = TargetRegionGeometry.ResizeFromCorner(
+            new RectangleD(
+                resizeDragStartLeft,
+                resizeDragStartTop,
+                resizeDragStartWidth,
+                resizeDragStartHeight),
+            resizeDragCorner,
             horizontalChange,
             verticalChange,
             ExpectedAspectRatio,
             AspectLockCheckBox.IsChecked == true);
-        Width = resized.X;
-        Height = resized.Y;
+        ApplyRectangle(resized);
         UpdateMetrics();
         e.Handled = true;
+    }
+
+    private static bool TryGetResizeCorner(object sender, out TargetRegionCorner corner)
+    {
+        if (sender is FrameworkElement { Tag: string tag })
+        {
+            return Enum.TryParse(tag, out corner);
+        }
+
+        corner = default;
+        return false;
     }
 
     private void OnResizeThumbDragCompleted(
@@ -695,11 +715,44 @@ public partial class TargetRegionWindow : Window
             return;
         }
 
+        // The long description is the first thing to go when the target area gets small, so the
+        // move handle keeps its room for as long as possible.
+        CalibrationDescription.Visibility = height >= 250d && width >= 380d
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        var freeHeight = height - CalibrationHeader.ActualHeight - CalibrationControls.ActualHeight;
+        var handleSize = GetMoveHandleSize(width, freeHeight);
+        if (handleSize <= 0d)
+        {
+            DragSurface.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            DragSurface.Visibility = Visibility.Visible;
+            DragSurface.Width = handleSize;
+            DragSurface.Height = handleSize;
+            MoveHandleIcon.FontSize = handleSize * 0.62d;
+        }
+
         var differs = AspectLockCheckBox.IsChecked != true
             && AspectRatio.ExceedsTolerance(
                 AspectRatio.Calculate(width, height),
                 ExpectedAspectRatio);
         AspectWarningPanel.Visibility = differs ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Sizes the centre move handle to the space the heading and the controls leave free, and
+    /// returns zero when that space is too small to draw a legible glyph in.
+    /// </summary>
+    internal static double GetMoveHandleSize(double width, double freeHeight)
+    {
+        const double minimumSize = 44d;
+        const double maximumSize = 112d;
+
+        var size = Math.Min(freeHeight - 12d, width * 0.45d);
+        return size < minimumSize ? 0d : Math.Min(size, maximumSize);
     }
 
     private void ApplyRectangle(RectangleD rectangle)

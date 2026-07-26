@@ -43,4 +43,21 @@ public sealed class TargetRegionWindowGestureTests
 
         Assert.Equal(expected, kind);
     }
+
+    [Theory]
+    [InlineData(1_920d, 800d, 112d)]
+    [InlineData(640d, 200d, 112d)]
+    [InlineData(500d, 90d, 78d)]
+    [InlineData(160d, 400d, 72d)]
+    [InlineData(640d, 50d, 0d)]
+    [InlineData(80d, 400d, 0d)]
+    public void GetMoveHandleSize_FitsTheFreeSpaceOrDisappears(
+        double width,
+        double freeHeight,
+        double expected)
+    {
+        var size = TargetRegionWindow.GetMoveHandleSize(width, freeHeight);
+
+        Assert.Equal(expected, size, precision: 12);
+    }
 }

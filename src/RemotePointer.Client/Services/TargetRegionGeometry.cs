@@ -56,6 +56,39 @@ public static class TargetRegionGeometry
         return new PointD(width, height);
     }
 
+    /// <summary>
+    /// Resizes from any corner. The cursor delta is interpreted in the direction that corner
+    /// grows, and the diagonally opposite corner is kept in place so the window does not walk
+    /// across the screen while it is being sized.
+    /// </summary>
+    public static RectangleD ResizeFromCorner(
+        RectangleD current,
+        TargetRegionCorner corner,
+        double horizontalChange,
+        double verticalChange,
+        double expectedAspectRatio,
+        bool lockAspectRatio)
+    {
+        EnsureFinite(current.Left, nameof(current));
+        EnsureFinite(current.Top, nameof(current));
+
+        var growsRight = corner is TargetRegionCorner.TopRight or TargetRegionCorner.BottomRight;
+        var growsDown = corner is TargetRegionCorner.BottomLeft or TargetRegionCorner.BottomRight;
+        var size = Resize(
+            current.Width,
+            current.Height,
+            growsRight ? horizontalChange : -horizontalChange,
+            growsDown ? verticalChange : -verticalChange,
+            expectedAspectRatio,
+            lockAspectRatio);
+
+        return new RectangleD(
+            growsRight ? current.Left : current.Left + current.Width - size.X,
+            growsDown ? current.Top : current.Top + current.Height - size.Y,
+            size.X,
+            size.Y);
+    }
+
     public static RectangleD FitWithin(
         RectangleD bounds,
         double expectedAspectRatio,

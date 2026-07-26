@@ -67,6 +67,88 @@ public sealed class TargetRegionGeometryTests
     }
 
     [Fact]
+    public void ResizeFromCorner_GrowsBottomRightWithoutMovingOrigin()
+    {
+        var result = TargetRegionGeometry.ResizeFromCorner(
+            new(100d, 50d, 640d, 360d),
+            TargetRegionCorner.BottomRight,
+            horizontalChange: 60d,
+            verticalChange: 40d,
+            expectedAspectRatio: 16d / 9d,
+            lockAspectRatio: false);
+
+        Assert.Equal(100d, result.Left, precision: 12);
+        Assert.Equal(50d, result.Top, precision: 12);
+        Assert.Equal(700d, result.Width, precision: 12);
+        Assert.Equal(400d, result.Height, precision: 12);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_GrowsTopLeftTowardsTheCursor()
+    {
+        var result = TargetRegionGeometry.ResizeFromCorner(
+            new(100d, 50d, 640d, 360d),
+            TargetRegionCorner.TopLeft,
+            horizontalChange: -60d,
+            verticalChange: -40d,
+            expectedAspectRatio: 16d / 9d,
+            lockAspectRatio: false);
+
+        Assert.Equal(40d, result.Left, precision: 12);
+        Assert.Equal(10d, result.Top, precision: 12);
+        Assert.Equal(700d, result.Width, precision: 12);
+        Assert.Equal(400d, result.Height, precision: 12);
+    }
+
+    [Theory]
+    [InlineData(TargetRegionCorner.TopLeft, 740d, 410d)]
+    [InlineData(TargetRegionCorner.TopRight, 100d, 410d)]
+    [InlineData(TargetRegionCorner.BottomLeft, 740d, 50d)]
+    [InlineData(TargetRegionCorner.BottomRight, 100d, 50d)]
+    public void ResizeFromCorner_KeepsTheOppositeCornerAnchored(
+        TargetRegionCorner corner,
+        double expectedAnchorX,
+        double expectedAnchorY)
+    {
+        var result = TargetRegionGeometry.ResizeFromCorner(
+            new(100d, 50d, 640d, 360d),
+            corner,
+            horizontalChange: 75d,
+            verticalChange: -25d,
+            expectedAspectRatio: 16d / 9d,
+            lockAspectRatio: true);
+
+        var anchorX = corner is TargetRegionCorner.TopLeft or TargetRegionCorner.BottomLeft
+            ? result.Left + result.Width
+            : result.Left;
+        var anchorY = corner is TargetRegionCorner.TopLeft or TargetRegionCorner.TopRight
+            ? result.Top + result.Height
+            : result.Top;
+
+        Assert.Equal(expectedAnchorX, anchorX, precision: 12);
+        Assert.Equal(expectedAnchorY, anchorY, precision: 12);
+    }
+
+    [Fact]
+    public void ResizeFromCorner_EnforcesMinimumDimensionsFromTopLeft()
+    {
+        var result = TargetRegionGeometry.ResizeFromCorner(
+            new(100d, 50d, 300d, 200d),
+            TargetRegionCorner.TopLeft,
+            horizontalChange: 1_000d,
+            verticalChange: 1_000d,
+            expectedAspectRatio: 16d / 9d,
+            lockAspectRatio: false);
+
+        Assert.Equal(TargetRegionGeometry.MinimumWidth, result.Width, precision: 12);
+        Assert.Equal(TargetRegionGeometry.MinimumHeight, result.Height, precision: 12);
+
+        // The bottom-right corner must stay where it was even once the drag hits the floor.
+        Assert.Equal(400d, result.Left + result.Width, precision: 12);
+        Assert.Equal(250d, result.Top + result.Height, precision: 12);
+    }
+
+    [Fact]
     public void DifferenceFromExpected_ReturnsZeroForMatchingShape()
     {
         var result = TargetRegionGeometry.DifferenceFromExpected(1_920d, 1_080d, 16d / 9d);
