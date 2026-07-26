@@ -156,6 +156,49 @@
             </Setter>
         </Style>
 
+        <!-- Session row actions — start/stop annotating, pause, disconnect — share one reduced
+             chrome so the host and annotator panels read as the same control set. -->
+        <Style x:Key="SessionIconButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="FontSize" Value="18" />
+        </Style>
+
+        <Style x:Key="DestructiveIconButtonStyle" TargetType="Button" BasedOn="{StaticResource SessionIconButtonStyle}">
+            <Setter Property="Foreground" Value="#FF8A80" />
+        </Style>
+
+        <!-- Annotating is what the app is for, so its button keeps an accent tint and a little
+             extra size that the neighbouring session actions give up. -->
+        <Style x:Key="AccentIconButtonStyle" TargetType="Button" BasedOn="{StaticResource SessionIconButtonStyle}">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="FontSize" Value="19" />
+            <Setter Property="Foreground" Value="#60CDFF" />
+            <Setter Property="Background" Value="#1D3C4B" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#27536A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#2F6480" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="PrimaryButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="40" />
             <Setter Property="Padding" Value="16,0" />
@@ -558,7 +601,7 @@
                     <TextBlock VerticalAlignment="Center"
                                FontSize="18"
                                FontWeight="SemiBold"
-                               Text="Available clients" />
+                               Text="Available" />
                     <Grid Grid.Row="1" Margin="0,12,0,0">
                         <ListBox ItemsSource="{Binding Annotator.AvailableHosts}"
                                  Background="Transparent"
@@ -771,16 +814,12 @@
                             </Ellipse>
                         </Grid>
                         <Button Grid.Column="2"
-                                Width="38"
-                                Height="38"
                                 Margin="0,0,7,0"
-                                Background="#60CDFF"
-                                Foreground="#17242A"
                                 Command="{Binding Annotator.ToggleAnnotatingCommand}"
                                 Content="{Binding Annotator.AnnotatingActionIcon}"
                                 ToolTip="{Binding Annotator.AnnotatingActionLabel}">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+                                <Style TargetType="Button" BasedOn="{StaticResource AccentIconButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Annotator.IsSessionApproved}" Value="True">
@@ -791,15 +830,11 @@
                             </Button.Style>
                         </Button>
                         <Button Grid.Column="3"
-                                Width="38"
-                                Height="38"
-                                Background="#C42B1C"
-                                Foreground="White"
                                 Command="{Binding Annotator.EndSessionCommand}"
                                 Content="&#xE711;"
                                 ToolTip="{Binding Annotator.EndSessionActionLabel}">
                             <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+                                <Style TargetType="Button" BasedOn="{StaticResource DestructiveIconButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Annotator.IsSessionApproved}" Value="True">
@@ -832,10 +867,17 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="Connected Annotators" />
                     <!-- Sized to its rows rather than to the panel: a single annotator sits
                          directly above its buttons instead of across a stretched gap. -->
-                    <ListBox MaxHeight="216"
+                    <ListBox Grid.Row="1"
+                             Margin="0,12,0,0"
+                             MaxHeight="216"
                              ItemsSource="{Binding ConnectedAnnotators}"
                              Background="Transparent"
                              BorderThickness="0"
@@ -904,20 +946,13 @@
                                                ToolTip="Annotating now"
                                                Visibility="{Binding IsAnnotating, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                     <Button Grid.Column="3"
-                                            Width="32"
-                                            Height="32"
-                                            FontSize="14"
-                                            Style="{StaticResource IconButtonStyle}"
+                                            Style="{StaticResource SessionIconButtonStyle}"
                                             Command="{Binding TogglePauseCommand}"
                                             Content="{Binding PauseActionIcon}"
                                             ToolTip="{Binding PauseActionLabel}"
                                             Visibility="{Binding CanControl, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                     <Button Grid.Column="4"
-                                            Width="32"
-                                            Height="32"
-                                            FontSize="14"
-                                            Style="{StaticResource IconButtonStyle}"
-                                            Foreground="#FF8A80"
+                                            Style="{StaticResource DestructiveIconButtonStyle}"
                                             Command="{Binding DisconnectCommand}"
                                             Content="&#xE711;"
                                             ToolTip="{Binding DisconnectActionLabel}"
@@ -928,7 +963,7 @@
                     </ListBox>
                     <!-- Only worth showing once the per-annotator buttons would mean repeating
                          the same click for every row. -->
-                    <StackPanel Grid.Row="1"
+                    <StackPanel Grid.Row="2"
                                 Margin="0,12,0,0"
                                 HorizontalAlignment="Right"
                                 Orientation="Horizontal"
@@ -1372,7 +1407,7 @@
                                            Text="{Binding UserName}"
                                            TextTrimming="CharacterEllipsis" />
                                 <TextBlock FontSize="10"
-                                           Foreground="#AFAFAF"
+                                           Foreground="{Binding AvailabilityLabelColor}"
                                            Text="{Binding AvailabilityLabel}" />
                             </StackPanel>
                         </StackPanel>

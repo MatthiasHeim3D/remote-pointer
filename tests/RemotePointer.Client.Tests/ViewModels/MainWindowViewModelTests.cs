@@ -698,16 +698,19 @@ public sealed class MainWindowViewModelTests
         Assert.False(viewModel.Annotator.RoleEnabled);
         Assert.False(viewModel.Annotator.JoinDiscoveredHostCommand.CanExecute(
             new AvailableHostDescriptor("other-session", "Other host")));
-        Assert.Equal("Available and connected", viewModel.AvailabilityLabel);
-        Assert.Equal("#63C5DA", viewModel.AvailabilityColor);
+        Assert.True(viewModel.IsConnected);
+        Assert.Equal("Connected", viewModel.AvailabilityLabel);
+        Assert.Equal("#6CCB7F", viewModel.AvailabilityColor);
+        Assert.Equal("#6CCB7F", viewModel.AvailabilityLabelColor);
         Assert.True(viewModel.CanSetHostAvailability);
 
         await viewModel.SetHostAvailabilityAsync(HostAvailability.Invisible);
 
         Assert.True(viewModel.HasConnectedAnnotator);
         Assert.False(relay.IsDiscoverable);
-        Assert.Equal("Invisible", viewModel.AvailabilityLabel);
-        Assert.Equal("#8B8B8B", viewModel.AvailabilityColor);
+        // A live session outranks discoverability: the host is still connected to its annotators.
+        Assert.Equal("Connected", viewModel.AvailabilityLabel);
+        Assert.Equal("#6CCB7F", viewModel.AvailabilityColor);
         Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));
         viewModel.DisconnectAllConnectionsCommand.Execute(null);
 
@@ -757,6 +760,48 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(
             "peer-session",
             Assert.Single(viewModel.Annotator.AvailableHosts).SessionId);
+    }
+
+    [Fact]
+    public async Task JoiningAHost_ReportsTheAnnotatorAsConnectedInTheProfileBar()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var hostRelay = CreateHostRelay();
+        var annotatorRelay = new FakeRelayClient
+        {
+            AvailableHosts = [new AvailableHostDescriptor("peer-session", "Peer PC")],
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: hostRelay,
+            annotatorRelayClient: annotatorRelay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+
+        Assert.False(viewModel.IsConnected);
+        Assert.Equal("Available", viewModel.AvailabilityLabel);
+        Assert.Equal("#AFAFAF", viewModel.AvailabilityLabelColor);
+
+        var observedConnectedLabel = false;
+        viewModel.PropertyChanged += (_, e) => observedConnectedLabel |=
+            e.PropertyName == nameof(MainWindowViewModel.AvailabilityLabel);
+
+        annotatorRelay.RaiseApproved(
+            new SessionStateMessage(
+                "peer-session",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                HostDisplayName: "Peer PC"));
+
+        Assert.True(viewModel.Annotator.IsSessionApproved);
+        Assert.True(viewModel.IsConnected);
+        Assert.True(observedConnectedLabel);
+        Assert.Equal("Connected", viewModel.AvailabilityLabel);
+        Assert.Equal("#6CCB7F", viewModel.AvailabilityLabelColor);
+        Assert.Equal("#6CCB7F", viewModel.AvailabilityColor);
     }
 
     [Fact]
