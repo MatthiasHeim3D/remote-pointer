@@ -168,6 +168,16 @@
             <Setter Property="Foreground" Value="#FF8A80" />
         </Style>
 
+        <!-- The bulk forms of those same actions. They carry a label because "all" needs saying,
+             but keep the reduced chrome so they do not outrank the rows they act on. -->
+        <Style x:Key="SessionTextButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+            <Setter Property="Width" Value="Auto" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
         <!-- Annotating is what the app is for, so its button keeps an accent tint and a little
              extra size that the neighbouring session actions give up. -->
         <Style x:Key="AccentIconButtonStyle" TargetType="Button" BasedOn="{StaticResource SessionIconButtonStyle}">
@@ -872,7 +882,7 @@
                     <TextBlock VerticalAlignment="Center"
                                FontSize="18"
                                FontWeight="SemiBold"
-                               Text="Connected Annotators" />
+                               Text="Annotators" />
                     <!-- Sized to its rows rather than to the panel: a single annotator sits
                          directly above its buttons instead of across a stretched gap. -->
                     <ListBox Grid.Row="1"
@@ -881,6 +891,7 @@
                              ItemsSource="{Binding ConnectedAnnotators}"
                              Background="Transparent"
                              BorderThickness="0"
+                             Padding="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto">
                         <ListBox.ItemContainerStyle>
@@ -968,17 +979,37 @@
                                 HorizontalAlignment="Right"
                                 Orientation="Horizontal"
                                 Visibility="{Binding HasMultipleConnectedAnnotators, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <Button Height="38"
-                                Margin="0,0,8,0"
-                                Style="{StaticResource SecondaryButtonStyle}"
+                        <Button Margin="0,0,4,0"
+                                Style="{StaticResource SessionTextButtonStyle}"
                                 Command="{Binding TogglePauseAllCommand}"
-                                Content="{Binding PauseAllActionLabel}" />
-                        <Button Height="38"
-                                Style="{StaticResource PrimaryButtonStyle}"
-                                Background="#C42B1C"
-                                Foreground="White"
+                                ToolTip="{Binding PauseAllActionLabel}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="15"
+                                           Foreground="#E8E8E8"
+                                           Text="{Binding PauseAllActionIcon}" />
+                                <TextBlock Margin="7,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="#E8E8E8"
+                                           Text="{Binding PauseAllActionLabel}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource SessionTextButtonStyle}"
                                 Command="{Binding DisconnectAllConnectionsCommand}"
-                                Content="Disconnect all" />
+                                ToolTip="Disconnect all">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="15"
+                                           Foreground="#FF8A80"
+                                           Text="&#xE711;" />
+                                <TextBlock Margin="7,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="#FF8A80"
+                                           Text="Disconnect all" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Grid>

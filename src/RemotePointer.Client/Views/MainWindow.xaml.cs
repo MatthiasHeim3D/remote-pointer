@@ -19,8 +19,12 @@ public partial class MainWindow : Window
     private const double AnnotatorSessionHeight = 200d;
     private const double AvailableClientsBaseHeight = 244d;
     private const double AvailableClientRowHeight = 64d;
-    private const double ConnectedClientsBaseHeight = 306d;
-    private const double ConnectedClientRowHeight = 54d;
+    // The flyout is sized rather than measured, so these track what the connected-annotator panel
+    // actually draws: 108 of window chrome, its heading, then one 52 row per annotator. The
+    // bulk-action row only exists once a second annotator makes per-row clicking repetitive.
+    private const double ConnectedClientsBaseHeight = 200d;
+    private const double ConnectedClientRowHeight = 52d;
+    private const double ConnectedClientsActionRowHeight = 44d;
     private const int MaximumVisibleClientRows = 4;
     private GlobalHotKeyRegistration? hotKeyRegistration;
     private HwndSource? source;
@@ -238,10 +242,7 @@ public partial class MainWindow : Window
         Height = viewModel.IsSettingsOpen
             ? ExpandedHeight
             : viewModel.HasConnectedAnnotator
-                ? CalculateClientListHeight(
-                    ConnectedClientsBaseHeight,
-                    ConnectedClientRowHeight,
-                    viewModel.ConnectedAnnotators.Count)
+                ? CalculateConnectedClientsHeight(viewModel.ConnectedAnnotators.Count)
                 : (viewModel.Annotator.IsSessionApproved || viewModel.Annotator.IsJoinPending)
                     ? AnnotatorSessionHeight
                     : CalculateClientListHeight(
@@ -266,6 +267,17 @@ public partial class MainWindow : Window
         double rowHeight,
         int clientCount) => baseHeight
         + (Math.Clamp(clientCount, 1, MaximumVisibleClientRows) - 1) * rowHeight;
+
+    /// <summary>
+    /// Height of the connected-annotator panel, which unlike the discovery list grows by a row
+    /// of bulk actions the moment a second annotator appears.
+    /// </summary>
+    internal static double CalculateConnectedClientsHeight(int clientCount) =>
+        CalculateClientListHeight(
+            ConnectedClientsBaseHeight,
+            ConnectedClientRowHeight,
+            clientCount)
+        + (clientCount > 1 ? ConnectedClientsActionRowHeight : 0d);
 
     private void ShowFromTray()
     {
