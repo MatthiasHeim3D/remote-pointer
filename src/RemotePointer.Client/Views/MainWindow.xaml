@@ -616,6 +616,7 @@
                         <ListBox ItemsSource="{Binding Annotator.AvailableHosts}"
                                  Background="Transparent"
                                  BorderThickness="0"
+                                 Padding="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
                             <ListBox.ItemContainerStyle>
@@ -736,7 +737,15 @@
                             </Style.Triggers>
                         </Style>
                     </Grid.Style>
-                    <Grid VerticalAlignment="Center">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="{Binding Annotator.SessionHeading}" />
+                    <Grid Grid.Row="1" Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="42" />
                             <ColumnDefinition Width="*" />

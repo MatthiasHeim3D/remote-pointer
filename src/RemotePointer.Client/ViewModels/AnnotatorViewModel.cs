@@ -178,6 +178,12 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         ? "Disconnect from host"
         : "Cancel connection request";
 
+    /// <summary>
+    /// Heading for the session panel, mirroring the host's "Connected Annotators". The same panel
+    /// covers the wait for approval, so it names that state rather than claiming a session.
+    /// </summary>
+    public string SessionHeading => IsSessionApproved ? "Connected Host" : "Connecting";
+
     public string StateLabel => State.ToString();
 
     public string StatusMessage
@@ -212,6 +218,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
                 RaiseNetworkCommandStates();
                 RaisePropertyChanged(nameof(ConnectionStatusLabel));
                 RaisePropertyChanged(nameof(EndSessionActionLabel));
+                RaisePropertyChanged(nameof(SessionHeading));
             }
         }
     }
@@ -228,6 +235,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
                 toggleAnnotatingCommand.RaiseCanExecuteChanged();
                 RaisePropertyChanged(nameof(ConnectionStatusLabel));
                 RaisePropertyChanged(nameof(EndSessionActionLabel));
+                RaisePropertyChanged(nameof(SessionHeading));
             }
         }
     }

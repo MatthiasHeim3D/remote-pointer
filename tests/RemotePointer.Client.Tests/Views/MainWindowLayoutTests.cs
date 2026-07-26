@@ -23,6 +23,21 @@ public sealed class MainWindowLayoutTests
     }
 
     [Theory]
+    [InlineData(0, 244d)]
+    [InlineData(1, 212d)]
+    [InlineData(2, 276d)]
+    [InlineData(4, 404d)]
+    [InlineData(10, 404d)]
+    public void CalculateAvailableClientsHeight_KeepsTheEmptyStateRoomierThanOneRow(
+        int clientCount,
+        double expectedHeight)
+    {
+        var height = MainWindow.CalculateAvailableClientsHeight(clientCount);
+
+        Assert.Equal(expectedHeight, height);
+    }
+
+    [Theory]
     [InlineData(1, 200d)]
     [InlineData(2, 296d)]
     [InlineData(4, 400d)]

@@ -267,6 +267,34 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
+    public void SessionHeading_NamesTheApprovalWaitSeparatelyFromTheSession()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        var headingChanges = 0;
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AnnotatorViewModel.SessionHeading))
+            {
+                headingChanges++;
+            }
+        };
+
+        Assert.Equal("Connecting", viewModel.SessionHeading);
+
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        Assert.Equal("Connected Host", viewModel.SessionHeading);
+        Assert.True(headingChanges > 0);
+    }
+
+    [Fact]
     public void SessionEnded_ExitsAnnotatingAndClearsApproval()
     {
         using var service = new FakeTargetRegionService();

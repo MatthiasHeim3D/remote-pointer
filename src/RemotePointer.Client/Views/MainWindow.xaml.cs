@@ -16,9 +16,13 @@ public partial class MainWindow : Window
 {
     private const string RepositoryUrl = "https://github.com/MatthiasHeim3D/remote-pointer";
     private const double ExpandedHeight = 520d;
-    private const double AnnotatorSessionHeight = 200d;
-    private const double AvailableClientsBaseHeight = 244d;
+    private const double AnnotatorSessionHeight = 190d;
+    private const double AvailableClientsBaseHeight = 212d;
     private const double AvailableClientRowHeight = 64d;
+
+    // With nothing to list, the panel draws its empty-state icon and message instead of a row,
+    // which needs more room than a single client would.
+    private const double AvailableClientsEmptyHeight = 244d;
     // The flyout is sized rather than measured, so these track what the connected-annotator panel
     // actually draws: 108 of window chrome, its heading, then one 52 row per annotator. The
     // bulk-action row only exists once a second annotator makes per-row clicking repetitive.
@@ -245,9 +249,7 @@ public partial class MainWindow : Window
                 ? CalculateConnectedClientsHeight(viewModel.ConnectedAnnotators.Count)
                 : (viewModel.Annotator.IsSessionApproved || viewModel.Annotator.IsJoinPending)
                     ? AnnotatorSessionHeight
-                    : CalculateClientListHeight(
-                        AvailableClientsBaseHeight,
-                        AvailableClientRowHeight,
+                    : CalculateAvailableClientsHeight(
                         viewModel.Annotator.AvailableHosts.Count);
         if (IsLoaded)
         {
@@ -267,6 +269,17 @@ public partial class MainWindow : Window
         double rowHeight,
         int clientCount) => baseHeight
         + (Math.Clamp(clientCount, 1, MaximumVisibleClientRows) - 1) * rowHeight;
+
+    /// <summary>
+    /// Height of the discovery list, which falls back to its roomier empty state when there is
+    /// no client to show.
+    /// </summary>
+    internal static double CalculateAvailableClientsHeight(int clientCount) => clientCount == 0
+        ? AvailableClientsEmptyHeight
+        : CalculateClientListHeight(
+            AvailableClientsBaseHeight,
+            AvailableClientRowHeight,
+            clientCount);
 
     /// <summary>
     /// Height of the connected-annotator panel, which unlike the discovery list grows by a row
