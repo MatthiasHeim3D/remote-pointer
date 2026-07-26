@@ -16,19 +16,23 @@ public partial class MainWindow : Window
 {
     private const string RepositoryUrl = "https://github.com/MatthiasHeim3D/remote-pointer";
     private const double ExpandedHeight = 520d;
-    private const double AnnotatorSessionHeight = 190d;
     private const double AvailableClientsBaseHeight = 212d;
     private const double AvailableClientRowHeight = 64d;
 
     // With nothing to list, the panel draws its empty-state icon and message instead of a row,
     // which needs more room than a single client would.
     private const double AvailableClientsEmptyHeight = 244d;
+
     // The flyout is sized rather than measured, so these track what the connected-annotator panel
     // actually draws: 108 of window chrome, its heading, then one 52 row per annotator. The
     // bulk-action row only exists once a second annotator makes per-row clicking repetitive.
     private const double ConnectedClientsBaseHeight = 200d;
     private const double ConnectedClientRowHeight = 52d;
     private const double ConnectedClientsActionRowHeight = 44d;
+
+    // A connected host is one session row under a heading — the same shape as a single connected
+    // annotator — so the two panels stand at exactly the same height rather than drifting apart.
+    internal const double AnnotatorSessionHeight = ConnectedClientsBaseHeight;
     private const int MaximumVisibleClientRows = 4;
     private GlobalHotKeyRegistration? hotKeyRegistration;
     private HwndSource? source;

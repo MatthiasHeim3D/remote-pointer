@@ -745,7 +745,11 @@
                                FontSize="18"
                                FontWeight="SemiBold"
                                Text="{Binding Annotator.SessionHeading}" />
-                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                    <!-- Same 52 as a connected-annotator row on the host, so a session looks the
+                         same height from either side. -->
+                    <Grid Grid.Row="1"
+                          Height="52"
+                          Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="42" />
                             <ColumnDefinition Width="*" />

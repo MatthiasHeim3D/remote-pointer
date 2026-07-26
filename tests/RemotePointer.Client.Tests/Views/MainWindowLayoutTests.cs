@@ -52,6 +52,16 @@ public sealed class MainWindowLayoutTests
     }
 
     [Fact]
+    public void ConnectedHostAndConnectedAnnotator_StandAtTheSameHeight()
+    {
+        // Both panels draw one session row under a heading, so a session must look the same
+        // height whether this client is the host or the annotator.
+        Assert.Equal(
+            MainWindow.AnnotatorSessionHeight,
+            MainWindow.CalculateConnectedClientsHeight(1));
+    }
+
+    [Fact]
     public void CalculateConnectedClientsHeight_LeavesNoGapWhenTheSecondAnnotatorArrives()
     {
         var single = MainWindow.CalculateConnectedClientsHeight(1);
