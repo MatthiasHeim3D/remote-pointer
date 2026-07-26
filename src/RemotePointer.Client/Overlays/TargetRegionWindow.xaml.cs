@@ -39,6 +39,9 @@ public partial class TargetRegionWindow : Window
     private bool isAnnotationPaused;
     private bool isUsageHelpCollapsed;
     private bool isResizeDragActive;
+    private bool isResizeRenderHooked;
+    private RectangleD? pendingResizeRectangle;
+    private PhysicalRectangle? lastAppliedPlacement;
     private TargetRegionCorner resizeDragCorner;
     private NativePoint resizeDragStartCursor;
     private double resizeDragStartLeft;
@@ -105,6 +108,9 @@ public partial class TargetRegionWindow : Window
     public void EnterAnnotatingMode()
     {
         isAnnotatingMode = true;
+        isResizeDragActive = false;
+        pendingResizeRectangle = null;
+        UnhookResizeRendering();
         isUsageHelpCollapsed = !ExpandUsageHintsInitially;
         CalibrationPanel.Visibility = Visibility.Collapsed;
         UpdateUsageHelpVisibility();
@@ -159,6 +165,16 @@ public partial class TargetRegionWindow : Window
         resizeDragDpiScaleX = dpi.DpiScaleX;
         resizeDragDpiScaleY = dpi.DpiScaleY;
         isResizeDragActive = true;
+        pendingResizeRectangle = null;
+        lastAppliedPlacement = null;
+        // Mouse moves arrive far faster than the screen refreshes, and every one of them would
+        // otherwise repaint this layered window end to end. Collapsing them onto the render
+        // loop keeps the drag at one resize per displayed frame.
+        if (!isResizeRenderHooked)
+        {
+            isResizeRenderHooked = true;
+            CompositionTarget.Rendering += OnResizeRendering;
+        }
     }
 
     private void OnResizeThumbDragDelta(
@@ -185,9 +201,103 @@ public partial class TargetRegionWindow : Window
             verticalChange,
             ExpectedAspectRatio,
             AspectLockCheckBox.IsChecked == true);
-        ApplyRectangle(resized);
-        UpdateMetrics();
+        pendingResizeRectangle = resized;
         e.Handled = true;
+    }
+
+    private void OnResizeRendering(object? sender, EventArgs e)
+    {
+        if (pendingResizeRectangle is not { } rectangle)
+        {
+            return;
+        }
+
+        pendingResizeRectangle = null;
+        ApplyRectangleWhileDragging(rectangle);
+    }
+
+    /// <summary>
+    /// Moves and sizes the window in a single native call. Assigning
+    /// <see cref="Window.Left"/>, <see cref="Window.Top"/>, <see cref="FrameworkElement.Width"/>
+    /// and <see cref="FrameworkElement.Height"/> instead costs four separate window placements,
+    /// which a corner drag shows as the opposite edge jittering while the window catches up.
+    /// </summary>
+    private void ApplyRectangleWhileDragging(RectangleD rectangle)
+    {
+        var placement = GetDevicePlacement(
+            rectangle,
+            resizeDragDpiScaleX,
+            resizeDragDpiScaleY);
+
+        // Sub-pixel cursor movement rounds to the placement the window already has. Repainting
+        // a layered window this size is far too expensive to spend on a no-op.
+        if (placement == lastAppliedPlacement)
+        {
+            return;
+        }
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == 0
+            || !NativeMethods.SetWindowPos(
+                handle,
+                insertAfter: 0,
+                placement.Left,
+                placement.Top,
+                placement.Width,
+                placement.Height,
+                // The surface is repainted from scratch anyway, so preserving the old pixels
+                // and erasing the background are both wasted work that shows up as smearing.
+                NativeMethods.SwpNoZOrder
+                    | NativeMethods.SwpNoActivate
+                    | NativeMethods.SwpNoCopyBits
+                    | NativeMethods.SwpDeferErase))
+        {
+            ApplyRectangle(rectangle);
+            return;
+        }
+
+        lastAppliedPlacement = placement;
+    }
+
+    /// <summary>
+    /// Converts a rectangle to device pixels by rounding its four edges rather than its origin
+    /// and its size. Rounding origin and size separately lets the two disagree, which walks the
+    /// edge opposite the drag back and forth by a pixel from one frame to the next; rounding
+    /// edges pins that edge to the same pixel for the whole drag.
+    /// </summary>
+    internal static PhysicalRectangle GetDevicePlacement(
+        RectangleD rectangle,
+        double scaleX,
+        double scaleY)
+    {
+        var left = (int)Math.Round(rectangle.Left * scaleX);
+        var top = (int)Math.Round(rectangle.Top * scaleY);
+        var right = (int)Math.Round((rectangle.Left + rectangle.Width) * scaleX);
+        var bottom = (int)Math.Round((rectangle.Top + rectangle.Height) * scaleY);
+
+        return new PhysicalRectangle(left, top, right - left, bottom - top);
+    }
+
+    /// <summary>
+    /// Brings the dependency properties back in step with the window that was placed natively,
+    /// so later reads of <see cref="Window.Left"/> and friends see where the window really is.
+    /// </summary>
+    private void SyncPlacementFromWindowHandle()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == 0
+            || !NativeMethods.GetWindowRect(handle, out var bounds)
+            || resizeDragDpiScaleX <= 0d
+            || resizeDragDpiScaleY <= 0d)
+        {
+            return;
+        }
+
+        ApplyRectangle(new RectangleD(
+            bounds.Left / resizeDragDpiScaleX,
+            bounds.Top / resizeDragDpiScaleY,
+            (bounds.Right - bounds.Left) / resizeDragDpiScaleX,
+            (bounds.Bottom - bounds.Top) / resizeDragDpiScaleY));
     }
 
     private static bool TryGetResizeCorner(object sender, out TargetRegionCorner corner)
@@ -205,7 +315,35 @@ public partial class TargetRegionWindow : Window
         object sender,
         System.Windows.Controls.Primitives.DragCompletedEventArgs e)
     {
+        UnhookResizeRendering();
+        var wasDragging = isResizeDragActive;
         isResizeDragActive = false;
+
+        // Without an accepted drag there is no captured DPI scale to convert with, and nothing
+        // to flush either.
+        if (!wasDragging)
+        {
+            pendingResizeRectangle = null;
+            return;
+        }
+
+        if (pendingResizeRectangle is { } rectangle)
+        {
+            pendingResizeRectangle = null;
+            ApplyRectangleWhileDragging(rectangle);
+        }
+
+        SyncPlacementFromWindowHandle();
+        UpdateMetrics();
+    }
+
+    private void UnhookResizeRendering()
+    {
+        if (isResizeRenderHooked)
+        {
+            isResizeRenderHooked = false;
+            CompositionTarget.Rendering -= OnResizeRendering;
+        }
     }
 
     private void OnAspectLockChanged(object sender, RoutedEventArgs e)
@@ -695,6 +833,7 @@ public partial class TargetRegionWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        UnhookResizeRendering();
         gestureUpdateTimer.Stop();
         gestureUpdateTimer.Tick -= OnGestureUpdateTimerTick;
         pointerVisuals.Clear();
@@ -717,9 +856,10 @@ public partial class TargetRegionWindow : Window
 
         // The long description is the first thing to go when the target area gets small, so the
         // move handle keeps its room for as long as possible.
-        CalibrationDescription.Visibility = height >= 250d && width >= 380d
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        CalibrationDescription.Visibility = GetDescriptionVisibility(
+            width,
+            height,
+            CalibrationDescription.Visibility);
 
         var freeHeight = height - CalibrationHeader.ActualHeight - CalibrationControls.ActualHeight;
         var handleSize = GetMoveHandleSize(width, freeHeight);
@@ -730,9 +870,12 @@ public partial class TargetRegionWindow : Window
         else
         {
             DragSurface.Visibility = Visibility.Visible;
-            DragSurface.Width = handleSize;
-            DragSurface.Height = handleSize;
-            MoveHandleIcon.FontSize = handleSize * 0.62d;
+            if (DragSurface.Width != handleSize)
+            {
+                DragSurface.Width = handleSize;
+                DragSurface.Height = handleSize;
+                MoveHandleIcon.FontSize = handleSize * 0.62d;
+            }
         }
 
         var differs = AspectLockCheckBox.IsChecked != true
@@ -746,13 +889,47 @@ public partial class TargetRegionWindow : Window
     /// Sizes the centre move handle to the space the heading and the controls leave free, and
     /// returns zero when that space is too small to draw a legible glyph in.
     /// </summary>
+    /// <summary>
+    /// Decides whether the description line fits, with a dead band between the two thresholds so
+    /// that dragging a corner along the limit cannot flicker it in and out frame after frame.
+    /// </summary>
+    internal static Visibility GetDescriptionVisibility(
+        double width,
+        double height,
+        Visibility current)
+    {
+        const double showWidth = 400d;
+        const double showHeight = 260d;
+        const double hideWidth = 360d;
+        const double hideHeight = 240d;
+
+        if (current == Visibility.Visible)
+        {
+            return width < hideWidth || height < hideHeight
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+
+        return width >= showWidth && height >= showHeight
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
     internal static double GetMoveHandleSize(double width, double freeHeight)
     {
         const double minimumSize = 44d;
         const double maximumSize = 112d;
+        const double step = 4d;
 
         var size = Math.Min(freeHeight - 12d, width * 0.45d);
-        return size < minimumSize ? 0d : Math.Min(size, maximumSize);
+        if (size < minimumSize)
+        {
+            return 0d;
+        }
+
+        // Quantised so a resize drag does not re-render the glyph on every single frame, and
+        // so the handle does not visibly breathe while the window is being sized.
+        return Math.Max(minimumSize, Math.Floor(Math.Min(size, maximumSize) / step) * step);
     }
 
     private void ApplyRectangle(RectangleD rectangle)

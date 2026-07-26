@@ -17,6 +17,8 @@ internal static partial class NativeMethods
     internal const int SwpNoZOrder = 0x0004;
     internal const int SwpNoActivate = 0x0010;
     internal const int SwpShowWindow = 0x0040;
+    internal const int SwpNoCopyBits = 0x0100;
+    internal const int SwpDeferErase = 0x2000;
     internal const int WmDisplayChange = 0x007E;
     internal const int WmMouseActivate = 0x0021;
     internal const int WmNcHitTest = 0x0084;
