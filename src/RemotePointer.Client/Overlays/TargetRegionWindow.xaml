@@ -178,7 +178,7 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="PointingUsageHint"
+            <Border x:Name="AnnotatingUsageHint"
                     Width="260"
                     Margin="12,0,0,12"
                     Padding="9,7"
@@ -238,7 +238,7 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="PointingUsageCollapsedHint"
+            <Border x:Name="AnnotatingUsageCollapsedHint"
                     Margin="12,0,0,12"
                     Padding="9,5"
                     HorizontalAlignment="Left"

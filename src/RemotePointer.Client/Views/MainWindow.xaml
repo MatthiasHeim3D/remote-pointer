@@ -776,9 +776,9 @@
                                 Margin="0,0,7,0"
                                 Background="#60CDFF"
                                 Foreground="#17242A"
-                                Command="{Binding Annotator.TogglePointingCommand}"
-                                Content="{Binding Annotator.PointingActionIcon}"
-                                ToolTip="{Binding Annotator.PointingActionLabel}">
+                                Command="{Binding Annotator.ToggleAnnotatingCommand}"
+                                Content="{Binding Annotator.AnnotatingActionIcon}"
+                                ToolTip="{Binding Annotator.AnnotatingActionLabel}">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
                                     <Setter Property="Visibility" Value="Collapsed" />

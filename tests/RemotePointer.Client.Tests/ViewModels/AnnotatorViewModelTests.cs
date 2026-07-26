@@ -267,7 +267,7 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
-    public void SessionEnded_ExitsPointingAndClearsApproval()
+    public void SessionEnded_ExitsAnnotatingAndClearsApproval()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
@@ -360,25 +360,25 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
-    public void TogglePointingMode_OpensCalibrationWhenInactive()
+    public void ToggleAnnotatingMode_OpensCalibrationWhenInactive()
     {
         using var service = new FakeTargetRegionService();
         using var viewModel = new AnnotatorViewModel(service);
 
-        viewModel.TogglePointingMode();
+        viewModel.ToggleAnnotatingMode();
 
         Assert.Equal(1, service.ToggleCount);
         Assert.False(viewModel.IsError);
     }
 
     [Fact]
-    public void TogglePointingMode_ForwardsWhenReady()
+    public void ToggleAnnotatingMode_ForwardsWhenReady()
     {
         using var service = new FakeTargetRegionService();
         using var viewModel = new AnnotatorViewModel(service);
         service.RaiseState(TargetRegionState.Ready, "Ready");
 
-        viewModel.TogglePointingMode();
+        viewModel.ToggleAnnotatingMode();
 
         Assert.Equal(1, service.ToggleCount);
     }
@@ -420,17 +420,17 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
-    public void StateChanges_UpdatePointingAndStatusProperties()
+    public void StateChanges_UpdateAnnotatingAndStatusProperties()
     {
         using var service = new FakeTargetRegionService();
         using var viewModel = new AnnotatorViewModel(service);
 
-        service.RaiseState(TargetRegionState.Pointing, "Pointing active");
+        service.RaiseState(TargetRegionState.Annotating, "Annotating active");
 
-        Assert.True(viewModel.IsPointing);
-        Assert.Equal("Stop pointing", viewModel.PointingActionLabel);
-        Assert.Equal("Pointing", viewModel.StateLabel);
-        Assert.Equal("Pointing active", viewModel.StatusMessage);
+        Assert.True(viewModel.IsAnnotating);
+        Assert.Equal("Stop annotating", viewModel.AnnotatingActionLabel);
+        Assert.Equal("Annotating", viewModel.StateLabel);
+        Assert.Equal("Annotating active", viewModel.StatusMessage);
         Assert.False(viewModel.IsError);
     }
 
@@ -508,9 +508,9 @@ public sealed class AnnotatorViewModelTests
             InvalidateCount++;
         }
 
-        public void TogglePointingMode() => ToggleCount++;
+        public void ToggleAnnotatingMode() => ToggleCount++;
 
-        public void ExitPointingMode()
+        public void ExitAnnotatingMode()
         {
             ExitCount++;
         }

@@ -17,7 +17,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
     private readonly int pointerTtlMilliseconds;
     private readonly IRelayClient? relayClient;
     private readonly ITargetRegionService targetRegionService;
-    private readonly RelayCommand togglePointingCommand;
+    private readonly RelayCommand toggleAnnotatingCommand;
     private int capturedPointerCount;
     private bool directoryReadPending;
     private bool disposed;
@@ -73,11 +73,11 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         calibrateCommand = new RelayCommand(
             _ => BeginCalibration(),
             _ => relayClient is null || IsSessionApproved);
-        togglePointingCommand = new RelayCommand(
-            _ => TogglePointingMode(),
+        toggleAnnotatingCommand = new RelayCommand(
+            _ => ToggleAnnotatingMode(),
             _ => State != TargetRegionState.Calibrating
                 && (relayClient is null || IsSessionApproved));
-        ExitPointingCommand = new RelayCommand(_ => targetRegionService.ExitPointingMode());
+        ExitAnnotatingCommand = new RelayCommand(_ => targetRegionService.ExitAnnotatingMode());
         refreshHostsCommand = new AsyncRelayCommand(
             _ => RefreshAvailableHostsAsync(),
             _ => relayClient is not null
@@ -138,20 +138,20 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref state, value))
             {
-                togglePointingCommand.RaiseCanExecuteChanged();
-                RaisePropertyChanged(nameof(IsPointing));
-                RaisePropertyChanged(nameof(PointingActionLabel));
-                RaisePropertyChanged(nameof(PointingActionIcon));
+                toggleAnnotatingCommand.RaiseCanExecuteChanged();
+                RaisePropertyChanged(nameof(IsAnnotating));
+                RaisePropertyChanged(nameof(AnnotatingActionLabel));
+                RaisePropertyChanged(nameof(AnnotatingActionIcon));
                 RaisePropertyChanged(nameof(StateLabel));
             }
         }
     }
 
-    public bool IsPointing => State == TargetRegionState.Pointing;
+    public bool IsAnnotating => State == TargetRegionState.Annotating;
 
-    public string PointingActionLabel => IsPointing ? "Stop pointing" : "Enable pointing";
+    public string AnnotatingActionLabel => IsAnnotating ? "Stop annotating" : "Enable annotating";
 
-    public string PointingActionIcon => IsPointing ? "\uE71A" : "\uE768";
+    public string AnnotatingActionIcon => IsAnnotating ? "\uE71A" : "\uE768";
 
     /// <summary>
     /// True while the host has this annotator paused. The session stays up and the target region
@@ -225,7 +225,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             {
                 RaiseNetworkCommandStates();
                 calibrateCommand.RaiseCanExecuteChanged();
-                togglePointingCommand.RaiseCanExecuteChanged();
+                toggleAnnotatingCommand.RaiseCanExecuteChanged();
                 RaisePropertyChanged(nameof(ConnectionStatusLabel));
                 RaisePropertyChanged(nameof(EndSessionActionLabel));
             }
@@ -264,9 +264,9 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
 
     public ICommand CalibrateCommand => calibrateCommand;
 
-    public ICommand TogglePointingCommand => togglePointingCommand;
+    public ICommand ToggleAnnotatingCommand => toggleAnnotatingCommand;
 
-    public ICommand ExitPointingCommand { get; }
+    public ICommand ExitAnnotatingCommand { get; }
 
     public ICommand RefreshHostsCommand => refreshHostsCommand;
 
@@ -340,15 +340,15 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void TogglePointingMode()
+    public void ToggleAnnotatingMode()
     {
         if (relayClient is not null && !IsSessionApproved)
         {
-            SetStatus("Wait for host approval before enabling pointing.", isError: true);
+            SetStatus("Wait for host approval before enabling annotating.", isError: true);
             return;
         }
 
-        targetRegionService.TogglePointingMode();
+        targetRegionService.ToggleAnnotatingMode();
     }
 
     public void ReportHotKeyRegistrationFailure(string message) =>
@@ -532,7 +532,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         }
 
         var wasApproved = IsSessionApproved;
-        targetRegionService.ExitPointingMode();
+        targetRegionService.ExitAnnotatingMode();
         try
         {
             await relayClient.EndSessionAsync();
@@ -731,7 +731,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
 
     private void OnSessionEnded(object? sender, RelaySessionEndedEventArgs e)
     {
-        targetRegionService.ExitPointingMode();
+        targetRegionService.ExitAnnotatingMode();
         ClearSessionState();
         SetStatus(e.Reason, e.Expired);
     }

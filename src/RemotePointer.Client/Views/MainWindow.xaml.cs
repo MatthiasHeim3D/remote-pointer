@@ -132,7 +132,7 @@ public partial class MainWindow : Window
             && wordParameter.ToInt32() == GlobalHotKeyRegistration.TogglePointerHotKeyId)
         {
             handled = true;
-            viewModel.Annotator.TogglePointingMode();
+            viewModel.Annotator.ToggleAnnotatingMode();
         }
 
         return 0;
@@ -219,8 +219,8 @@ public partial class MainWindow : Window
             UpdateFlyoutHeight();
         }
 
-        var status = viewModel.Annotator.IsPointing
-            ? "Pointing active"
+        var status = viewModel.Annotator.IsAnnotating
+            ? "Annotating active"
             : viewModel.Annotator.IsSessionApproved
                 ? "Annotator connected"
                 : viewModel.HasConnectedAnnotator

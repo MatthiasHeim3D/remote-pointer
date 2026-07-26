@@ -30,7 +30,7 @@ public sealed class GlobalHotKeyRegistration : IDisposable
         {
             throw new Win32Exception(
                 Marshal.GetLastPInvokeError(),
-                "Ctrl+Alt+P could not be registered as the global pointing hotkey.");
+                "Ctrl+Alt+P could not be registered as the global annotating hotkey.");
         }
 
         registered = true;

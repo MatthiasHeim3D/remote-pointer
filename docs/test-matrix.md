@@ -17,7 +17,7 @@
 | Monitor selection | Initial selection, refresh preservation, selected-display disconnection |
 | Marker commands | Four corners, center, invalid custom coordinates, overlay state errors |
 | Calibration geometry | Locked/unlocked resize, horizontal/vertical ratio preservation, minimum dimensions, fullscreen monitor fitting |
-| Annotator state | Expected-ratio validation, calibration request, ready/pointing transitions, hotkey errors |
+| Annotator state | Expected-ratio validation, calibration request, ready/annotating transitions, hotkey errors |
 | Annotator capture reporting | Normalized local pointer count and coordinate presentation |
 | Session secrets and lifetime | Cryptographic generation, hashing, constant-time comparison, abandoned-session collection, expiry |
 | Host directory | Host visibility choice, directory filtering, direct request, mandatory approval |
@@ -70,8 +70,8 @@
 3. Move it onto each annotator monitor and select **Fullscreen**. With ratio lock enabled, confirm the largest host-shaped rectangle is centered within that monitor. Disable ratio lock and confirm it fills the complete monitor.
 4. With ratio lock disabled, create a difference greater than 2%, and verify Lock requires the explicit Allow mismatch override.
 5. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.
-6. Enable pointing. Verify left-click highlights, left-drag draws a fading path, Shift+left-drag draws a fading line, Shift+left-click opens a text box finalized by Enter, right-drag draws a fading box, and Shift+right-drag draws a fading circle centered at the initial click. Confirm each appears locally and on the host. Verify the help panel includes the Escape shortcut and settings guidance, opens on first use, and starts collapsed on later uses. Confirm `H` always toggles the full panel, while disabling **Show usage hints** removes the collapsed help badge.
-7. With pointing active, change **Drawing opacity** in Settings and re-enter pointing. Confirm the annotator's own shapes, ripples, and placed text notes are dimmed by the chosen percentage, that the host still renders them at full opacity, and that the value survives a client restart.
+6. Enable annotating. Verify left-click highlights, left-drag draws a fading path, Shift+left-drag draws a fading line, Shift+left-click opens a text box finalized by Enter, right-drag draws a fading box, and Shift+right-drag draws a fading circle centered at the initial click. Confirm each appears locally and on the host. Verify the help panel includes the Escape shortcut and settings guidance, opens on first use, and starts collapsed on later uses. Confirm `H` always toggles the full panel, while disabling **Show usage hints** removes the collapsed help badge.
+7. With annotating active, change **Drawing opacity** in Settings and re-enter annotating. Confirm the annotator's own shapes, ripples, and placed text notes are dimmed by the chosen percentage, that the host still renders them at full opacity, and that the value survives a client restart.
 8. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
 9. Click outside the rectangle and confirm the underlying application behaves normally.
 10. Press Escape and confirm normal clicking is restored immediately.
@@ -83,13 +83,13 @@
 1. Trust the local ASP.NET Core development certificate and start the HTTPS relay.
 2. Start two client processes. In the host, select a monitor and choose **Available**. Confirm it appears in the annotator's host list automatically.
 3. Select the host and request access. Confirm the host shows the annotator's machine name and that calibration remains disabled until approval.
-4. Approve the annotator, calibrate the shared desktop region, and enable pointing.
+4. Approve the annotator, calibrate the shared desktop region, and enable annotating.
 5. Click the four corners and center. Confirm equivalent host positions, a local ripple, and a displayed acknowledgement latency.
-6. Pause the annotator from its row on the host. Confirm the annotator's input area dims to a pause symbol, its clicks and drags produce nothing on either side, and its row reads **Paused**. Resume it and confirm pointing works again and the annotating indicator lights while it draws. Then disconnect it from its row and confirm annotator pointing exits while the host returns to the available list.
+6. Pause the annotator from its row on the host. Confirm the annotator's input area dims to a pause symbol, its clicks and drags produce nothing on either side, and its row reads **Paused**. Resume it and confirm annotating works again and the annotating indicator lights while it draws. Then disconnect it from its row and confirm annotator annotating exits while the host returns to the available list.
 7. With two annotators approved, confirm **Pause all** and **Disconnect all** appear, pause both, and confirm the button offers **Resume all**.
-8. Use **Disconnect all** on the host and confirm annotator pointing exits while the host returns to the available list. Request and approve access again, disconnect from the annotator, then choose **Invisible** on the host and confirm it no longer appears in the list.
+8. Use **Disconnect all** on the host and confirm annotator annotating exits while the host returns to the available list. Request and approve access again, disconnect from the annotator, then choose **Invisible** on the host and confirm it no longer appears in the list.
 9. During an active session, interrupt relay connectivity and click while the UI shows Reconnecting. Confirm those clicks are reported as dropped and do not appear after reconnection.
-10. Restore connectivity within the reconnect window. Confirm the host can return, the previous annotator is no longer connected, and pointing remains unavailable until that annotator submits a new request and is approved again.
+10. Restore connectivity within the reconnect window. Confirm the host can return, the previous annotator is no longer connected, and annotating remains unavailable until that annotator submits a new request and is approved again.
 11. Minimize each client, confirm notification-area status, restore by double-clicking the icon, and exit from its menu.
 12. On a representative corporate LAN, collect at least several hundred acknowledgement samples and verify p95 click-to-marker latency is below 250 ms.
 13. Set the host to **Invisible** and confirm it leaves the directory on the other client and cannot be joined. Set it back to **Available** and confirm the visible-host flow works again.
@@ -111,5 +111,5 @@
 3. Build the Inno Setup package with the matching HTTPS URL and root, and archive the generated SHA-256 file on the restricted internal share.
 4. Run `build\Test-Installer.ps1` as a non-administrator. Confirm current-user install and uninstall succeed.
 5. Install normally and leave the HTTPS trust task selected. Confirm the Start menu shortcut is current-user and the health URL succeeds without certificate warnings.
-6. Establish a real host/annotator session from two machines, including one over VPN, and repeat join approval, calibration, pointing, termination, and reconnect tests.
+6. Establish a real host/annotator session from two machines, including one over VPN, and repeat join approval, calibration, annotating, termination, and reconnect tests.
 7. Confirm the clients require only outbound TCP 443 and relay port 8080 is not published by Docker.

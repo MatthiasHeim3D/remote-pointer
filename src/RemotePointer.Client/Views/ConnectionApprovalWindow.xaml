@@ -77,7 +77,7 @@
                        FontFamily="Segoe UI"
                        FontSize="11"
                        Foreground="#AFAFAF"
-                       Text="Allow this user to point at your selected screen?" />
+                       Text="Allow this user to annotate on your selected screen?" />
             <StackPanel Grid.Row="2"
                         HorizontalAlignment="Right"
                         Orientation="Horizontal">

@@ -35,7 +35,7 @@ public partial class TargetRegionWindow : Window
     private Point currentGesturePosition;
     private bool gestureUpdatePending;
     private long lastGestureSentAt;
-    private bool isPointingMode;
+    private bool isAnnotatingMode;
     private bool isAnnotationPaused;
     private bool isUsageHelpCollapsed;
     private bool isResizeDragActive;
@@ -87,7 +87,7 @@ public partial class TargetRegionWindow : Window
 
     public event EventHandler? CalibrationCancelled;
 
-    public event EventHandler? PointingExitRequested;
+    public event EventHandler? AnnotatingExitRequested;
 
     public event EventHandler<PointerCapturedEventArgs>? PointerCaptured;
 
@@ -99,9 +99,9 @@ public partial class TargetRegionWindow : Window
 
     public double DrawingOpacity { get; }
 
-    public void EnterPointingMode()
+    public void EnterAnnotatingMode()
     {
-        isPointingMode = true;
+        isAnnotatingMode = true;
         isUsageHelpCollapsed = !ExpandUsageHintsInitially;
         CalibrationPanel.Visibility = Visibility.Collapsed;
         UpdateUsageHelpVisibility();
@@ -119,7 +119,7 @@ public partial class TargetRegionWindow : Window
 
     private void OnDragSurfaceMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (isPointingMode || e.ChangedButton != MouseButton.Left)
+        if (isAnnotatingMode || e.ChangedButton != MouseButton.Left)
         {
             return;
         }
@@ -141,7 +141,7 @@ public partial class TargetRegionWindow : Window
         object sender,
         System.Windows.Controls.Primitives.DragStartedEventArgs e)
     {
-        if (isPointingMode || !NativeMethods.GetCursorPos(out resizeDragStartCursor))
+        if (isAnnotatingMode || !NativeMethods.GetCursorPos(out resizeDragStartCursor))
         {
             isResizeDragActive = false;
             return;
@@ -159,7 +159,7 @@ public partial class TargetRegionWindow : Window
         object sender,
         System.Windows.Controls.Primitives.DragDeltaEventArgs e)
     {
-        if (isPointingMode ||
+        if (isAnnotatingMode ||
             !isResizeDragActive ||
             !NativeMethods.GetCursorPos(out var currentCursor))
         {
@@ -190,7 +190,7 @@ public partial class TargetRegionWindow : Window
 
     private void OnAspectLockChanged(object sender, RoutedEventArgs e)
     {
-        if (!IsInitialized || isPointingMode)
+        if (!IsInitialized || isAnnotatingMode)
         {
             return;
         }
@@ -255,7 +255,7 @@ public partial class TargetRegionWindow : Window
 
     private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (isPointingMode && activeTextEditor is not null)
+        if (isAnnotatingMode && activeTextEditor is not null)
         {
             if (e.Key == Key.Enter)
             {
@@ -272,14 +272,14 @@ public partial class TargetRegionWindow : Window
             return;
         }
 
-        if (isPointingMode && e.Key == Key.Escape)
+        if (isAnnotatingMode && e.Key == Key.Escape)
         {
             e.Handled = true;
-            PointingExitRequested?.Invoke(this, EventArgs.Empty);
+            AnnotatingExitRequested?.Invoke(this, EventArgs.Empty);
             return;
         }
 
-        if (isPointingMode && e.Key == Key.H)
+        if (isAnnotatingMode && e.Key == Key.H)
         {
             e.Handled = true;
             isUsageHelpCollapsed = !isUsageHelpCollapsed;
@@ -292,8 +292,8 @@ public partial class TargetRegionWindow : Window
         var (usageHelp, collapsedHint) = GetUsageHintVisibilities(
             ShowUsageHints,
             isUsageHelpCollapsed);
-        PointingUsageHint.Visibility = usageHelp;
-        PointingUsageCollapsedHint.Visibility = collapsedHint;
+        AnnotatingUsageHint.Visibility = usageHelp;
+        AnnotatingUsageCollapsedHint.Visibility = collapsedHint;
     }
 
     internal static (Visibility UsageHelp, Visibility CollapsedHint)
@@ -322,7 +322,7 @@ public partial class TargetRegionWindow : Window
             AbandonActiveGesture();
         }
 
-        if (isPointingMode)
+        if (isAnnotatingMode)
         {
             Cursor = paused ? Cursors.No : Cursors.Cross;
         }
@@ -346,7 +346,7 @@ public partial class TargetRegionWindow : Window
 
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (!isPointingMode || isAnnotationPaused || activePointerButton is not null)
+        if (!isAnnotatingMode || isAnnotationPaused || activePointerButton is not null)
         {
             return;
         }
@@ -382,7 +382,7 @@ public partial class TargetRegionWindow : Window
 
     private void OnPreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (!isPointingMode
+        if (!isAnnotatingMode
             || isAnnotationPaused
             || activePointerButton is null
             || activeTextEditor is not null)
@@ -423,7 +423,7 @@ public partial class TargetRegionWindow : Window
 
     private void OnPreviewMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (!isPointingMode || isAnnotationPaused || activePointerButton != e.ChangedButton)
+        if (!isAnnotatingMode || isAnnotationPaused || activePointerButton != e.ChangedButton)
         {
             return;
         }
@@ -683,7 +683,7 @@ public partial class TargetRegionWindow : Window
 
     private void UpdateMetrics()
     {
-        if (!IsInitialized || isPointingMode)
+        if (!IsInitialized || isAnnotatingMode)
         {
             return;
         }

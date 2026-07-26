@@ -14,8 +14,8 @@ Good for walking a colleague through an app, pointing out details during a scree
 
 Remote Pointer has two roles and a small server that connects them:
 
-- **Host** — the person whose screen is being pointed at. A transparent, click-through overlay shows the incoming markers while they keep using their PC normally underneath.
-- **Annotator** — the person doing the pointing. In their remote-desktop or screen-share view, they line up a target area over the host's screen, then draw. Their gestures show up on the host's real screen (and so are visible back in the shared view).
+- **Host** — the person whose screen is being annotated. A transparent, click-through overlay shows the incoming markers while they keep using their PC normally underneath.
+- **Annotator** — the person doing the annotating. In their remote-desktop or screen-share view, they line up a target area over the host's screen, then draw. Their gestures show up on the host's real screen (and so are visible back in the shared view).
 - **Relay** — a small server you run yourself that both sides connect to over HTTPS. It validates and forwards gestures; it never touches either desktop.
 
 "Host" names the role, not the hardware: a Host is a client like any other, and the relay is the only thing being *hosted* in the infrastructure sense.
@@ -28,11 +28,11 @@ Every annotator must be **individually approved** by the host, and the host can 
 2. On the host PC, choose **Available** to become discoverable.
 3. On each annotator PC, pick that host from the list and request access.
 4. The host approves each request.
-5. Annotators line up their target area over the host's screen in their remote-desktop view, then turn on pointing (or press **Ctrl+Alt+P**).
+5. Annotators line up their target area over the host's screen in their remote-desktop view, then turn on annotating (or press **Ctrl+Alt+P**).
 
 ### Pointer controls
 
-While pointing is active:
+While annotating is active:
 
 | Gesture | Draws |
 | --- | --- |

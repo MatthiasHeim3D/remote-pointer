@@ -87,7 +87,7 @@ public sealed class TargetRegionService : ITargetRegionService
 
         SetState(
             TargetRegionState.Calibrating,
-            "Move and resize the target window, then start pointing.");
+            "Move and resize the target window, then start annotating.");
         window.Show();
         _ = window.Activate();
     }
@@ -119,20 +119,20 @@ public sealed class TargetRegionService : ITargetRegionService
         SetState(TargetRegionState.Inactive, message);
     }
 
-    public void TogglePointingMode()
+    public void ToggleAnnotatingMode()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        if (State == TargetRegionState.Pointing)
+        if (State == TargetRegionState.Annotating)
         {
-            ExitPointingMode();
+            ExitAnnotatingMode();
             return;
         }
 
         BeginCalibration(expectedAspectRatio);
     }
 
-    private void EnterPointingMode()
+    private void EnterAnnotatingMode()
     {
         if (calibratedRectangle is null)
         {
@@ -149,7 +149,7 @@ public sealed class TargetRegionService : ITargetRegionService
             showUsageHints,
             expandUsageHintsInitially: !hasShownUsageHints,
             drawingOpacity: DrawingOpacity);
-        window.EnterPointingMode();
+        window.EnterAnnotatingMode();
         window.SetAnnotationPaused(isAnnotationPaused);
         if (!hasShownUsageHints)
         {
@@ -157,41 +157,41 @@ public sealed class TargetRegionService : ITargetRegionService
             UsageHintsShown?.Invoke(this, EventArgs.Empty);
         }
         window.PointerCaptured += OnPointerCaptured;
-        window.PointingExitRequested += OnPointingExitRequested;
+        window.AnnotatingExitRequested += OnAnnotatingExitRequested;
         window.Closed += OnWindowClosed;
 
         SetState(
-            TargetRegionState.Pointing,
-            "Pointing active. Click, drag, Shift+drag, Shift+click, right-drag, or Shift+right-drag; press Esc or Ctrl+Alt+P to stop.");
-        var pointingWindow = window;
-        pointingWindow.Show();
+            TargetRegionState.Annotating,
+            "Annotating active. Click, drag, Shift+drag, Shift+click, right-drag, or Shift+right-drag; press Esc or Ctrl+Alt+P to stop.");
+        var annotatingWindow = window;
+        annotatingWindow.Show();
 
         // The command button's mouse event is still unwinding when Show returns.
         // Activating at dispatcher idle prevents that event from restoring focus to
-        // the control window after pointing mode has started.
-        _ = pointingWindow.Dispatcher.InvokeAsync(
+        // the control window after annotating mode has started.
+        _ = annotatingWindow.Dispatcher.InvokeAsync(
             () =>
             {
-                if (ReferenceEquals(window, pointingWindow) && pointingWindow.IsVisible)
+                if (ReferenceEquals(window, annotatingWindow) && annotatingWindow.IsVisible)
                 {
-                    _ = pointingWindow.Activate();
-                    _ = pointingWindow.Focus();
-                    _ = Keyboard.Focus(pointingWindow);
+                    _ = annotatingWindow.Activate();
+                    _ = annotatingWindow.Focus();
+                    _ = Keyboard.Focus(annotatingWindow);
                 }
             },
             DispatcherPriority.ApplicationIdle);
     }
 
-    public void ExitPointingMode()
+    public void ExitAnnotatingMode()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        if (State != TargetRegionState.Pointing)
+        if (State != TargetRegionState.Annotating)
         {
             return;
         }
 
         CloseWindow();
-        SetState(TargetRegionState.Ready, "Pointing stopped. The target region remains locked.");
+        SetState(TargetRegionState.Ready, "Annotating stopped. The target region remains locked.");
     }
 
     public void Dispose()
@@ -235,7 +235,7 @@ public sealed class TargetRegionService : ITargetRegionService
         }
 
         CloseWindow();
-        EnterPointingMode();
+        EnterAnnotatingMode();
     }
 
     private void OnCalibrationCancelled(object? sender, EventArgs e)
@@ -251,7 +251,7 @@ public sealed class TargetRegionService : ITargetRegionService
     private void OnPointerCaptured(object? sender, PointerCapturedEventArgs e) =>
         PointerCaptured?.Invoke(this, e);
 
-    private void OnPointingExitRequested(object? sender, EventArgs e) => ExitPointingMode();
+    private void OnAnnotatingExitRequested(object? sender, EventArgs e) => ExitAnnotatingMode();
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
@@ -262,7 +262,7 @@ public sealed class TargetRegionService : ITargetRegionService
 
         DetachWindow();
         window = null;
-        if (State is TargetRegionState.Calibrating or TargetRegionState.Pointing)
+        if (State is TargetRegionState.Calibrating or TargetRegionState.Annotating)
         {
             SetState(
                 calibratedRectangle is null ? TargetRegionState.Inactive : TargetRegionState.Ready,
@@ -293,7 +293,7 @@ public sealed class TargetRegionService : ITargetRegionService
         window.CalibrationLocked -= OnCalibrationLocked;
         window.CalibrationCancelled -= OnCalibrationCancelled;
         window.PointerCaptured -= OnPointerCaptured;
-        window.PointingExitRequested -= OnPointingExitRequested;
+        window.AnnotatingExitRequested -= OnAnnotatingExitRequested;
         window.Closed -= OnWindowClosed;
     }
 

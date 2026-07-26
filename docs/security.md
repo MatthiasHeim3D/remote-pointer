@@ -23,13 +23,13 @@ The shared library does not reference Windows desktop APIs. Client Win32 interop
 
 ## Phase 3 input controls
 
-- Pointing uses a bounded top-level WPF window rather than a low-level mouse hook.
-- Only explicit pointer gestures delivered inside the calibrated rectangle are observed and converted to normalized coordinates while pointing mode is active.
+- Annotating uses a bounded top-level WPF window rather than a low-level mouse hook.
+- Only explicit pointer gestures delivered inside the calibrated rectangle are observed and converted to normalized coordinates while annotating mode is active.
 - Keyboard text is observed only after Shift+left-click opens the visible annotation editor; Enter finalizes at most 256 plain-text characters. Text is transient, is not interpreted as markup, and is never persisted or logged.
 - No mouse movement or click is injected locally or remotely.
 - `Ctrl+Alt+P` uses `RegisterHotKey`; no keyboard hook is installed.
 - Escape is handled only while the annotator target window is focused.
-- Leaving pointing mode closes the capture window, restoring normal application behavior everywhere.
+- Leaving annotating mode closes the capture window, restoring normal application behavior everywhere.
 
 ## Controls scheduled for later phases
 
@@ -62,9 +62,9 @@ No development certificate-bypass switch will be included in production builds.
 - TLS certificate validation uses the platform default; the production constructor has no message-handler or certificate-validation override.
 - Only the random client-instance ID is persisted in plaintext under the current user's local application data.
 - Calibration geometry lasts only for the process session and is never sent to the relay.
-- Pointer sends are dropped while disconnected or reconnecting and are not replayed. Endpoint disconnect revokes annotator access, so pointing resumes only after a fresh request and approval.
+- Pointer sends are dropped while disconnected or reconnecting and are not replayed. Endpoint disconnect revokes annotator access, so annotating resumes only after a fresh request and approval.
 - The host repeats structural and TTL validation immediately before display and acknowledges only displayed markers.
-- Termination or failed resume removes the overlay, exits pointing, and clears the in-memory session state.
+- Termination or failed resume removes the overlay, exits annotating, and clears the in-memory session state.
 
 ## Phase 6 hardening controls
 

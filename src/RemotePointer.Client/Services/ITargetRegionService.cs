@@ -18,7 +18,7 @@ public interface ITargetRegionService : IDisposable
 
     /// <summary>
     /// Marks the target region as paused by the host: it stops capturing input and says so, but
-    /// stays open and calibrated so pointing resumes the moment the host lifts the pause.
+    /// stays open and calibrated so annotating resumes the moment the host lifts the pause.
     /// </summary>
     void SetAnnotationPaused(bool paused);
 
@@ -28,7 +28,7 @@ public interface ITargetRegionService : IDisposable
 
     void InvalidateCalibration(string message);
 
-    void TogglePointingMode();
+    void ToggleAnnotatingMode();
 
-    void ExitPointingMode();
+    void ExitAnnotatingMode();
 }

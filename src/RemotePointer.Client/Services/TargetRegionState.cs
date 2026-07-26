@@ -5,5 +5,5 @@ public enum TargetRegionState
     Inactive,
     Calibrating,
     Ready,
-    Pointing,
+    Annotating,
 }
