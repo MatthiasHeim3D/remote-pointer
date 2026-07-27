@@ -12,6 +12,8 @@ Good for walking a colleague through an app, pointing out details during a scree
 
 ## How it works
 
+![The host's screen reaches the annotator through whatever screen-sharing app they already use. The annotator lines Remote Pointer's target area up with that shared image, then draws in it — and the marks appear on the host's real screen.](docs/media/user-flow.svg)
+
 Remote Pointer has two roles and a small server that connects them:
 
 - **Host** — the person whose screen is being annotated. A transparent, click-through overlay shows the incoming markers while they keep using their PC normally underneath.
