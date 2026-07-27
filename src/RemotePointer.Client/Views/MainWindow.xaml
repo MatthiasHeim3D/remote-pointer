@@ -1206,7 +1206,7 @@
                     </Grid>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
-                               Text="Annotation Area" />
+                               Text="Annotator" />
                     <StackPanel ToolTipService.ShowDuration="30000">
                         <StackPanel.ToolTip>
                             <ToolTip Padding="11,9"
@@ -1219,7 +1219,7 @@
                                            Text="Colours what you draw, and travels with it, so your partner's screen shows your annotations in this colour too. Takes effect the moment you pick it, so you can try one out while annotating. The annotation area's own frame stays red. Pick a colour that stands out against what you are drawing over, and a different one from anyone else annotating the same screen." />
                             </ToolTip>
                         </StackPanel.ToolTip>
-                        <TextBlock Text="Annotation colour" />
+                        <TextBlock Text="Color" />
                         <!-- Left-aligned rather than stretched: the swatches read as one strip of
                              choices, which even spacing across the pane would break up. -->
                         <StackPanel Margin="0,8,0,0"
