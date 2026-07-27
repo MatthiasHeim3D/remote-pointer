@@ -1252,7 +1252,7 @@
                                 <TextBlock MaxWidth="280"
                                            Foreground="#F5F5F5"
                                            TextWrapping="Wrap"
-                                           Text="Colours what you draw, and travels with it, so your partner's screen shows your annotations in this colour too. The annotation area's own frame stays red. Pick a colour that stands out against what you are drawing over, and a different one from anyone else annotating the same screen." />
+                                           Text="Colours what you draw, and travels with it, so your partner's screen shows your annotations in this colour too. Takes effect the moment you pick it, so you can try one out while annotating. The annotation area's own frame stays red. Pick a colour that stands out against what you are drawing over, and a different one from anyone else annotating the same screen." />
                             </ToolTip>
                         </StackPanel.ToolTip>
                         <TextBlock Text="Annotation colour" />

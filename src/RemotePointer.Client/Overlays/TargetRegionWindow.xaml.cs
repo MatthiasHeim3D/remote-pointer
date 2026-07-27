@@ -31,7 +31,7 @@ public partial class TargetRegionWindow : Window
         AnnotationPalette.CreateStrokeBrush(AnnotationPalette.DefaultAccent);
 
     private readonly RectangleD resetRectangle;
-    private readonly SolidColorBrush annotationBrush;
+    private SolidColorBrush annotationBrush;
     private readonly PointerVisualRenderer pointerVisuals;
     private readonly DispatcherTimer gestureUpdateTimer;
     private readonly List<Point> pendingPathPoints = [];
@@ -125,7 +125,25 @@ public partial class TargetRegionWindow : Window
     /// click ripples and placed text notes — and not the window's own chrome. The same value
     /// travels with every pointer event, so the host's copy of a drawing matches this one.
     /// </summary>
-    public Color AnnotationColor { get; }
+    public Color AnnotationColor { get; private set; }
+
+    /// <summary>
+    /// Recolours what is drawn from here on, without closing the window, so a colour picked
+    /// during a live session takes effect on the next stroke rather than the next calibration.
+    /// Shapes already on the canvas keep the colour they were drawn in.
+    /// </summary>
+    public void SetAnnotationColor(string? annotationColor)
+    {
+        var accent = AnnotationPalette.ToColor(annotationColor);
+        if (accent == AnnotationColor)
+        {
+            return;
+        }
+
+        AnnotationColor = accent;
+        annotationBrush = AnnotationPalette.CreateStrokeBrush(accent);
+        pointerVisuals.SetDefaultAccent(accent);
+    }
 
     public void EnterAnnotatingMode()
     {

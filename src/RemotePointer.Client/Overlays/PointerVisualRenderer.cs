@@ -29,7 +29,7 @@ internal sealed class PointerVisualRenderer
 
     private readonly Canvas canvas;
     private readonly bool smoothRemoteGestures;
-    private readonly Color defaultAccent;
+    private Color defaultAccent;
     private readonly Dictionary<Color, AccentBrushes> accentBrushes = [];
     private readonly Dictionary<Guid, ActiveGesture> activeGestures = [];
     private readonly List<ActiveGesture> arrivedGestures = [];
@@ -130,6 +130,13 @@ internal sealed class PointerVisualRenderer
                 break;
         }
     }
+
+    /// <summary>
+    /// Changes the colour used for gestures that name none. Only gestures started afterwards
+    /// pick it up: whatever is already on the canvas holds the brush it was created with, so a
+    /// colour changed mid-stroke cannot rewrite ink the annotator has already drawn.
+    /// </summary>
+    public void SetDefaultAccent(Color accent) => defaultAccent = accent;
 
     public void Clear()
     {

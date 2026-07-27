@@ -54,8 +54,14 @@ public sealed class TargetRegionService : ITargetRegionService
         this.drawingOpacityPercent =
             PointerSettings.ClampDrawingOpacityPercent(drawingOpacityPercent);
 
-    public void SetAnnotationColor(string? annotationColor) =>
+    public void SetAnnotationColor(string? annotationColor)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
         this.annotationColor = AnnotationColors.Normalize(annotationColor);
+        // Pushed into an open window rather than only remembered for the next one: the colour is
+        // usually changed mid-session, and reaching it should not cost a recalibration.
+        window?.SetAnnotationColor(this.annotationColor);
+    }
 
     public void SetAnnotationPaused(bool paused)
     {

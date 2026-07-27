@@ -282,6 +282,30 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task AnnotationColor_ReachesTheAnnotationAreaOnSelectionRatherThanOnSave()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var targetRegion = new FakeTargetRegionService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            targetRegionService: targetRegion,
+            clientSettings: testSettings.Settings);
+
+        var cyan = viewModel.AnnotationColorOptions.Single(option => option.Name == "Cyan");
+        viewModel.SelectAnnotationColorCommand.Execute(cyan);
+
+        // Applied before the pane is closed, so the colour can be judged against a live drawing.
+        Assert.Equal(cyan.Color, targetRegion.AnnotationColor);
+        Assert.NotEqual(cyan.Color, testSettings.Settings.Pointer.AnnotationColor);
+
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(cyan.Color, testSettings.Settings.Pointer.AnnotationColor);
+    }
+
+    [Fact]
     public void AnnotationColorPresets_AreCanonicalAndDistinct()
     {
         var colors = MainWindowViewModel.AnnotationColorPresets

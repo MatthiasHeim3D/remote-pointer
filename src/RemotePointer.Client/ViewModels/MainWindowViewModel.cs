@@ -624,6 +624,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// The colour this client's annotations are drawn in, here and on the host it draws to.
+    /// Unlike the other settings it is applied as soon as it is picked rather than when the
+    /// settings pane closes, so the choice can be judged against a real drawing. Saving still
+    /// happens on close, which is also where a reopened pane restores what was saved.
     /// </summary>
     public string AnnotationColor
     {
@@ -634,6 +637,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 RefreshAnnotationColorSelection();
                 RaisePropertyChanged(nameof(IsCustomAnnotationColor));
+                Annotator.SetAnnotationColor(annotationColor);
             }
         }
     }
@@ -1656,7 +1660,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             AnnotationColor);
         Annotator.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
         Annotator.SetDrawingOpacityPercent(DrawingOpacityPercent);
-        Annotator.SetAnnotationColor(AnnotationColor);
+        // The annotation colour is deliberately absent: it was already applied the moment it was
+        // picked, so saving it here would only repeat that.
         startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
         RaiseServerAddressCommandState();
     }
