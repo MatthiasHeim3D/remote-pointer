@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 900 326" width="900" height="326" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The host's screen reaches the annotator through any screen-sharing app. On the annotator's PC, Remote Pointer's target area is moved and resized until it matches the shared image; pressing Start turns its border red and begins annotating. Three clicks and a circle drawn around a block of code then appear a moment later on the host's real screen, each fading on its own.">
+<svg viewBox="0 0 900 326" width="900" height="326" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The host's screen reaches the annotator through any screen-sharing app. On the annotator's PC, Remote Pointer's target area is moved and resized until it matches the shared image; pressing Start turns its border red and begins annotating. Three clicks and a circle drawn around a block of code then appear on the host's real screen as they are made, each fading on its own.">
   <title>Remote Pointer — how a session runs</title>
 
   <defs>
@@ -175,16 +175,12 @@
       .ripple-a { animation: ripple-a 12s ease-out infinite; }
       .ripple-h { animation: ripple-h 12s ease-out infinite; }
 
-      /* Annotator clicks land at 5.65 / 6.10 / 6.55s and the circle starts at 7.20s;
-         each reappears on the host a quarter-second later, the relay round trip. */
-      .t-a1 { animation-delay: 5.65s; }
-      .t-a2 { animation-delay: 6.10s; }
-      .t-a3 { animation-delay: 6.55s; }
-      .t-h1 { animation-delay: 5.90s; }
-      .t-h2 { animation-delay: 6.35s; }
-      .t-h3 { animation-delay: 6.80s; }
-      .t-ac { animation-delay: 7.20s; }
-      .t-hc { animation-delay: 7.45s; }
+      /* Clicks land at 5.65 / 6.10 / 6.55s and the circle starts at 7.20s. Each mark and
+         its copy on the host share one delay, so both screens show it at the same instant. */
+      .t-1 { animation-delay: 5.65s; }
+      .t-2 { animation-delay: 6.10s; }
+      .t-3 { animation-delay: 6.55s; }
+      .t-c { animation-delay: 7.20s; }
 
       @keyframes ants { to { stroke-dashoffset: -18; } }
 
@@ -395,26 +391,26 @@
   <!-- What gets drawn. Drawing opacity dims the annotator's own copy, so the one
        coming back from the host stays the readable one. -->
   <g opacity="0.5">
-    <circle class="dot t-a1" cx="680" cy="165" r="4" />
-    <circle class="ripple ripple-a t-a1" cx="680" cy="165" r="3" />
-    <circle class="dot t-a2" cx="708" cy="172" r="4" />
-    <circle class="ripple ripple-a t-a2" cx="708" cy="172" r="3" />
-    <circle class="dot t-a3" cx="736" cy="163" r="4" />
-    <circle class="ripple ripple-a t-a3" cx="736" cy="163" r="3" />
-    <path class="mark curve t-ac" pathLength="1"
+    <circle class="dot t-1" cx="680" cy="165" r="4" />
+    <circle class="ripple ripple-a t-1" cx="680" cy="165" r="3" />
+    <circle class="dot t-2" cx="708" cy="172" r="4" />
+    <circle class="ripple ripple-a t-2" cx="708" cy="172" r="3" />
+    <circle class="dot t-3" cx="736" cy="163" r="4" />
+    <circle class="ripple ripple-a t-3" cx="736" cy="163" r="3" />
+    <path class="mark curve t-c" pathLength="1"
           d="M 681 131 C 675 121 690 105 712 105
                        C 733 105 749 116 746 126
                        C 743 136 726 142 707 140
                        C 692 138.5 680 133 678 126" />
   </g>
   <g>
-    <circle class="dot t-h1" cx="127.71" cy="165.43" r="5" />
-    <circle class="ripple ripple-h t-h1" cx="127.71" cy="165.43" r="3" />
-    <circle class="dot t-h2" cx="167.71" cy="175.43" r="5" />
-    <circle class="ripple ripple-h t-h2" cx="167.71" cy="175.43" r="3" />
-    <circle class="dot t-h3" cx="207.71" cy="162.57" r="5" />
-    <circle class="ripple ripple-h t-h3" cx="207.71" cy="162.57" r="3" />
-    <path class="mark curve t-hc" pathLength="1" stroke-width="4"
+    <circle class="dot t-1" cx="127.71" cy="165.43" r="5" />
+    <circle class="ripple ripple-h t-1" cx="127.71" cy="165.43" r="3" />
+    <circle class="dot t-2" cx="167.71" cy="175.43" r="5" />
+    <circle class="ripple ripple-h t-2" cx="167.71" cy="175.43" r="3" />
+    <circle class="dot t-3" cx="207.71" cy="162.57" r="5" />
+    <circle class="ripple ripple-h t-3" cx="207.71" cy="162.57" r="3" />
+    <path class="mark curve t-c" pathLength="1" stroke-width="4"
           d="M 129.14 116.86 C 120.57 102.57 142 79.71 173.43 79.71
                               C 203.43 79.71 226.29 95.43 222 109.71
                               C 217.71 124 193.43 132.57 166.29 129.71
