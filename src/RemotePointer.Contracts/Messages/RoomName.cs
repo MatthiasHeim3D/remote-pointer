@@ -8,8 +8,14 @@ namespace RemotePointer.Contracts.Messages;
 /// </summary>
 public static class RoomName
 {
-    /// <summary>The room a client joins until it names another one.</summary>
-    public const string Default = "general";
+    /// <summary>The room a client joins until it names another one, in canonical form.</summary>
+    public const string Default = "public";
+
+    /// <summary>
+    /// <see cref="Default"/> as a fresh client shows and stores it. Names are kept as typed and
+    /// folded only for matching, so the capital is cosmetic: it names the same room.
+    /// </summary>
+    public const string DefaultDisplayName = "Public";
 
     public const int MaximumLength = 64;
 

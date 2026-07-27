@@ -34,7 +34,7 @@ A room is a plain name that scopes the host directory. Clients see each other wh
 
 A room is not an access control. Everyone reaching the relay has already presented the server password, and any of them can type any room name. Rooms separate teams from each other's clutter; the password is the boundary that matters.
 
-Room names ignore case and surrounding spaces, so `Engineering` and `engineering` are one room. A client that names nothing lands in `general`.
+Room names ignore case and surrounding spaces, so `Engineering` and `engineering` are one room. A client that names nothing lands in `public`.
 
 ## The host directory
 

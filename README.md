@@ -25,7 +25,7 @@ Every annotator must be **individually approved** by the host, and the host can 
 ## Using it
 
 1. On every PC, enter the relay's **server password** in Settings. It is what gets the client onto the relay at all — without it, nothing connects.
-2. Put every PC in the same **room** in Settings. Clients see each other when they are in the same room, and the name is shown back in Settings so you can check it at a glance. Fresh installs all start in `general`.
+2. Put every PC in the same **room** in Settings. Clients see each other when they are in the same room, and the name is shown back in Settings so you can check it at a glance. Fresh installs all start in `Public`.
 3. On the host PC, choose **Available** to become discoverable.
 4. On each annotator PC, pick that host from the list and request access.
 5. The host approves each request.

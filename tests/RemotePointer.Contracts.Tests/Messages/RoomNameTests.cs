@@ -53,4 +53,13 @@ public sealed class RoomNameTests
         Assert.True(RoomName.IsValid(RoomName.Default));
         Assert.Equal(RoomName.Default, RoomName.Normalize(RoomName.Default));
     }
+
+    [Fact]
+    public void DefaultDisplayName_NamesTheSameRoomTheRelayPutsUnnamedConnectionsIn()
+    {
+        // A fresh client shows and stores this one. If it folded to anything else, that client
+        // would sit in a room of its own while believing it was in the default one.
+        Assert.True(RoomName.IsValid(RoomName.DefaultDisplayName));
+        Assert.Equal(RoomName.Default, RoomName.Normalize(RoomName.DefaultDisplayName));
+    }
 }

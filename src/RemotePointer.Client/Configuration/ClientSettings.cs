@@ -324,7 +324,7 @@ public sealed class ClientSettings
     private static string NormalizeRoom(string? room)
     {
         var trimmed = room?.Trim();
-        return RoomName.IsValid(trimmed) ? trimmed! : RoomName.Default;
+        return RoomName.IsValid(trimmed) ? trimmed! : RoomName.DefaultDisplayName;
     }
 
     private static bool IsSupportedUserName(string? userName) =>
@@ -412,7 +412,7 @@ public sealed class ClientSettings
         bool HasShownUsageHints = false,
         int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent,
         string AnnotationColor = AnnotationColors.Default,
-        string Room = RoomName.Default);
+        string Room = RoomName.DefaultDisplayName);
 }
 
 public sealed class ServerSettings
@@ -433,7 +433,7 @@ public sealed class ServerSettings
     /// the relay already presented the password — so it is stored in the preferences file as
     /// typed and shown back in Settings.
     /// </summary>
-    public string Room { get; set; } = RoomName.Default;
+    public string Room { get; set; } = RoomName.DefaultDisplayName;
 }
 
 public sealed class PointerSettings

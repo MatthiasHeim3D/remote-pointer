@@ -68,7 +68,7 @@ $minimumPasswordLength = 8
 $dataDirectoryVariable = 'REMOTEPOINTER_DATA_DIRECTORY'
 $serverUrlVariable = 'REMOTEPOINTER_SERVER_BASEURL'
 $serverPasswordVariable = 'Access__ServerPassword'
-$developmentRoom = 'general'
+$developmentRoom = 'Public'
 
 $previousServerOverride = [Environment]::GetEnvironmentVariable(
     $serverUrlVariable,

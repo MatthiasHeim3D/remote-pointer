@@ -106,7 +106,9 @@ public sealed class MainWindowViewModelTests
             "has no password of its own",
             viewModel.ServerPasswordWarning,
             StringComparison.Ordinal);
-        Assert.Equal($"No available clients in {RoomName.Default}", viewModel.EmptyClientListMessage);
+        Assert.Equal(
+            $"No available clients in room \"{RoomName.DefaultDisplayName}\"",
+            viewModel.EmptyClientListMessage);
     }
 
     [Fact]
@@ -237,8 +239,8 @@ public sealed class MainWindowViewModelTests
             hostRelayClient: relay,
             clientSettings: testSettings.Settings);
 
-        Assert.Equal(RoomName.Default, viewModel.RoomInput);
-        Assert.Equal(RoomName.Default, viewModel.Room);
+        Assert.Equal(RoomName.DefaultDisplayName, viewModel.RoomInput);
+        Assert.Equal(RoomName.DefaultDisplayName, viewModel.Room);
 
         viewModel.RoomInput = "Engineering";
         await viewModel.CloseSettingsAsync();
@@ -263,7 +265,7 @@ public sealed class MainWindowViewModelTests
         viewModel.RoomInput = new string('r', RoomName.MaximumLength + 1);
 
         Assert.NotEmpty(viewModel.RoomValidationMessage);
-        Assert.Equal(RoomName.Default, viewModel.Room);
+        Assert.Equal(RoomName.DefaultDisplayName, viewModel.Room);
     }
 
     [Fact]

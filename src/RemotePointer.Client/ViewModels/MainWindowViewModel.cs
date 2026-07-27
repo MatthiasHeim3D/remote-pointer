@@ -70,7 +70,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool serverPasswordRequired;
     private bool hasRelayCapabilities;
     private string serverPasswordInput = string.Empty;
-    private string roomInput = RoomName.Default;
+    private string roomInput = RoomName.DefaultDisplayName;
     private bool pendingRelayReinitialization;
     private string? lastTestedServerAddress;
     private bool lastServerConnectionTestSucceeded;
@@ -102,7 +102,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         this.serverConnectionTester = serverConnectionTester ?? new ServerConnectionTester();
         this.serverPasswordStore = serverPasswordStore;
         hasServerPassword = !string.IsNullOrWhiteSpace(clientSettings?.Server.PasswordKey);
-        roomInput = clientSettings?.Server.Room ?? RoomName.Default;
+        roomInput = clientSettings?.Server.Room ?? RoomName.DefaultDisplayName;
         var configuredServerAddress = clientSettings?.Server.BaseUrl
             ?? hostRelayClient?.ServerUrl
             ?? string.Empty;
@@ -575,7 +575,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             : $"Use {RoomName.MaximumLength} characters or fewer.";
 
     /// <summary>The room this client is in, which is the one the directory is scoped to.</summary>
-    public string Room => clientSettings?.Server.Room ?? RoomName.Default;
+    public string Room => clientSettings?.Server.Room ?? RoomName.DefaultDisplayName;
 
     public string UserName
     {
