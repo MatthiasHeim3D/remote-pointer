@@ -80,7 +80,8 @@ public sealed class ClientSettings
         bool? showUsageHints = null,
         bool? hostAvailable = null,
         int? drawingOpacityPercent = null,
-        string? annotationColor = null)
+        string? annotationColor = null,
+        string? room = null)
     {
         var normalizedServerAddress = NormalizeServerAddress(serverAddress);
         var normalizedUserName = userName.Trim();
@@ -121,6 +122,10 @@ public sealed class ClientSettings
         {
             Pointer.AnnotationColor = AnnotationColors.Normalize(annotationColor);
         }
+        if (room is not null)
+        {
+            Server.Room = NormalizeRoom(room);
+        }
         WriteUserPreferences();
     }
 
@@ -156,7 +161,8 @@ public sealed class ClientSettings
                 Host.IsAvailable,
                 Pointer.HasShownUsageHints,
                 Pointer.DrawingOpacityPercent,
-                Pointer.AnnotationColor),
+                Pointer.AnnotationColor,
+                Server.Room),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -308,6 +314,17 @@ public sealed class ClientSettings
         Pointer.DrawingOpacityPercent = PointerSettings.ClampDrawingOpacityPercent(
             preferences.DrawingOpacityPercent);
         Pointer.AnnotationColor = AnnotationColors.Normalize(preferences.AnnotationColor);
+        Server.Room = NormalizeRoom(preferences.Room);
+    }
+
+    /// <summary>
+    /// Keeps the user's own capitalisation, because the name is shown back to them, and falls
+    /// back to the default room for anything that cannot be used as a name.
+    /// </summary>
+    private static string NormalizeRoom(string? room)
+    {
+        var trimmed = room?.Trim();
+        return RoomName.IsValid(trimmed) ? trimmed! : RoomName.Default;
     }
 
     private static bool IsSupportedUserName(string? userName) =>
@@ -394,7 +411,8 @@ public sealed class ClientSettings
         bool HostAvailable = false,
         bool HasShownUsageHints = false,
         int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent,
-        string AnnotationColor = AnnotationColors.Default);
+        string AnnotationColor = AnnotationColors.Default,
+        string Room = RoomName.Default);
 }
 
 public sealed class ServerSettings
@@ -404,10 +422,18 @@ public sealed class ServerSettings
     public int[] ReconnectDelaysSeconds { get; init; } = [0, 2, 5, 10, 30];
 
     /// <summary>
-    /// The key derived from the server password. It is loaded from and written to the protected
-    /// store rather than the preferences file, so it is never serialised alongside the settings.
+    /// The key derived from the server password, which the relay demands before it will talk to
+    /// this client at all. It is loaded from and written to the protected store rather than the
+    /// preferences file, so it is never serialised alongside the settings.
     /// </summary>
     public string? PasswordKey { get; set; }
+
+    /// <summary>
+    /// The room whose host directory this client takes part in. It is not a secret — everyone on
+    /// the relay already presented the password — so it is stored in the preferences file as
+    /// typed and shown back in Settings.
+    /// </summary>
+    public string Room { get; set; } = RoomName.Default;
 }
 
 public sealed class PointerSettings

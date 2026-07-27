@@ -10,8 +10,9 @@ The primary objectives are to prevent remote control, prevent unintended disclos
 
 | Asset | Location | Protection |
 | --- | --- | --- |
-| Server password | Client memory during entry; derived key in a DPAPI-protected current-user file | Never sent to the relay or written to the preferences file; PBKDF2-SHA256 derivation makes a leaked key expensive to attack offline; the settings screen shows only a 32-bit check code derived from the key under a separate domain separator |
-| Host name and profile picture | Client settings and relay session memory | Published only to clients presenting the same derived key; sent to the relay over TLS; never persisted server-side |
+| Server password | Client memory during entry; derived key in a DPAPI-protected current-user file; relay configuration | Only the derived key crosses the network, in an `Authorization` header rather than the query string; never written to the client preferences file and never shown back; PBKDF2-SHA256 derivation makes a leaked key expensive to attack offline; the relay holds the derived key in memory and compares in constant time |
+| Room name | Client preferences file, relay connection state, and the wire | None, deliberately: it is a label, not a secret, so that the user can read back which room they are in |
+| Host name and profile picture | Client settings and relay session memory | Published only to clients admitted by the server password, and only to those in the same room; sent to the relay over TLS; never persisted server-side |
 | Session and reconnect tokens | Client memory and DPAPI-protected current-user file | TLS in transit, DPAPI at rest, hashes on relay |
 | Session secret | Host memory | Cryptographic generation; never logged or sent to annotator |
 | Normalized pointer event | Client memory and relay transit | TLS, TTL, authorization, sequence window, rate limit; never persisted |
@@ -35,8 +36,9 @@ No flow contains pixels, window titles, processes, keystrokes, clipboard content
 
 | Threat | Control | Residual risk |
 | --- | --- | --- |
-| Session-identity guessing | 256-bit random session IDs, published only inside a password-scoped directory, explicit host approval before any credential | Online attempts are not globally throttled by source IP in the MVP; network perimeter controls remain required |
-| Host-directory enumeration | Server password scopes every listing, join and notification to clients holding the same one; per-session host visibility; approval before credentials | The directory cannot be switched off, because it is the only join path; entries carry the host's chosen name and profile picture, so everyone holding the password sees them without approval; the password is shared human-to-human, cannot be revoked for one person, and a relay with `RequireServerPassword=false` puts every passwordless client in one open pool |
+| Session-identity guessing | 256-bit random session IDs, published only to clients the server password admitted, explicit host approval before any credential | Online attempts are not globally throttled by source IP in the MVP; network perimeter controls remain required |
+| Relay access | The server password is required to open a connection; a client without it is refused at the handshake and never reaches the hub | The password is shared human-to-human and cannot be revoked for one person without changing it for everyone and restarting the relay; a relay started with no password configured admits anyone who can reach its address |
+| Host-directory enumeration | Rooms scope every listing, join and notification to the clients in the same one; per-session host visibility; approval before credentials | Rooms are not an access control: any client the password admitted can name any room and list what is published there. The directory cannot be switched off, because it is the only join path, and entries carry the host's chosen name and profile picture, so everyone in the room sees them without approval |
 | Annotator impersonation | Random client identity, host-visible machine name, explicit approval, role token | Machine name is not cryptographic identity until optional Entra ID is added |
 | Credential theft from disk | Windows DPAPI CurrentUser encryption and no plaintext fallback | Malware running as the same user can call DPAPI and remains outside the app's isolation capability |
 | Token replay | Session/role/client binding and single-use reconnect-token rotation | A token stolen from live process memory can be used until rotation or expiry |

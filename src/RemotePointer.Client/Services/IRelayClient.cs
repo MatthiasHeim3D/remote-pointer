@@ -47,12 +47,19 @@ public interface IRelayClient : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Sets the derived group key to present on this and every later connection, and presents
-    /// it right away when the connection is live. The relay keeps a connection in the group its
-    /// last key derived to, so a key that is only stored locally leaves this client listed to,
-    /// and joinable from, the password it just left.
+    /// Sets the derived key this client presents to get onto the relay. The key is presented
+    /// when a connection is established, so a live connection — which the old password admitted
+    /// — is dropped and the next call reconnects with the new one.
     /// </summary>
     Task SetServerPasswordKeyAsync(string? key, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Names the room whose directory this client takes part in, and names it to the relay right
+    /// away when the connection is live. The relay keeps a connection in the room it last named,
+    /// so a room that is only stored locally leaves this client listed in, and joinable from,
+    /// the room it just left.
+    /// </summary>
+    Task SetRoomAsync(string? name, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AvailableHostDescriptor>> GetAvailableHostsAsync(
         CancellationToken cancellationToken = default);

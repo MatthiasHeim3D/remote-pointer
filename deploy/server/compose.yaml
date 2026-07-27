@@ -9,7 +9,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       Deployment__BehindHttpsProxy: "true"
-      Sessions__RequireServerPassword: ${REMOTEPOINTER_REQUIRE_SERVER_PASSWORD:-true}
+      Access__ServerPassword: ${REMOTEPOINTER_SERVER_PASSWORD:?Set REMOTEPOINTER_SERVER_PASSWORD in .env}
 
   caddy:
     image: caddy:2-alpine

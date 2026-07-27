@@ -5,6 +5,7 @@ using RemotePointer.Client.Tests.Fakes;
 using RemotePointer.Client.ViewModels;
 using RemotePointer.Contracts.Coordinates;
 using RemotePointer.Contracts.Messages;
+using RemotePointer.Contracts.Security;
 
 namespace RemotePointer.Client.Tests.ViewModels;
 
@@ -30,34 +31,60 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task NoServerPassword_WarnsAndSaysWhyTheListIsEmpty()
+    public void RefusedServerPassword_WarnsAndSaysWhyTheListIsEmpty()
     {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
         using var overlay = new FakeOverlayService();
-        var relay = new FakeRelayClient
-        {
-            Capabilities = new RelayCapabilities(ServerPasswordRequired: true),
-        };
+        var relay = new FakeRelayClient();
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
             overlay,
             hostRelayClient: relay,
-            clientSettings: new ClientSettings());
+            clientSettings: testSettings.Settings);
 
-        await viewModel.InitializeAsync();
+        // Being turned away is all a client without the password ever learns about a protected
+        // relay: it never connects, so it never gets to ask what the relay requires.
+        relay.RaiseConnectionStatus(
+            RelayConnectionStatus.Unauthorized,
+            "This relay requires a server password.");
 
         Assert.False(viewModel.HasServerPassword);
+        Assert.True(viewModel.ServerPasswordRequired);
         Assert.True(viewModel.ShowServerPasswordWarning);
         Assert.Contains(
             "requires a server password",
             viewModel.ServerPasswordWarning,
             StringComparison.Ordinal);
         Assert.Equal(
-            "Set a server password in Settings to see other clients.",
+            "The server password was not accepted. Check it in Settings.",
             viewModel.EmptyClientListMessage);
     }
 
     [Fact]
-    public async Task OpenRelayWithoutPassword_WarnsThatEveryoneCanSeeTheProfile()
+    public void WrongServerPassword_IsReportedApartFromNotHavingOne()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        settings.Server.PasswordKey = "stored-key";
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: settings);
+
+        relay.RaiseConnectionStatus(
+            RelayConnectionStatus.Unauthorized,
+            "The server password is not correct.");
+
+        Assert.Contains(
+            "did not accept this password",
+            viewModel.ServerPasswordWarning,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OpenRelay_WarnsThatAnyoneWhoReachesItIsAClient()
     {
         using var overlay = new FakeOverlayService();
         var relay = new FakeRelayClient
@@ -73,12 +100,13 @@ public sealed class MainWindowViewModelTests
         await viewModel.InitializeAsync();
 
         Assert.False(viewModel.ServerPasswordRequired);
+        Assert.True(viewModel.IsRelayUnprotected);
         Assert.True(viewModel.ShowServerPasswordWarning);
         Assert.Contains(
-            "visible to everyone",
+            "has no password of its own",
             viewModel.ServerPasswordWarning,
             StringComparison.Ordinal);
-        Assert.Equal("No available clients", viewModel.EmptyClientListMessage);
+        Assert.Equal($"No available clients in {RoomName.Default}", viewModel.EmptyClientListMessage);
     }
 
     [Fact]
@@ -105,8 +133,6 @@ public sealed class MainWindowViewModelTests
         Assert.Null(settings.Server.PasswordKey);
         Assert.Null(relay.ServerPasswordKey);
         Assert.Equal(1, relay.ServerPasswordKeyUpdateCount);
-        Assert.False(viewModel.HasServerPasswordCheckCode);
-        Assert.Empty(viewModel.ServerPasswordCheckCode);
     }
 
     [Fact]
@@ -174,36 +200,44 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ServerPasswordCheckCode_IdentifiesTheCurrentPasswordAndFollowsAChange()
+    public async Task Room_IsPersistedAsTypedAndNamedToBothRelayConnections()
     {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
         using var overlay = new FakeOverlayService();
         var relay = new FakeRelayClient();
-        var settings = new ClientSettings();
-        settings.Server.PasswordKey = ServerPasswordKey.Derive("first team password");
         using var viewModel = new MainWindowViewModel(
             new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
             overlay,
             hostRelayClient: relay,
-            clientSettings: settings);
-        var raised = new List<string?>();
-        viewModel.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+            clientSettings: testSettings.Settings);
 
-        var first = viewModel.ServerPasswordCheckCode;
-        Assert.True(viewModel.HasServerPasswordCheckCode);
-        Assert.Equal(
-            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("first team password")),
-            first);
+        Assert.Equal(RoomName.Default, viewModel.RoomInput);
+        Assert.Equal(RoomName.Default, viewModel.Room);
 
-        // Replacing one password with another leaves HasServerPassword true throughout, so the
-        // code has to be raised on its own or the settings screen keeps showing the old one.
-        viewModel.ServerPasswordInput = "second team password";
+        viewModel.RoomInput = "Engineering";
         await viewModel.CloseSettingsAsync();
 
-        Assert.NotEqual(first, viewModel.ServerPasswordCheckCode);
-        Assert.Equal(
-            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("second team password")),
-            viewModel.ServerPasswordCheckCode);
-        Assert.Contains(nameof(MainWindowViewModel.ServerPasswordCheckCode), raised);
+        // Kept as typed, because the settings screen shows it back; the relay is what folds
+        // case, so a colleague who typed it differently is still in the same room.
+        Assert.Equal("Engineering", viewModel.Room);
+        Assert.Equal("Engineering", testSettings.Settings.Server.Room);
+        Assert.Equal("Engineering", relay.Room);
+        Assert.Equal("Engineering", TemporaryClientSettings.Reload(testSettings).Server.Room);
+    }
+
+    [Fact]
+    public void UnusableRoom_IsReportedAndLeavesTheStoredOneAlone()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: new ClientSettings());
+
+        viewModel.RoomInput = new string('r', RoomName.MaximumLength + 1);
+
+        Assert.NotEmpty(viewModel.RoomValidationMessage);
+        Assert.Equal(RoomName.Default, viewModel.Room);
     }
 
     [Fact]
@@ -1331,6 +1365,10 @@ public sealed class MainWindowViewModelTests
         }
 
         public ClientSettings Settings { get; }
+
+        /// <summary>Reads the same directory again, to see what actually reached the disk.</summary>
+        public static ClientSettings Reload(TemporaryClientSettings settings) =>
+            ClientSettings.Load(settings.directory, null);
 
         public void Dispose() => Directory.Delete(directory, recursive: true);
     }

@@ -7,15 +7,17 @@
     separate users on separate machines: distinct identities, distinct preferences, distinct
     saved credentials. Nothing is shared with each other or with an installed release.
 
-    Every client is seeded with the same relay address and server password, which is what makes
-    them visible to one another in the host directory. The directories are deleted when the
-    session ends unless -KeepClientData is given.
+    The relay is started with a server password and every client is seeded with the key derived
+    from it, which is what gets them onto the relay at all. They all start in the same room, so
+    they see one another in the host directory. The directories are deleted when the session ends
+    unless -KeepClientData is given.
 
 .PARAMETER ClientCount
     How many clients to start. Defaults to 2.
 
 .PARAMETER ServerPassword
-    The password all clients share. Must be at least 8 characters, matching the client's own rule.
+    The relay's password, which all clients present. Must be at least 8 characters, matching the
+    rule the client and the relay both apply.
 
 .PARAMETER KeepClientData
     Leaves the per-client data directories in place for inspection instead of deleting them.
@@ -55,9 +57,9 @@ $processes = [System.Collections.Generic.List[System.Diagnostics.Process]]::new(
 $clientProcesses = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
 $clientDataRoot = $null
 
-# Mirrors of the client's own constants. Assert-ClientCryptoConstant checks each one against the
-# source below, so a change there fails this script loudly instead of quietly putting the clients
-# into different relay groups.
+# Mirrors of the shared derivation constants. Assert-ClientCryptoConstant checks each one against
+# the source below, so a change there fails this script loudly instead of quietly seeding clients
+# with a key the relay will not accept.
 $passwordSaltText = 'RemotePointer.ServerPassword.v1'
 $passwordIterations = 210000
 $passwordKeyBytes = 32
@@ -65,12 +67,17 @@ $protectionEntropyText = 'RemotePointer.SessionCredential.v1'
 $minimumPasswordLength = 8
 $dataDirectoryVariable = 'REMOTEPOINTER_DATA_DIRECTORY'
 $serverUrlVariable = 'REMOTEPOINTER_SERVER_BASEURL'
+$serverPasswordVariable = 'Access__ServerPassword'
+$developmentRoom = 'general'
 
 $previousServerOverride = [Environment]::GetEnvironmentVariable(
     $serverUrlVariable,
     [EnvironmentVariableTarget]::Process)
 $previousDataDirectory = [Environment]::GetEnvironmentVariable(
     $dataDirectoryVariable,
+    [EnvironmentVariableTarget]::Process)
+$previousServerPassword = [Environment]::GetEnvironmentVariable(
+    $serverPasswordVariable,
     [EnvironmentVariableTarget]::Process)
 
 function Test-TcpPort {
@@ -135,18 +142,18 @@ function Assert-ClientCryptoConstant {
     }
 }
 
-function Get-ServerPasswordGroupKey {
+function Get-ServerPasswordKey {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute(
         'PSAvoidUsingPlainTextForPassword',
         'Password',
-        Justification = 'Mirrors the client derivation, which takes the password characters.')]
+        Justification = 'Mirrors the shared derivation, which takes the password characters.')]
     param(
         [Parameter(Mandatory)]
         [string]$Password
     )
 
-    # The relay only ever sees this derived key, never the password, and two clients share a
-    # group precisely when they derive the same value.
+    # The relay only ever sees this derived key, never the password. It derives the same value
+    # from its own configured password and admits a client precisely when the two match.
     $salt = [System.Text.Encoding]::UTF8.GetBytes($passwordSaltText)
     $passwordBytes = [System.Text.Encoding]::UTF8.GetBytes($Password.Trim())
     $derive = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
@@ -173,12 +180,14 @@ function New-ClientDataDirectory {
         [string]$UserName,
 
         [Parameter(Mandatory)]
-        [string]$GroupKey
+        [string]$DerivedKey
     )
 
     $sessionDirectory = Join-Path $Path 'Sessions'
     New-Item -ItemType Directory -Path $sessionDirectory -Force | Out-Null
 
+    # The room is plain text on purpose, unlike the key below: it is a label the client shows
+    # back in Settings, not a secret, and every development client starts in the same one.
     $preferences = [ordered]@{
         serverAddress               = $developmentServerUrl
         userName                    = $UserName
@@ -189,6 +198,7 @@ function New-ClientDataDirectory {
         showUsageHints              = $false
         hostAvailable               = $false
         hasShownUsageHints          = $true
+        room                        = $developmentRoom
     }
     $preferencesJson = $preferences | ConvertTo-Json -Compress
     [System.IO.File]::WriteAllText(
@@ -200,7 +210,7 @@ function New-ClientDataDirectory {
     # with the client's fixed entropy. The account's master key is untouched, so deleting these
     # directories is the whole of the cleanup.
     $entropy = [System.Text.Encoding]::UTF8.GetBytes($protectionEntropyText)
-    $plaintext = [System.Text.Encoding]::UTF8.GetBytes($GroupKey)
+    $plaintext = [System.Text.Encoding]::UTF8.GetBytes($DerivedKey)
     $protectedBytes = [System.Security.Cryptography.ProtectedData]::Protect(
         $plaintext,
         $entropy,
@@ -219,15 +229,15 @@ try {
     }
 
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Client\Services\ServerPasswordKey.cs' `
+        -RelativePath 'src\RemotePointer.Contracts\Security\ServerPasswordKey.cs' `
         -Pattern "`"$passwordSaltText`"" `
         -Description 'the expected password salt'
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Client\Services\ServerPasswordKey.cs' `
+        -RelativePath 'src\RemotePointer.Contracts\Security\ServerPasswordKey.cs' `
         -Pattern 'Iterations = 210_000' `
         -Description 'the expected password iteration count'
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Client\Services\ServerPasswordKey.cs' `
+        -RelativePath 'src\RemotePointer.Contracts\Security\ServerPasswordKey.cs' `
         -Pattern "KeyBytes = $passwordKeyBytes" `
         -Description 'the expected derived key length'
     Assert-ClientCryptoConstant `
@@ -267,6 +277,13 @@ try {
     $dotnetPath = (Get-Command dotnet -ErrorAction Stop).Source
 
     Write-Host "Starting relay at $developmentServerUrl..." -ForegroundColor Cyan
+
+    # The relay inherits this and derives the same key the clients are seeded with, so the
+    # development session exercises the real front door rather than an open relay.
+    [Environment]::SetEnvironmentVariable(
+        $serverPasswordVariable,
+        $ServerPassword,
+        [EnvironmentVariableTarget]::Process)
     $server = Start-Process `
         -FilePath $dotnetPath `
         -ArgumentList @(
@@ -303,7 +320,7 @@ try {
     $clientDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
         "RemotePointer.Development\$([Guid]::NewGuid().ToString('N'))")
     New-Item -ItemType Directory -Path $clientDataRoot -Force | Out-Null
-    $groupKey = Get-ServerPasswordGroupKey -Password $ServerPassword
+    $derivedKey = Get-ServerPasswordKey -Password $ServerPassword
 
     $clientLabel = if ($ClientCount -eq 1) { 'client' } else { 'clients' }
     Write-Host "Starting $ClientCount $clientLabel..." -ForegroundColor Cyan
@@ -312,7 +329,7 @@ try {
         New-ClientDataDirectory `
             -Path $dataDirectory `
             -UserName "Dev Client $index" `
-            -GroupKey $groupKey
+            -DerivedKey $derivedKey
 
         # Set immediately before each start: a child inherits this process's environment as it
         # stands at that moment, which is what gives every client its own directory.
@@ -334,6 +351,7 @@ try {
     Write-Host "Server PID: $($server.Id)" -ForegroundColor Green
     Write-Host "Client PIDs: $(($clientProcesses | ForEach-Object { $_.Id }) -join ', ')" -ForegroundColor Green
     Write-Host "Server password: $ServerPassword" -ForegroundColor Green
+    Write-Host "Room: $developmentRoom" -ForegroundColor Green
     Write-Host "Client data: $clientDataRoot"
     Write-Host "Server logs: $logDirectory"
     Write-Host 'Close every client or press Ctrl+C to stop the development session.'
@@ -373,6 +391,10 @@ finally {
     [Environment]::SetEnvironmentVariable(
         $dataDirectoryVariable,
         $previousDataDirectory,
+        [EnvironmentVariableTarget]::Process)
+    [Environment]::SetEnvironmentVariable(
+        $serverPasswordVariable,
+        $previousServerPassword,
         [EnvironmentVariableTarget]::Process)
 
     if ($clientDataRoot -and (Test-Path -LiteralPath $clientDataRoot)) {

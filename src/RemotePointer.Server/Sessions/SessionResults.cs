@@ -2,9 +2,13 @@ using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Server.Sessions;
 
-public sealed record RelayGroupChange(
-    string GroupKey,
-    string? PreviousGroupKey,
+/// <summary>
+/// The room a connection ended up in. <paramref name="PreviousRoom"/> is null when the
+/// connection was already there, which is how a caller tells a move from a repeat.
+/// </summary>
+public sealed record RelayRoomChange(
+    string Room,
+    string? PreviousRoom,
     SessionTerminationResult? CancelledJoinRequest = null);
 
 public sealed record JoinSessionResult(
@@ -84,16 +88,16 @@ public sealed record ResumeSessionResult(
     string? ReplacedConnectionId);
 
 /// <summary>
-/// <paramref name="GroupKey"/> is the group the affected session was published under, which is
-/// not always the group of the connection that caused the change: an approved annotator that
-/// changes its server password keeps its place in the session it was admitted to. It is the
-/// directory that gained or lost an entry, so it is the one to notify.
+/// <paramref name="Room"/> is the room the affected session was published in, which is not
+/// always the room of the connection that caused the change: an approved annotator that changes
+/// rooms keeps its place in the session it was admitted to. It is the directory that gained or
+/// lost an entry, so it is the one to notify.
 /// </summary>
 public sealed record SessionTerminationResult(
     string SessionId,
     IReadOnlyList<string> ConnectionIds,
     long PointerCount,
-    string GroupKey,
+    string Room,
     bool HostPreserved = false,
     string? AnnotatorConnectionId = null,
     string? HostConnectionId = null,
@@ -107,5 +111,5 @@ public sealed record ConnectionDisconnectResult(
     IReadOnlyList<string> AnnotatorConnectionIdsToEnd,
     string? HostConnectionId,
     SessionStateMessage? State,
-    string GroupKey,
+    string Room,
     string? CancelledAnnotatorRequestConnectionId = null);

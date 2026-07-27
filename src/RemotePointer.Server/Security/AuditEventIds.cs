@@ -7,6 +7,8 @@ public static class AuditEventIds
     public static readonly EventId ClientConnected = new(1000, nameof(ClientConnected));
     public static readonly EventId ClientDisconnected = new(1001, nameof(ClientDisconnected));
     public static readonly EventId PlaintextRejected = new(1002, nameof(PlaintextRejected));
+    public static readonly EventId ServerPasswordRejected = new(1003, nameof(ServerPasswordRejected));
+    public static readonly EventId RelayUnprotected = new(1004, nameof(RelayUnprotected));
     public static readonly EventId SessionCreated = new(1100, nameof(SessionCreated));
     public static readonly EventId AnnotatorJoinRequested = new(1101, nameof(AnnotatorJoinRequested));
     public static readonly EventId AnnotatorJoinRejected = new(1102, nameof(AnnotatorJoinRejected));

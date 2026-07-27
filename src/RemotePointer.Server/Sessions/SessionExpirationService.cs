@@ -25,7 +25,7 @@ public sealed class SessionExpirationService(
                 // it, so the peers that were listing it are told to read it again. Nothing else
                 // would tell them, and they would go on offering a host that cannot be
                 // joined until something unrelated changed.
-                await hubContext.Clients.Group(PointerHub.DirectoryGroupName(session.GroupKey))
+                await hubContext.Clients.Group(PointerHub.DirectoryGroupName(session.Room))
                     .HostDirectoryChanged()
                     .ConfigureAwait(false);
                 logger.LogInformation(

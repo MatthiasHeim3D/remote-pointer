@@ -9,14 +9,7 @@ public sealed class SessionManager : ISessionManager
 {
     private const int DefaultAnnotatorConnections = 2;
 
-    /// <summary>
-    /// The group every client shares when it presents no server password. It only ever holds
-    /// clients on a relay that allows them, because <see cref="SessionOptions.RequireServerPassword"/>
-    /// otherwise rejects an empty key.
-    /// </summary>
-    public const string OpenGroupKey = "";
-
-    private readonly Dictionary<string, string> connectionGroups = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> connectionRooms = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ConnectionMembership> connections = new(StringComparer.Ordinal);
     private readonly object syncRoot = new();
     private readonly PointerRateLimitOptions rateLimitOptions;
@@ -53,60 +46,48 @@ public sealed class SessionManager : ISessionManager
         }
     }
 
-    public bool ServerPasswordRequired => sessionOptions.RequireServerPassword;
-
     /// <summary>
-    /// Binds a connection to the group derived from its server password. The relay never sees
-    /// the password itself: the client derives a key from it and two clients reach the same
-    /// group only by deriving the same key, so groups need no registry and no cleanup.
+    /// Puts a connection in the room it named. Rooms are plain names rather than secrets — every
+    /// connection that gets this far already presented the server password — so a room needs no
+    /// registry and no cleanup: an unused one simply has no members.
     /// </summary>
-    public RelayGroupChange SetConnectionGroup(string connectionId, string? groupKey)
+    public RelayRoomChange SetConnectionRoom(string connectionId, string? room)
     {
         EnsureIdentifier(connectionId, nameof(connectionId));
-        var normalized = groupKey ?? OpenGroupKey;
-        if (normalized.Length > 128)
-        {
-            throw new SessionOperationException(
-                "invalid_group_key",
-                "The server password key is not valid.");
-        }
 
-        if (normalized.Length == 0 && sessionOptions.RequireServerPassword)
-        {
-            throw new SessionOperationException(
-                "server_password_required",
-                "This relay requires a server password. Set one in Settings.");
-        }
+        // Normalised rather than rejected: the name is a label, and a client that sends an
+        // unusable one belongs in the default room instead of being refused a directory.
+        var normalized = RoomName.Normalize(room);
 
         lock (syncRoot)
         {
-            // A connection that has not presented a password yet sits in the open pool, so
-            // that is the group it leaves when it presents one.
-            connectionGroups.TryGetValue(connectionId, out var previous);
-            previous ??= OpenGroupKey;
-            connectionGroups[connectionId] = normalized;
+            // A connection that has not named a room yet is in the default one, so that is the
+            // room it leaves when it names another.
+            connectionRooms.TryGetValue(connectionId, out var previous);
+            previous ??= RoomName.Default;
+            connectionRooms[connectionId] = normalized;
             if (string.Equals(previous, normalized, StringComparison.Ordinal))
             {
-                return new RelayGroupChange(normalized, null);
+                return new RelayRoomChange(normalized, null);
             }
 
-            return new RelayGroupChange(
+            return new RelayRoomChange(
                 normalized,
                 previous,
                 MoveConnectionSessionNoLock(connectionId, normalized));
         }
     }
 
-    public string GetConnectionGroup(string connectionId)
+    public string GetConnectionRoom(string connectionId)
     {
         if (string.IsNullOrWhiteSpace(connectionId))
         {
-            return OpenGroupKey;
+            return RoomName.Default;
         }
 
         lock (syncRoot)
         {
-            return GetConnectionGroupNoLock(connectionId);
+            return GetConnectionRoomNoLock(connectionId);
         }
     }
 
@@ -145,7 +126,6 @@ public sealed class SessionManager : ISessionManager
         lock (syncRoot)
         {
             EnsureConnectionIsUnbound(connectionId);
-            EnsureGroupIsPermittedNoLock(connectionId);
             var now = timeProvider.GetUtcNow();
             var sessionId = GenerateUniqueSessionId();
             var sessionSecret = secretGenerator.GenerateSecret();
@@ -171,7 +151,7 @@ public sealed class SessionManager : ISessionManager
                 host,
                 sessionOptions.SequenceWindowSize,
                 annotatorLimit,
-                GetConnectionGroupNoLock(connectionId));
+                GetConnectionRoomNoLock(connectionId));
             session.IsDiscoverable = true;
 
             sessions.Add(sessionId, session);
@@ -196,19 +176,14 @@ public sealed class SessionManager : ISessionManager
     {
         lock (syncRoot)
         {
-            var groupKey = connectionId is null
-                ? OpenGroupKey
-                : GetConnectionGroupNoLock(connectionId);
-            if (sessionOptions.RequireServerPassword && groupKey.Length == 0)
-            {
-                return [];
-            }
-
+            var room = connectionId is null
+                ? RoomName.Default
+                : GetConnectionRoomNoLock(connectionId);
             var now = timeProvider.GetUtcNow();
             return sessions.Values
                 .Where(session =>
                     session.IsDiscoverable
-                    && string.Equals(session.GroupKey, groupKey, StringComparison.Ordinal)
+                    && string.Equals(session.Room, room, StringComparison.Ordinal)
                     && session.ExpiresAt > now
                     && session.Host.ConnectionId is not null
                     && session.PendingAnnotator is null
@@ -740,10 +715,10 @@ public sealed class SessionManager : ISessionManager
                     session.ApplicationInstanceId = applicationInstanceId;
                 }
 
-                // The resuming connection presented its password before it resumed, and a
-                // client whose password changed while it was away must not come back into
-                // the group it left.
-                session.GroupKey = GetConnectionGroupNoLock(connectionId);
+                // The resuming connection named its room before it resumed, and a client that
+                // changed rooms while it was away must not bring its session back into the
+                // room it left.
+                session.Room = GetConnectionRoomNoLock(connectionId);
             }
             connections.Add(
                 connectionId,
@@ -944,7 +919,7 @@ public sealed class SessionManager : ISessionManager
         {
             // Group membership belongs to the connection rather than to a session, so it is
             // released here whether or not the connection ever joined one.
-            connectionGroups.Remove(connectionId);
+            connectionRooms.Remove(connectionId);
             if (!connections.TryGetValue(connectionId, out var membership)
                 || !sessions.TryGetValue(membership.SessionId, out var session))
             {
@@ -978,7 +953,7 @@ public sealed class SessionManager : ISessionManager
                     annotatorConnectionIds,
                     HostConnectionId: null,
                     CreateState(session),
-                    session.GroupKey);
+                    session.Room);
             }
 
             connections.Remove(connectionId);
@@ -1004,7 +979,7 @@ public sealed class SessionManager : ISessionManager
                 AnnotatorConnectionIdsToEnd: [],
                 session.Host.ConnectionId,
                 CreateState(session),
-                session.GroupKey,
+                session.Room,
                 cancelledAnnotatorRequestConnectionId);
         }
     }
@@ -1063,12 +1038,12 @@ public sealed class SessionManager : ISessionManager
         applicationInstanceId = string.IsNullOrWhiteSpace(applicationInstanceId)
             ? clientInstanceId
             : applicationInstanceId;
-        // Sharing a server password is what makes two clients visible and reachable to each
-        // other, so a request that crosses that boundary is refused without confirming whether
-        // the session exists.
+        // Sharing a room is what makes two clients visible and reachable to each other, so a
+        // request from outside the session's room is refused without confirming whether the
+        // session exists.
         if (!string.Equals(
-                session.GroupKey,
-                GetConnectionGroupNoLock(connectionId),
+                session.Room,
+                GetConnectionRoomNoLock(connectionId),
                 StringComparison.Ordinal))
         {
             return RejectedJoin("The selected host is no longer available.");
@@ -1124,20 +1099,20 @@ public sealed class SessionManager : ISessionManager
         return sessionId;
     }
 
-    private string GetConnectionGroupNoLock(string connectionId) =>
-        connectionGroups.TryGetValue(connectionId, out var groupKey) ? groupKey : OpenGroupKey;
+    private string GetConnectionRoomNoLock(string connectionId) =>
+        connectionRooms.TryGetValue(connectionId, out var room) ? room : RoomName.Default;
 
     /// <summary>
-    /// Carries a session across with the host that changed its server password. A session
-    /// keeps the key it was published under otherwise, which would leave the host listed
-    /// and joinable under the password it just left. A pending request that no longer shares
-    /// the session's group is cancelled from either side: approving one would form a session
-    /// across the boundary the password draws. An already approved annotator keeps its place,
-    /// because the host admitted it by name and ends it from its connected-annotator list.
+    /// Carries a session across with the host that changed rooms. A session keeps the room it
+    /// was published in otherwise, which would leave the host listed and joinable in the room
+    /// it just left. A pending request that no longer shares the session's room is cancelled
+    /// from either side: approving one would form a session across two rooms. An already
+    /// approved annotator keeps its place, because the host admitted it by name and ends it
+    /// from its connected-annotator list.
     /// </summary>
     private SessionTerminationResult? MoveConnectionSessionNoLock(
         string connectionId,
-        string groupKey)
+        string room)
     {
         if (!connections.TryGetValue(connectionId, out var membership)
             || !sessions.TryGetValue(membership.SessionId, out var session))
@@ -1147,7 +1122,7 @@ public sealed class SessionManager : ISessionManager
 
         if (membership.Role == ClientRole.Host)
         {
-            session.GroupKey = groupKey;
+            session.Room = room;
         }
         else if (membership.Approved)
         {
@@ -1157,29 +1132,14 @@ public sealed class SessionManager : ISessionManager
         var pending = session.PendingAnnotator;
         if (pending is null
             || string.Equals(
-                session.GroupKey,
-                GetConnectionGroupNoLock(pending.ConnectionId),
+                session.Room,
+                GetConnectionRoomNoLock(pending.ConnectionId),
                 StringComparison.Ordinal))
         {
             return null;
         }
 
         return CancelPendingAnnotatorNoLock(session, pending.ConnectionId);
-    }
-
-    /// <summary>
-    /// Rejects a client that has not presented a server password on a relay that requires one,
-    /// so an unidentified connection can neither publish itself nor see or reach anyone else.
-    /// </summary>
-    private void EnsureGroupIsPermittedNoLock(string connectionId)
-    {
-        if (sessionOptions.RequireServerPassword
-            && GetConnectionGroupNoLock(connectionId).Length == 0)
-        {
-            throw new SessionOperationException(
-                "server_password_required",
-                "This relay requires a server password. Set one in Settings.");
-        }
     }
 
     /// <summary>
@@ -1262,7 +1222,7 @@ public sealed class SessionManager : ISessionManager
             session.Id,
             connectionIds,
             session.PointerCount,
-            session.GroupKey);
+            session.Room);
     }
 
     private SessionTerminationResult DisconnectAnnotatorsNoLock(SessionRecord session)
@@ -1287,7 +1247,7 @@ public sealed class SessionManager : ISessionManager
             session.Id,
             annotatorConnectionIds,
             session.PointerCount,
-            session.GroupKey,
+            session.Room,
             HostPreserved: true,
             AnnotatorConnectionId: annotatorConnectionIds.FirstOrDefault(),
             HostConnectionId: session.Host.ConnectionId,
@@ -1316,7 +1276,7 @@ public sealed class SessionManager : ISessionManager
             session.Id,
             [annotatorConnectionId],
             session.PointerCount,
-            session.GroupKey,
+            session.Room,
             HostPreserved: true,
             AnnotatorConnectionId: annotatorConnectionId,
             HostConnectionId: session.Host.ConnectionId,
@@ -1336,7 +1296,7 @@ public sealed class SessionManager : ISessionManager
             session.Id,
             [annotatorConnectionId],
             session.PointerCount,
-            session.GroupKey,
+            session.Room,
             HostPreserved: true,
             AnnotatorConnectionId: annotatorConnectionId,
             HostConnectionId: session.Host.ConnectionId,
@@ -1386,7 +1346,7 @@ public sealed class SessionManager : ISessionManager
         Participant host,
         int sequenceWindowSize,
         int maximumAnnotatorConnections,
-        string groupKey)
+        string room)
     {
         internal string Id { get; } = id;
 
@@ -1410,7 +1370,7 @@ public sealed class SessionManager : ISessionManager
 
         internal int MaximumAnnotatorConnections { get; set; } = maximumAnnotatorConnections;
 
-        internal string GroupKey { get; set; } = groupKey;
+        internal string Room { get; set; } = room;
 
         internal bool AbandonmentResolved { get; set; }
 

@@ -7,6 +7,7 @@ using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Coordinates;
 using RemotePointer.Contracts.Messages;
+using RemotePointer.Contracts.Security;
 using RemotePointer.Contracts.Validation;
 
 namespace RemotePointer.Client.ViewModels;
@@ -67,7 +68,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool hasServerPassword;
     private bool isChangingServerPassword;
     private bool serverPasswordRequired;
+    private bool hasRelayCapabilities;
     private string serverPasswordInput = string.Empty;
+    private string roomInput = RoomName.Default;
     private bool pendingRelayReinitialization;
     private string? lastTestedServerAddress;
     private bool lastServerConnectionTestSucceeded;
@@ -99,6 +102,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         this.serverConnectionTester = serverConnectionTester ?? new ServerConnectionTester();
         this.serverPasswordStore = serverPasswordStore;
         hasServerPassword = !string.IsNullOrWhiteSpace(clientSettings?.Server.PasswordKey);
+        roomInput = clientSettings?.Server.Room ?? RoomName.Default;
         var configuredServerAddress = clientSettings?.Server.BaseUrl
             ?? hostRelayClient?.ServerUrl
             ?? string.Empty;
@@ -351,13 +355,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public string ServerConnectionGuidance => IsServerConfigurationMissing
         ? "Set the server address in Settings."
-        : "Server not reachable. Check the server address in Settings.";
+        : IsServerPasswordRejected
+            ? "The server password was not accepted. Check it in Settings."
+            : "Server not reachable. Check the server address in Settings.";
 
     public string EmptyClientListMessage => !IsServerAvailable
         ? ServerConnectionGuidance
-        : ServerPasswordRequired && !HasServerPassword
-            ? "Set a server password in Settings to see other clients."
-            : "No available clients";
+        : $"No available clients in {Room}";
 
     public bool IsAvailabilityMenuOpen
     {
@@ -517,27 +521,61 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool ShowServerPasswordSetState => HasServerPassword && !IsChangingServerPassword;
 
-    public bool ShowServerPasswordWarning => !HasServerPassword;
-
-    public string ServerPasswordWarning => ServerPasswordRequired
-        ? "This relay requires a server password. Set one to see other clients and be seen by them."
-        : "No server password is set. Your name and picture are visible to everyone who can reach this relay.";
+    /// <summary>The relay refused the password this client presented, or its lack of one.</summary>
+    public bool IsServerPasswordRejected =>
+        hostRelayClient?.Status == RelayConnectionStatus.Unauthorized;
 
     /// <summary>
-    /// The password itself is never stored, so it cannot be shown back. This code can: it is
-    /// the same on every client that uses the same password, which is what lets the user check
-    /// two clients against each other without anyone typing a password in the open.
+    /// This client reached the relay without a password, which means the relay lets in whoever
+    /// can reach its address. It takes an answer from the relay to know this: before one arrives
+    /// the question is open, not settled in the relay's favour.
     /// </summary>
-    public string ServerPasswordCheckCode =>
-        ServerPasswordKey.DeriveCheckCode(clientSettings?.Server.PasswordKey) ?? string.Empty;
+    public bool IsRelayUnprotected =>
+        hasRelayCapabilities && IsServerAvailable && !ServerPasswordRequired;
 
-    public bool HasServerPasswordCheckCode => ServerPasswordCheckCode.Length > 0;
+    public bool ShowServerPasswordWarning => ServerPasswordWarning.Length > 0;
+
+    public string ServerPasswordWarning => IsServerPasswordRejected
+        ? HasServerPassword
+            ? "This relay did not accept this password."
+            : "This relay requires a server password."
+        : IsRelayUnprotected
+            ? "This relay has no password of its own. Anyone who can reach its address can see "
+                + "the clients on it, whichever room they are in."
+            : !HasServerPassword
+                ? "No server password is set. A relay that requires one will not accept this client."
+                : string.Empty;
 
     public string ServerPasswordValidationMessage =>
         ServerPasswordInput.Length == 0
             || ServerPasswordKey.IsValidPassword(ServerPasswordInput)
             ? string.Empty
             : $"Use at least {ServerPasswordKey.MinimumPasswordLength} characters.";
+
+    /// <summary>
+    /// The room typed in Settings. Unlike the password this is plain text that is stored, shown
+    /// back, and sent to the relay as typed, which is what lets two people confirm they are in
+    /// the same room by reading it out to each other.
+    /// </summary>
+    public string RoomInput
+    {
+        get => roomInput;
+        set
+        {
+            if (SetProperty(ref roomInput, value ?? string.Empty))
+            {
+                RaisePropertyChanged(nameof(RoomValidationMessage));
+            }
+        }
+    }
+
+    public string RoomValidationMessage =>
+        RoomInput.Trim().Length == 0 || RoomName.IsValid(RoomInput)
+            ? string.Empty
+            : $"Use {RoomName.MaximumLength} characters or fewer.";
+
+    /// <summary>The room this client is in, which is the one the directory is scoped to.</summary>
+    public string Room => clientSettings?.Server.Room ?? RoomName.Default;
 
     public string UserName
     {
@@ -781,7 +819,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             try
             {
                 var capabilities = await hostRelayClient.GetRelayCapabilitiesAsync();
+                hasRelayCapabilities = true;
                 ServerPasswordRequired = capabilities.ServerPasswordRequired;
+                RaiseServerPasswordProperties();
             }
             catch (Exception exception)
             {
@@ -1125,9 +1165,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RelayConnectionStatusChangedEventArgs e)
     {
         HostConnectionMessage = e.Message;
+        if (e.Status == RelayConnectionStatus.Unauthorized)
+        {
+            // Being turned away is the only proof a relay is protected that a client which
+            // cannot connect ever gets, and it has to survive so the warning stays right.
+            ServerPasswordRequired = true;
+        }
+
         RaisePropertyChanged(nameof(IsServerAvailable));
         RaisePropertyChanged(nameof(ServerConnectionGuidance));
         RaisePropertyChanged(nameof(EmptyClientListMessage));
+        RaiseServerPasswordProperties();
         RaiseAvailabilityProperties();
     }
 
@@ -1682,7 +1730,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ShowUsageHints,
             HostAvailability == HostAvailability.Available,
             DrawingOpacityPercent,
-            AnnotationColor);
+            AnnotationColor,
+            RoomInput);
+        RaisePropertyChanged(nameof(Room));
+        RaisePropertyChanged(nameof(EmptyClientListMessage));
         Annotator.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
         Annotator.SetDrawingOpacityPercent(DrawingOpacityPercent);
         // The annotation colour is deliberately absent: it was already applied the moment it was
@@ -1691,6 +1742,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RaiseServerAddressCommandState();
     }
 
+    /// <summary>
+    /// Both roles hold their own relay connection and the relay scopes each one separately, so a
+    /// room change has to reach both before this client stops being listed in the one it left.
+    /// </summary>
     private Task ApplyActiveClientSettingsAsync() => Task.WhenAll(
         hostRelayClient?.ApplyClientSettingsAsync(
             UserName,
@@ -1699,7 +1754,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Annotator.ApplyClientSettingsAsync(
             UserName,
             ProfilePicturePath,
-            MaximumAnnotatorConnections));
+            MaximumAnnotatorConnections),
+        hostRelayClient?.SetRoomAsync(Room) ?? Task.CompletedTask,
+        Annotator.SetRoomAsync(Room));
 
     private void ResetServerAddressDraft()
     {
@@ -1727,6 +1784,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ShowUsageHints = clientSettings.Pointer.ShowUsageHints;
         DrawingOpacityPercent = clientSettings.Pointer.DrawingOpacityPercent;
         AnnotationColor = clientSettings.Pointer.AnnotationColor;
+        RoomInput = clientSettings.Server.Room;
 
         var savedMonitor = Monitors.FirstOrDefault(
             monitor => string.Equals(
@@ -1866,8 +1924,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Derives the group key from the draft password, stores it protected, and hands it to both
-    /// relay connections. The password is used here and nowhere else.
+    /// Derives the relay key from the draft password, stores it protected, and hands it to both
+    /// relay connections. The password itself is used here and nowhere else.
     /// </summary>
     internal async Task ApplyServerPasswordDraftAsync()
     {
@@ -1913,9 +1971,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Both roles hold their own relay connection and the relay groups each one separately, so
-    /// a password change has to reach both before this client stops being visible and reachable
-    /// under the previous one.
+    /// Both roles hold their own relay connection and each one was admitted by the old password,
+    /// so a change has to reach both: each drops its connection and presents the new key on the
+    /// next one.
     /// </summary>
     private async Task ApplyServerPasswordKeyAsync(string? key)
     {
@@ -1924,10 +1982,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             clientSettings.Server.PasswordKey = key;
         }
 
-        // Raised here rather than from HasServerPassword, which does not change when one
-        // password replaces another — the case where the code is worth reading.
-        RaisePropertyChanged(nameof(ServerPasswordCheckCode));
-        RaisePropertyChanged(nameof(HasServerPasswordCheckCode));
         try
         {
             if (hostRelayClient is not null)
@@ -1951,8 +2005,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         RaisePropertyChanged(nameof(ShowServerPasswordSetState));
         RaisePropertyChanged(nameof(ShowServerPasswordWarning));
         RaisePropertyChanged(nameof(ServerPasswordWarning));
-        RaisePropertyChanged(nameof(ServerPasswordCheckCode));
-        RaisePropertyChanged(nameof(HasServerPasswordCheckCode));
+        RaisePropertyChanged(nameof(IsRelayUnprotected));
+        RaisePropertyChanged(nameof(IsServerPasswordRejected));
         RaisePropertyChanged(nameof(EmptyClientListMessage));
         changeServerPasswordCommand.RaiseCanExecuteChanged();
         (ClearServerPasswordCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();

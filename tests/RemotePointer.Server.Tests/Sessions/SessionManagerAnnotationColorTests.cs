@@ -177,7 +177,6 @@ public sealed class SessionManagerAnnotationColorTests
             MaximumSessionHours = 8,
             SequenceWindowSize = 64,
             MaximumAnnotatorsPerHost = 16,
-            RequireServerPassword = false,
         }),
         Options.Create(new PointerRateLimitOptions
         {

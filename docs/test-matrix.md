@@ -23,7 +23,8 @@
 | Annotator capture reporting | Normalized local pointer count and coordinate presentation |
 | Session secrets and lifetime | Cryptographic generation, hashing, constant-time comparison, abandoned-session collection, expiry |
 | Host directory | Host visibility choice, directory filtering, direct request, mandatory approval |
-| Server password | Stable key derivation, minimum length, protected round trip, corrupt-file discard, group-scoped listing and joins, enforced and open relay modes, client warning states, settings entry states for change/apply/cancel |
+| Server password | Stable key derivation, minimum length, constant-time key match, protected round trip, corrupt-file discard, connections refused at negotiate without or with a wrong password, open relay admitting a client that has none, client warning states, settings entry states for change/apply/cancel |
+| Rooms | Name normalisation and default fallback, room-scoped listing and joins, case and space folding across clients, host moved out of the room it left, join request cancelled across a room change, approved annotator kept, persistence as typed and delivery to both relay connections |
 | Display synchronization | Approval sends dimensions, host changes push to annotator, aspect/local display changes invalidate calibration |
 | Relay authorization | Host-only approval, annotator-only send, host-only acknowledgement, host-only pause and per-annotator disconnect |
 | Annotator pause | Paused events dropped rather than relayed, pause-all across annotators, resume restores relaying, pause survives into resumed session state, annotator input area blocked while paused |

@@ -6,11 +6,9 @@ public interface ISessionManager
 {
     int ActiveSessionCount { get; }
 
-    bool ServerPasswordRequired { get; }
+    RelayRoomChange SetConnectionRoom(string connectionId, string? room);
 
-    RelayGroupChange SetConnectionGroup(string connectionId, string? groupKey);
-
-    string GetConnectionGroup(string connectionId);
+    string GetConnectionRoom(string connectionId);
 
     CreateSessionResponse CreateHostSession(
         DisplayDescriptor display,

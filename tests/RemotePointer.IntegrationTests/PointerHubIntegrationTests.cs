@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net;
 using RemotePointer.Contracts.Messages;
+using RemotePointer.Contracts.Security;
 using RemotePointer.Contracts.Serialization;
 using RemotePointer.Server.Hubs;
 using RemotePointer.Server.RateLimiting;
@@ -15,6 +16,8 @@ namespace RemotePointer.IntegrationTests;
 
 public sealed class PointerHubIntegrationTests
 {
+    private const string RelayPassword = "integration relay password";
+
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
@@ -642,30 +645,55 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
-    public async Task ServerPassword_ScopesTheDirectoryToClientsThatShareIt()
+    public async Task ServerPassword_TurnsAwayEveryClientThatDoesNotPresentIt()
     {
         using var factory = CreateFactory(requireServerPassword: true);
-        await using var host = CreateConnection(factory, "host-group", "Host");
-        await using var insider = CreateConnection(factory, "insider-group", "Insider");
-        await using var outsider = CreateConnection(factory, "outsider-group", "Outsider");
+        await using var withoutPassword = CreateConnection(factory, "no-password", "Nobody");
+        await using var wrongPassword = CreateConnection(
+            factory,
+            "wrong-password",
+            "Nobody",
+            serverPassword: "some other password");
+        await using var admitted = CreateConnection(
+            factory,
+            "right-password",
+            "Somebody",
+            serverPassword: RelayPassword);
+
+        // Refused at the connection itself rather than at the first hub call, so a client that
+        // does not hold the password never reaches the hub at all.
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await Assert.ThrowsAsync<HttpRequestException>(
+                () => withoutPassword.StartAsync())).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.Unauthorized,
+            (await Assert.ThrowsAsync<HttpRequestException>(
+                () => wrongPassword.StartAsync())).StatusCode);
+
+        await admitted.StartAsync();
+        Assert.True(
+            (await admitted.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
+                .ServerPasswordRequired);
+    }
+
+    [Fact]
+    public async Task Room_ScopesTheDirectoryToClientsThatShareIt()
+    {
+        using var factory = CreateFactory(requireServerPassword: true);
+        await using var host = CreateConnection(
+            factory, "host-room", "Host", serverPassword: RelayPassword);
+        await using var insider = CreateConnection(
+            factory, "insider-room", "Insider", serverPassword: RelayPassword);
+        await using var outsider = CreateConnection(
+            factory, "outsider-room", "Outsider", serverPassword: RelayPassword);
         await host.StartAsync();
         await insider.StartAsync();
         await outsider.StartAsync();
 
-        Assert.True(
-            (await host.InvokeAsync<RelayCapabilities>("GetRelayCapabilities"))
-                .ServerPasswordRequired);
-        await Assert.ThrowsAsync<HubException>(
-            () => host.InvokeAsync<CreateSessionResponse>(
-                "CreateHostSession",
-                CreateDisplay(),
-                new ClientProfile(),
-                2,
-                string.Empty));
-
-        await host.InvokeAsync("EnterRelayGroup", "shared-key");
-        await insider.InvokeAsync("EnterRelayGroup", "shared-key");
-        await outsider.InvokeAsync("EnterRelayGroup", "other-key");
+        await host.InvokeAsync("EnterRoom", "engineering");
+        await insider.InvokeAsync("EnterRoom", "engineering");
+        await outsider.InvokeAsync("EnterRoom", "support");
         var created = await host.InvokeAsync<CreateSessionResponse>(
             "CreateHostSession",
             CreateDisplay(),
@@ -679,25 +707,30 @@ public sealed class PointerHubIntegrationTests
             "GetAvailableHosts");
         var outsiderJoin = await outsider.InvokeAsync<JoinResponse>(
             "RequestToJoinHost",
-            new DirectJoinRequest(created.SessionId, "outsider-group", "1.0.0"), string.Empty);
+            new DirectJoinRequest(created.SessionId, "outsider-room", "1.0.0"), string.Empty);
 
         Assert.Equal(created.SessionId, Assert.Single(insiderView).SessionId);
         Assert.Empty(outsiderView);
         Assert.False(outsiderJoin.Accepted);
+
+        // The room is a label, not a boundary: the outsider holds the password, so it reaches
+        // the same directory the moment it names the same room.
+        await outsider.InvokeAsync("EnterRoom", "Engineering");
+        Assert.Single(await outsider.InvokeAsync<AvailableHostDescriptor[]>("GetAvailableHosts"));
     }
 
     [Fact]
-    public async Task ChangedServerPassword_HidesTheHostFromItsFormerPeerAndTellsItToRelist()
+    public async Task ChangedRoom_HidesTheHostFromItsFormerPeerAndTellsItToRelist()
     {
-        using var factory = CreateFactory(requireServerPassword: true);
+        using var factory = CreateFactory();
         await using var host = CreateConnection(factory, "moving-host", "Host");
         await using var peer = CreateConnection(factory, "staying-peer", "Peer");
         var peerRelisted = CompletionSource<bool>();
         peer.On("HostDirectoryChanged", () => peerRelisted.TrySetResult(true));
         await host.StartAsync();
         await peer.StartAsync();
-        await host.InvokeAsync("EnterRelayGroup", "first-password-key");
-        await peer.InvokeAsync("EnterRelayGroup", "first-password-key");
+        await host.InvokeAsync("EnterRoom", "first-room");
+        await peer.InvokeAsync("EnterRoom", "first-room");
         var created = await host.InvokeAsync<CreateSessionResponse>(
             "CreateHostSession",
             CreateDisplay(),
@@ -706,7 +739,7 @@ public sealed class PointerHubIntegrationTests
             string.Empty);
         Assert.Single(await peer.InvokeAsync<AvailableHostDescriptor[]>("GetAvailableHosts"));
 
-        await host.InvokeAsync("EnterRelayGroup", "second-password-key");
+        await host.InvokeAsync("EnterRoom", "second-room");
 
         Assert.True(await peerRelisted.Task.WaitAsync(TestTimeout));
         Assert.Empty(await peer.InvokeAsync<AvailableHostDescriptor[]>("GetAvailableHosts"));
@@ -718,9 +751,9 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
-    public async Task ChangedServerPassword_CancelsAJoinRequestItLeavesBehind()
+    public async Task ChangedRoom_CancelsAJoinRequestItLeavesBehind()
     {
-        using var factory = CreateFactory(requireServerPassword: true);
+        using var factory = CreateFactory();
         await using var host = CreateConnection(factory, "moving-host", "Host");
         await using var peer = CreateConnection(factory, "requesting-peer", "Peer");
         var pending = CompletionSource<AnnotatorDescriptor>();
@@ -731,8 +764,8 @@ public sealed class PointerHubIntegrationTests
         peer.On<string>("SessionEnded", peerEnded.SetResult);
         await host.StartAsync();
         await peer.StartAsync();
-        await host.InvokeAsync("EnterRelayGroup", "first-password-key");
-        await peer.InvokeAsync("EnterRelayGroup", "first-password-key");
+        await host.InvokeAsync("EnterRoom", "first-room");
+        await peer.InvokeAsync("EnterRoom", "first-room");
         var created = await host.InvokeAsync<CreateSessionResponse>(
             "CreateHostSession",
             CreateDisplay(),
@@ -745,11 +778,11 @@ public sealed class PointerHubIntegrationTests
             string.Empty)).Accepted);
         var requested = await pending.Task.WaitAsync(TestTimeout);
 
-        await host.InvokeAsync("EnterRelayGroup", "second-password-key");
+        await host.InvokeAsync("EnterRoom", "second-room");
 
         Assert.Equal(requested.ConnectionId, await cancelled.Task.WaitAsync(TestTimeout));
         Assert.Contains(
-            "server password",
+            "another room",
             await peerEnded.Task.WaitAsync(TestTimeout),
             StringComparison.Ordinal);
         await Assert.ThrowsAsync<HubException>(
@@ -760,7 +793,7 @@ public sealed class PointerHubIntegrationTests
     }
 
     [Fact]
-    public async Task ServerPassword_IsNotRequiredOnAnOpenRelay()
+    public async Task OpenRelay_AdmitsAClientWithNoPasswordAndSaysSo()
     {
         using var factory = CreateFactory();
         await using var host = CreateConnection(factory, "open-host", "Host");
@@ -777,6 +810,8 @@ public sealed class PointerHubIntegrationTests
             new ClientProfile(),
             2,
             string.Empty);
+
+        // Neither named a room, so both are in the default one and see each other there.
         var available = await annotator.InvokeAsync<AvailableHostDescriptor[]>(
             "GetAvailableHosts");
 
@@ -874,16 +909,18 @@ public sealed class PointerHubIntegrationTests
                 builder =>
                 {
                     builder.UseEnvironment("Development");
-                    builder.UseSetting(
-                        "Sessions:RequireServerPassword",
-                        requireServerPassword.ToString());
+                    if (requireServerPassword)
+                    {
+                        builder.UseSetting("Access:ServerPassword", RelayPassword);
+                    }
                 });
 
     private static HubConnection CreateConnection(
         WebApplicationFactory<Program> factory,
         string clientInstanceId,
         string displayName,
-        string? applicationInstanceId = null)
+        string? applicationInstanceId = null,
+        string? serverPassword = null)
     {
         var server = factory.Server;
         applicationInstanceId ??= clientInstanceId;
@@ -898,6 +935,13 @@ public sealed class PointerHubIntegrationTests
                 {
                     options.Transports = HttpTransportType.LongPolling;
                     options.HttpMessageHandlerFactory = _ => server.CreateHandler();
+                    if (serverPassword is not null)
+                    {
+                        // The client derives the key and presents only that, exactly as the
+                        // desktop client does.
+                        var key = ServerPasswordKey.Derive(serverPassword);
+                        options.AccessTokenProvider = () => Task.FromResult<string?>(key);
+                    }
                 })
             .AddJsonProtocol(
                 options => RemotePointerJson.Configure(options.PayloadSerializerOptions))

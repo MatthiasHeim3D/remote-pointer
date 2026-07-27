@@ -24,11 +24,12 @@ Every annotator must be **individually approved** by the host, and the host can 
 
 ## Using it
 
-1. On every PC, enter the same **server password** in Settings. Clients only see each other when their passwords match, so it works like a meeting password for your team.
-2. On the host PC, choose **Available** to become discoverable.
-3. On each annotator PC, pick that host from the list and request access.
-4. The host approves each request.
-5. Annotators line up their target area over the host's screen in their remote-desktop view, then turn on annotating (or press **Ctrl+Alt+P**).
+1. On every PC, enter the relay's **server password** in Settings. It is what gets the client onto the relay at all — without it, nothing connects.
+2. Put every PC in the same **room** in Settings. Clients see each other when they are in the same room, and the name is shown back in Settings so you can check it at a glance. Fresh installs all start in `general`.
+3. On the host PC, choose **Available** to become discoverable.
+4. On each annotator PC, pick that host from the list and request access.
+5. The host approves each request.
+6. Annotators line up their target area over the host's screen in their remote-desktop view, then turn on annotating (or press **Ctrl+Alt+P**).
 
 ### Pointer controls
 
@@ -61,7 +62,7 @@ When several people annotate one screen at once, the server keeps them apart for
 
 ## Installing
 
-Remote Pointer is distributed as a per-user Windows installer that needs no administrator rights and installs only for the current account. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address; add the server password your team uses in the same screen.
+Remote Pointer is distributed as a per-user Windows installer that needs no administrator rights and installs only for the current account. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address; add the relay's server password in the same screen.
 
 - Set up the relay server → [Server deployment](docs/server-deployment.md)
 - Build and install the client → [Client deployment](docs/deployment.md)
@@ -84,7 +85,7 @@ To try the whole thing on one machine — a local relay plus a couple of client 
 
 Each client gets its own throwaway data directory, so they behave like separate users with
 separate names, identities, and saved credentials, and none of them touch the settings of an
-installed copy. They all share one relay address and server password so they can see each other.
+installed copy. They all share one relay address and server password, and start in the same room, so they can see each other.
 Everything shuts down and the temporary directories are deleted when the last client closes; pass
 `-KeepClientData` to keep them for inspection.
 

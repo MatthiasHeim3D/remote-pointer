@@ -1,6 +1,8 @@
 using System.Reflection;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.SignalR;
 using RemotePointer.Contracts.Messages;
+using RemotePointer.Contracts.Security;
 using RemotePointer.Contracts.Serialization;
 using RemotePointer.Server.Health;
 using RemotePointer.Server.Hubs;
@@ -31,8 +33,23 @@ builder.Services
         options => options.EventsPerSecond > 0 && options.BurstSize > 0,
         "Pointer rate-limit options must be positive.")
     .ValidateOnStart();
+builder.Services
+    .AddOptions<ServerAccessOptions>()
+    .Bind(builder.Configuration.GetSection(ServerAccessOptions.SectionName))
+    .Validate(
+        options => string.IsNullOrWhiteSpace(options.ServerPassword)
+            || ServerPasswordKey.IsValidPassword(options.ServerPassword),
+        $"The server password must be at least {ServerPasswordKey.MinimumPasswordLength} characters.")
+    .ValidateOnStart();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ServerPasswordVerifier>();
+builder.Services
+    .AddAuthentication(ServerPasswordAuthenticationHandler.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, ServerPasswordAuthenticationHandler>(
+        ServerPasswordAuthenticationHandler.SchemeName,
+        configureOptions: null);
+builder.Services.AddAuthorization();
 builder.Services.AddSingleton<ISessionSecretGenerator, SessionSecretGenerator>();
 builder.Services.AddSingleton<ISessionManager, SessionManager>();
 builder.Services.AddSingleton<PointerHubAuditFilter>();
@@ -52,6 +69,10 @@ builder.Services
     .AddCheck<SessionHealthCheck>("sessions");
 
 var app = builder.Build();
+
+// Resolved here so the slow key derivation happens once at startup rather than on whichever
+// connection arrives first, and so a password the relay cannot use stops it now.
+_ = app.Services.GetRequiredService<ServerPasswordVerifier>();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -88,6 +109,11 @@ if (!app.Environment.IsDevelopment())
     }
 }
 
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Health and version stay open: a client has to be able to check that an address is a relay,
+// and that it is reachable, before it can have been given the password for it.
 app.MapHealthChecks("/health");
 app.MapGet(
     "/version",

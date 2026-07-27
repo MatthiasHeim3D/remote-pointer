@@ -103,6 +103,18 @@ internal sealed class FakeRelayClient : IRelayClient
         return Task.CompletedTask;
     }
 
+    public string? Room { get; private set; }
+
+    public int RoomUpdateCount { get; private set; }
+
+    public Task SetRoomAsync(string? name, CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        Room = name;
+        RoomUpdateCount++;
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<AvailableHostDescriptor>> GetAvailableHostsAsync(
         CancellationToken cancellationToken = default)
     {

@@ -1,3 +1,4 @@
+using RemotePointer.Contracts.Security;
 using RemotePointer.Client.Services;
 
 namespace RemotePointer.Client.Tests.Services;
@@ -32,34 +33,21 @@ public sealed class ServerPasswordTests : IDisposable
     }
 
     [Fact]
-    public void CheckCode_MatchesAcrossClientsOnTheSamePasswordAndDiffersForOthers()
+    public void Matches_AcceptsOnlyTheKeyDerivedFromTheSamePassword()
     {
-        var code = ServerPasswordKey.DeriveCheckCode(
-            ServerPasswordKey.Derive("correct horse battery"));
+        var expected = ServerPasswordKey.Derive("shared team password");
 
-        Assert.Equal(
-            code,
-            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("correct horse battery")));
-        Assert.NotEqual(
-            code,
-            ServerPasswordKey.DeriveCheckCode(ServerPasswordKey.Derive("correct horse batterz")));
-        Assert.Null(ServerPasswordKey.DeriveCheckCode(null));
-        Assert.Null(ServerPasswordKey.DeriveCheckCode("   "));
-    }
-
-    [Fact]
-    public void CheckCode_IsShortAndRevealsNeitherThePasswordNorTheKey()
-    {
-        const string password = "shared team password";
-        var key = ServerPasswordKey.Derive(password);
-
-        var code = ServerPasswordKey.DeriveCheckCode(key);
-
-        Assert.Equal("XXXX-XXXX".Length, code!.Length);
-        Assert.Matches("^[0-9A-F]{4}-[0-9A-F]{4}$", code);
-        Assert.DoesNotContain(password, code, StringComparison.OrdinalIgnoreCase);
-        // Domain separation: the code must not be a slice of the key put on display.
-        Assert.DoesNotContain(code.Replace("-", string.Empty, StringComparison.Ordinal), key, StringComparison.OrdinalIgnoreCase);
+        Assert.True(
+            ServerPasswordKey.Matches(
+                ServerPasswordKey.Derive("shared team password"),
+                expected));
+        Assert.False(
+            ServerPasswordKey.Matches(
+                ServerPasswordKey.Derive("shared team passworc"),
+                expected));
+        Assert.False(ServerPasswordKey.Matches(null, expected));
+        Assert.False(ServerPasswordKey.Matches(string.Empty, expected));
+        Assert.False(ServerPasswordKey.Matches(expected[..^1], expected));
     }
 
     [Theory]

@@ -200,13 +200,13 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ServerPassword_ScopesTheDirectoryAndJoinsToClientsThatShareIt()
+    public void Room_ScopesTheDirectoryAndJoinsToClientsThatShareIt()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "room-one");
         var created = CreateHost(context);
-        context.Manager.SetConnectionGroup("insider-connection", "group-one");
-        context.Manager.SetConnectionGroup("outsider-connection", "group-two");
+        context.Manager.SetConnectionRoom("insider-connection", "room-one");
+        context.Manager.SetConnectionRoom("outsider-connection", "room-two");
 
         Assert.Equal(
             created.SessionId,
@@ -227,15 +227,15 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ChangedServerPassword_TakesThePublishedHostOutOfTheOldGroup()
+    public void ChangedRoom_TakesThePublishedHostOutOfTheOldRoom()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "room-one");
         var created = CreateHost(context);
-        context.Manager.SetConnectionGroup("former-peer-connection", "group-one");
+        context.Manager.SetConnectionRoom("former-peer-connection", "room-one");
         Assert.Single(context.Manager.GetAvailableHosts(null, "former-peer-connection"));
 
-        context.Manager.SetConnectionGroup("host-connection", "group-two");
+        context.Manager.SetConnectionRoom("host-connection", "room-two");
 
         Assert.Empty(context.Manager.GetAvailableHosts(null, "former-peer-connection"));
         var staleJoin = context.Manager.RequestToJoinHost(
@@ -244,23 +244,23 @@ public sealed class SessionManagerTests
             "Former Peer");
         Assert.False(staleJoin.Response.Accepted);
 
-        context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
+        context.Manager.SetConnectionRoom("new-peer-connection", "room-two");
         Assert.Equal(
             created.SessionId,
             Assert.Single(context.Manager.GetAvailableHosts(null, "new-peer-connection")).SessionId);
     }
 
     [Fact]
-    public void ChangedServerPassword_CancelsAJoinRequestThatNoLongerSharesTheGroup()
+    public void ChangedRoom_CancelsAJoinRequestThatNoLongerSharesTheRoom()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "room-one");
         var created = CreateHost(context);
-        context.Manager.SetConnectionGroup("annotator-connection", "group-one");
+        context.Manager.SetConnectionRoom("annotator-connection", "room-one");
         var join = JoinAnnotator(context, created);
         Assert.True(join.Response.Accepted);
 
-        var change = context.Manager.SetConnectionGroup("host-connection", "group-two");
+        var change = context.Manager.SetConnectionRoom("host-connection", "room-two");
 
         Assert.Equal(
             "annotator-connection",
@@ -269,7 +269,7 @@ public sealed class SessionManagerTests
 
         // The request is gone from both sides: the host is listable again, and the former
         // requester is unbound rather than left waiting on an approval it can no longer get.
-        context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
+        context.Manager.SetConnectionRoom("new-peer-connection", "room-two");
         Assert.Single(context.Manager.GetAvailableHosts(null, "new-peer-connection"));
         Assert.ThrowsAny<InvalidOperationException>(
             () => context.Manager.ApproveAnnotator(
@@ -279,19 +279,19 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ChangedServerPassword_KeepsAAnnotatorTheHostAlreadyApproved()
+    public void ChangedRoom_KeepsAnAnnotatorTheHostAlreadyApproved()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "room-one");
         var created = CreateHost(context);
-        context.Manager.SetConnectionGroup("annotator-connection", "group-one");
+        context.Manager.SetConnectionRoom("annotator-connection", "room-one");
         var join = JoinAnnotator(context, created);
         _ = context.Manager.ApproveAnnotator(
             created.SessionId,
             join.Annotator!.ConnectionId,
             "host-connection");
 
-        var change = context.Manager.SetConnectionGroup("annotator-connection", "group-two");
+        var change = context.Manager.SetConnectionRoom("annotator-connection", "room-two");
 
         Assert.Null(change.CancelledJoinRequest);
         var relayed = context.Manager.AcceptPointer(
@@ -301,14 +301,14 @@ public sealed class SessionManagerTests
     }
 
     [Fact]
-    public void ResumedHost_PublishesUnderThePasswordItsConnectionPresented()
+    public void ResumedHost_PublishesInTheRoomItsConnectionNamed()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("host-connection", "group-one");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "room-one");
         var created = CreateHost(context);
         _ = context.Manager.Disconnect("host-connection");
 
-        context.Manager.SetConnectionGroup("resumed-connection", "group-two");
+        context.Manager.SetConnectionRoom("resumed-connection", "room-two");
         _ = context.Manager.ResumeSession(
             "resumed-connection",
             new SessionResumeRequest(
@@ -318,47 +318,54 @@ public sealed class SessionManagerTests
                 created.Credential.SessionToken,
                 created.Credential.ReconnectToken));
 
-        context.Manager.SetConnectionGroup("former-peer-connection", "group-one");
-        context.Manager.SetConnectionGroup("new-peer-connection", "group-two");
+        context.Manager.SetConnectionRoom("former-peer-connection", "room-one");
+        context.Manager.SetConnectionRoom("new-peer-connection", "room-two");
         Assert.Empty(context.Manager.GetAvailableHosts(null, "former-peer-connection"));
         Assert.Single(context.Manager.GetAvailableHosts(null, "new-peer-connection"));
     }
 
     [Fact]
-    public void ServerPassword_IsRequiredBeforeAnythingIsPublishedOrListed()
-    {
-        var context = CreateContext(requireServerPassword: true);
-
-        Assert.ThrowsAny<InvalidOperationException>(
-            () => context.Manager.SetConnectionGroup("host-connection", null));
-        Assert.ThrowsAny<InvalidOperationException>(() => CreateHost(context));
-        Assert.Empty(context.Manager.GetAvailableHosts(null, "host-connection"));
-        Assert.True(context.Manager.ServerPasswordRequired);
-    }
-
-    [Fact]
-    public void OpenRelay_KeepsPasswordlessClientsInOneSharedGroup()
+    public void UnnamedRoom_PutsTheConnectionInTheDefaultOne()
     {
         var context = CreateContext();
         var created = CreateHost(context);
 
-        Assert.Equal(SessionManager.OpenGroupKey, context.Manager.GetConnectionGroup("anyone"));
+        // A client that never names a room, and one that names something unusable, both belong
+        // in the default room rather than in a directory of their own.
+        Assert.Equal(RoomName.Default, context.Manager.GetConnectionRoom("anyone"));
+        Assert.Equal(RoomName.Default, context.Manager.SetConnectionRoom("blank", "   ").Room);
+        Assert.Equal(
+            RoomName.Default,
+            context.Manager.SetConnectionRoom("too-long", new string('r', 65)).Room);
         Assert.Equal(
             created.SessionId,
-            Assert.Single(context.Manager.GetAvailableHosts(null, "anyone")).SessionId);
+            Assert.Single(context.Manager.GetAvailableHosts(null, "blank")).SessionId);
     }
 
     [Fact]
-    public void ConnectionGroup_IsReleasedWhenTheConnectionDrops()
+    public void Room_IgnoresCaseAndSurroundingSpaceSoTypedNamesStillMeet()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("browser-connection", "group-one");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "Engineering");
+        var created = CreateHost(context);
+        context.Manager.SetConnectionRoom("peer-connection", "  engineering  ");
+
+        Assert.Equal(
+            created.SessionId,
+            Assert.Single(context.Manager.GetAvailableHosts(null, "peer-connection")).SessionId);
+    }
+
+    [Fact]
+    public void ConnectionRoom_IsReleasedWhenTheConnectionDrops()
+    {
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("browser-connection", "room-one");
 
         _ = context.Manager.Disconnect("browser-connection");
 
         Assert.Equal(
-            SessionManager.OpenGroupKey,
-            context.Manager.GetConnectionGroup("browser-connection"));
+            RoomName.Default,
+            context.Manager.GetConnectionRoom("browser-connection"));
         Assert.Empty(context.Manager.GetAvailableHosts(null, "browser-connection"));
     }
 
@@ -960,34 +967,34 @@ public sealed class SessionManagerTests
     [Fact]
     public void AnnotatorThatChangedItsPassword_StillReportsTheGroupItsSessionIsListedIn()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("host-connection", "shared-key");
-        context.Manager.SetConnectionGroup("annotator-connection", "shared-key");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "shared-key");
+        context.Manager.SetConnectionRoom("annotator-connection", "shared-key");
         var approved = CreateApprovedSession(context);
 
         // An approved annotator keeps its place when it changes its own password, so from here
         // its connection group and the group its session is published in disagree.
-        context.Manager.SetConnectionGroup("annotator-connection", "private-key");
+        context.Manager.SetConnectionRoom("annotator-connection", "private-key");
         var ended = context.Manager.EndSession(
             approved.Created.SessionId,
             "annotator-connection");
 
-        Assert.Equal("private-key", context.Manager.GetConnectionGroup("annotator-connection"));
-        Assert.Equal("shared-key", ended.GroupKey);
+        Assert.Equal("private-key", context.Manager.GetConnectionRoom("annotator-connection"));
+        Assert.Equal("shared-key", ended.Room);
         Assert.True(ended.HostPreserved);
     }
 
     [Fact]
     public void CollectedSession_ReportsTheGroupThatHasToRereadTheDirectory()
     {
-        var context = CreateContext(requireServerPassword: true);
-        context.Manager.SetConnectionGroup("host-connection", "shared-key");
+        var context = CreateContext();
+        context.Manager.SetConnectionRoom("host-connection", "shared-key");
         _ = CreateHost(context);
 
         context.TimeProvider.Advance(TimeSpan.FromHours(9));
         var collected = Assert.Single(context.Manager.CollectExpiredSessions());
 
-        Assert.Equal("shared-key", collected.GroupKey);
+        Assert.Equal("shared-key", collected.Room);
         Assert.Equal(0, context.Manager.ActiveSessionCount);
     }
 
@@ -1094,9 +1101,7 @@ public sealed class SessionManagerTests
                 "annotator-client"));
     }
 
-    private static TestContext CreateContext(
-        int maximumAnnotatorsPerHost = 16,
-        bool requireServerPassword = false)
+    private static TestContext CreateContext(int maximumAnnotatorsPerHost = 16)
     {
         var timeProvider = new ManualTimeProvider(InitialTime);
         var manager = new SessionManager(
@@ -1106,7 +1111,6 @@ public sealed class SessionManagerTests
                 MaximumSessionHours = 8,
                 SequenceWindowSize = 64,
                 MaximumAnnotatorsPerHost = maximumAnnotatorsPerHost,
-                RequireServerPassword = requireServerPassword,
             }),
             Options.Create(new PointerRateLimitOptions
             {

@@ -313,8 +313,9 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// The listing this view model shows belongs to the old password until the relay is told
-    /// otherwise, so the key goes out first and the directory is read again behind it.
+    /// The connection this view model reads its listing over was admitted by the old password,
+    /// so the key goes out first — dropping that connection — and the directory is read again
+    /// behind it over one the new password admits.
     /// </summary>
     public async Task SetServerPasswordKeyAsync(string? key)
     {
@@ -324,6 +325,21 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         }
 
         await relayClient.SetServerPasswordKeyAsync(key);
+        await RefreshAvailableHostsAsync();
+    }
+
+    /// <summary>
+    /// The listing this view model shows belongs to the old room until the relay is told
+    /// otherwise, so the room goes out first and the directory is read again behind it.
+    /// </summary>
+    public async Task SetRoomAsync(string? name)
+    {
+        if (relayClient is null)
+        {
+            return;
+        }
+
+        await relayClient.SetRoomAsync(name);
         await RefreshAvailableHostsAsync();
     }
 

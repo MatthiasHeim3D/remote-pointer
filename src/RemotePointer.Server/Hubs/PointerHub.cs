@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using RemotePointer.Contracts.Messages;
 using RemotePointer.Server.Sessions;
@@ -5,53 +6,58 @@ using RemotePointer.Server.Security;
 
 namespace RemotePointer.Server.Hubs;
 
+/// <summary>
+/// Every method here is behind the relay's server password: a client that does not hold it is
+/// turned away at negotiate and never reaches this hub.
+/// </summary>
+[Authorize]
 public sealed class PointerHub(
     ISessionManager sessionManager,
+    ServerPasswordVerifier passwordVerifier,
     ILogger<PointerHub> logger) : Hub<IPointerClient>
 {
     public RelayCapabilities GetRelayCapabilities() =>
-        new(sessionManager.ServerPasswordRequired);
+        new(passwordVerifier.IsRequired);
 
     /// <summary>
-    /// Places this connection in the group its server password derives to. The argument is the
-    /// derived key, never the password: the relay cannot recover the password from it and does
-    /// not log it.
+    /// Puts this connection in the room it names. The name is not a secret — the password at the
+    /// front door is what decides who reaches the relay — so it is sent and held as typed.
     /// </summary>
-    public async Task EnterRelayGroup(string groupKey)
+    public async Task EnterRoom(string room)
     {
         try
         {
-            var change = sessionManager.SetConnectionGroup(Context.ConnectionId, groupKey);
-            if (change.PreviousGroupKey is not null)
+            var change = sessionManager.SetConnectionRoom(Context.ConnectionId, room);
+            if (change.PreviousRoom is not null)
             {
                 await Groups.RemoveFromGroupAsync(
                         Context.ConnectionId,
-                        DirectoryGroupName(change.PreviousGroupKey))
+                        DirectoryGroupName(change.PreviousRoom))
                     .ConfigureAwait(false);
             }
 
             await Groups.AddToGroupAsync(
                     Context.ConnectionId,
-                    DirectoryGroupName(change.GroupKey))
+                    DirectoryGroupName(change.Room))
                 .ConfigureAwait(false);
             if (change.CancelledJoinRequest is not null)
             {
                 await CancelJoinRequestAsync(change.CancelledJoinRequest).ConfigureAwait(false);
             }
 
-            if (change.PreviousGroupKey is not null)
+            if (change.PreviousRoom is not null)
             {
                 // Both directories change when a client moves between them: the one it left
                 // can no longer see the host it published, and the one it joined can. The
                 // caller is already in the new group, so this is also what refreshes its own
-                // listing after a password change.
-                await NotifyDirectoryChangedAsync(change.PreviousGroupKey).ConfigureAwait(false);
-                await NotifyDirectoryChangedAsync(change.GroupKey).ConfigureAwait(false);
+                // listing after a room change.
+                await NotifyDirectoryChangedAsync(change.PreviousRoom).ConfigureAwait(false);
+                await NotifyDirectoryChangedAsync(change.Room).ConfigureAwait(false);
             }
         }
         catch (SessionOperationException exception)
         {
-            throw ToHubException(exception, "EnterRelayGroup");
+            throw ToHubException(exception, "EnterRoom");
         }
     }
 
@@ -60,12 +66,11 @@ public sealed class PointerHub(
 
     public override async Task OnConnectedAsync()
     {
-        // Every connection starts in the open pool so that a client which never presents a
-        // password still receives directory notifications on a relay that allows one. Entering
-        // a group moves the connection out of it.
+        // Every connection starts in the default room, so a client that never names one still
+        // receives directory notifications. Entering a room moves the connection out of it.
         await Groups.AddToGroupAsync(
                 Context.ConnectionId,
-                DirectoryGroupName(SessionManager.OpenGroupKey))
+                DirectoryGroupName(RoomName.Default))
             .ConfigureAwait(false);
         logger.LogInformation(
             AuditEventIds.ClientConnected,
@@ -79,7 +84,7 @@ public sealed class PointerHub(
     {
         // Read before disconnecting: the connection's group is released with it, and the peers
         // that need to hear about this departure are the ones that shared it.
-        var groupKey = sessionManager.GetConnectionGroup(Context.ConnectionId);
+        var room = sessionManager.GetConnectionRoom(Context.ConnectionId);
         var disconnect = sessionManager.Disconnect(Context.ConnectionId);
         if (disconnect is not null)
         {
@@ -111,7 +116,7 @@ public sealed class PointerHub(
         }
 
         await NotifyAnnotationColorsAsync(disconnect?.SessionId).ConfigureAwait(false);
-        await NotifyDirectoryChangedAsync(groupKey, disconnect?.GroupKey).ConfigureAwait(false);
+        await NotifyDirectoryChangedAsync(room, disconnect?.Room).ConfigureAwait(false);
         if (exception is null)
         {
             logger.LogInformation(
@@ -528,7 +533,7 @@ public sealed class PointerHub(
                 result.SessionId,
                 result.HostPreserved,
                 result.PointerCount);
-            await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync(result.Room).ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -567,7 +572,7 @@ public sealed class PointerHub(
                 "Host disconnected all annotators. SessionId={SessionId} PointerCount={PointerCount}",
                 result.SessionId,
                 result.PointerCount);
-            await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync(result.Room).ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -607,7 +612,7 @@ public sealed class PointerHub(
                 "Host disconnected an annotator. SessionId={SessionId} AnnotatorClientInstanceId={ClientInstanceId}",
                 result.SessionId,
                 annotatorId);
-            await NotifyDirectoryChangedAsync(result.GroupKey).ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync(result.Room).ConfigureAwait(false);
         }
         catch (SessionOperationException exception)
         {
@@ -665,7 +670,7 @@ public sealed class PointerHub(
         }
 
         await Clients.Client(annotatorConnectionId)
-            .SessionEnded("The server password changed, so the connection request was cancelled.")
+            .SessionEnded("The host moved to another room, so the connection request was cancelled.")
             .ConfigureAwait(false);
         if (cancellation.HostConnectionId is not null)
         {
@@ -676,7 +681,7 @@ public sealed class PointerHub(
 
         logger.LogInformation(
             AuditEventIds.SessionEnded,
-            "Join request cancelled across a server password change. SessionId={SessionId} AnnotatorConnectionId={AnnotatorConnectionId}",
+            "Join request cancelled across a room change. SessionId={SessionId} AnnotatorConnectionId={AnnotatorConnectionId}",
             cancellation.SessionId,
             annotatorConnectionId);
     }
@@ -736,31 +741,30 @@ public sealed class PointerHub(
     internal static string GroupName(string sessionId) => $"session:{sessionId}";
 
     /// <summary>
-    /// Directory changes reach only the clients that share the same server password. Nobody
-    /// else can see the affected hosts, and one client's connection churn no longer costs
-    /// a directory read on every other connection.
+    /// Directory changes reach only the clients in the same room, so one client's connection
+    /// churn no longer costs a directory read on every other connection.
     /// </summary>
-    internal static string DirectoryGroupName(string groupKey) => $"directory:{groupKey}";
+    internal static string DirectoryGroupName(string room) => $"directory:{room}";
 
     private Task NotifyDirectoryChangedAsync() =>
-        NotifyDirectoryChangedAsync(sessionManager.GetConnectionGroup(Context.ConnectionId));
+        NotifyDirectoryChangedAsync(sessionManager.GetConnectionRoom(Context.ConnectionId));
 
-    private Task NotifyDirectoryChangedAsync(string groupKey) =>
-        Clients.Group(DirectoryGroupName(groupKey)).HostDirectoryChanged();
+    private Task NotifyDirectoryChangedAsync(string room) =>
+        Clients.Group(DirectoryGroupName(room)).HostDirectoryChanged();
 
     /// <summary>
     /// Notifies both directories a change touched, skipping the second when it is the same one.
-    /// A connection normally ends in the group its session was published under, but an approved
-    /// annotator that changed its server password does not, and the free slot it leaves behind
-    /// belongs to the session's group rather than to the one it walked off with.
+    /// A connection normally ends in the room its session was published in, but an approved
+    /// annotator that changed rooms does not, and the free slot it leaves behind belongs to the
+    /// session's room rather than to the one it walked off with.
     /// </summary>
-    private async Task NotifyDirectoryChangedAsync(string groupKey, string? sessionGroupKey)
+    private async Task NotifyDirectoryChangedAsync(string room, string? sessionRoom)
     {
-        await NotifyDirectoryChangedAsync(groupKey).ConfigureAwait(false);
-        if (sessionGroupKey is not null
-            && !string.Equals(sessionGroupKey, groupKey, StringComparison.Ordinal))
+        await NotifyDirectoryChangedAsync(room).ConfigureAwait(false);
+        if (sessionRoom is not null
+            && !string.Equals(sessionRoom, room, StringComparison.Ordinal))
         {
-            await NotifyDirectoryChangedAsync(sessionGroupKey).ConfigureAwait(false);
+            await NotifyDirectoryChangedAsync(sessionRoom).ConfigureAwait(false);
         }
     }
 }

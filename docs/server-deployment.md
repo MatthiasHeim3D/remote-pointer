@@ -15,20 +15,32 @@ Edit `.env`, then start the stack:
 
 ```text
 REMOTEPOINTER_HOSTNAME=pointer.internal.example
-REMOTEPOINTER_REQUIRE_SERVER_PASSWORD=true
+REMOTEPOINTER_SERVER_PASSWORD=change-this-to-your-own
 ```
 
-## Server passwords
+## The server password
 
-Clients see each other only when they use the same server password, which they enter in Settings. The relay never receives the password: the client derives a key from it and the relay groups clients whose keys match, so a directory listing, a join request and a directory notification never cross from one password to another. Groups are created and dropped implicitly — there is nothing to administer.
+The server password is the relay's front door. Every client presents it to open its connection, and one that does not hold it is refused at the handshake: it never reaches the hub, so it can neither publish itself nor list or reach anyone, whatever room it names. Set it in `.env` as `REMOTEPOINTER_SERVER_PASSWORD`; the relay reads it as `Access__ServerPassword` and refuses to start on anything shorter than 8 characters.
 
-`REMOTEPOINTER_REQUIRE_SERVER_PASSWORD` defaults to `true`, and a client that presents no password can then neither publish itself nor list or reach anyone. Set it to `false` to allow clients without one; they all land in a single open pool and share their names and profile pictures with anyone who can reach the relay, which the client warns about. Choose a password with the same care as one for a video meeting: everyone holding it sees every published name and picture, and changing it means telling everyone.
+The password itself never crosses the network. The relay derives a key from it with PBKDF2-SHA256 at startup, the client derives the same key from what the user typed, and the relay compares the two in constant time. The client stores only that derived key, under DPAPI, and can never show the password back.
+
+Leaving `Access__ServerPassword` unset runs the relay open: anyone who can reach the address becomes a client. That is meant for local development, and the client shows a warning when it finds itself on such a relay.
+
+Choose the password with the same care as one for a video meeting. Everyone holding it sees every published name and picture in every room, and changing it means telling everyone and restarting the relay.
+
+## Rooms
+
+A room is a plain name that scopes the host directory. Clients see each other when they are in the same room, and they type the name into Settings, where it is stored and shown back in the clear. Rooms are created and dropped implicitly — an unused one simply has no members, and there is nothing to administer.
+
+A room is not an access control. Everyone reaching the relay has already presented the server password, and any of them can type any room name. Rooms separate teams from each other's clutter; the password is the boundary that matters.
+
+Room names ignore case and surrounding spaces, so `Engineering` and `engineering` are one room. A client that names nothing lands in `general`.
 
 ## The host directory
 
 Hosts publish themselves in the relay directory, which is how the desktop client finds them, and it is the only route into a session. There is no switch to turn it off: a relay that published nothing would accept no join request and could serve nobody. Each host still controls its own visibility and can hide itself at any time.
 
-Being listed does not grant access — every direct join still requires host approval. It does mean anyone holding the server password can list the hosts currently published under it, which is why that password is the boundary that matters.
+Being listed does not grant access — every direct join still requires host approval. It does mean anyone holding the server password can list the hosts published in any room they care to name.
 
 ```powershell
 docker compose up -d --build

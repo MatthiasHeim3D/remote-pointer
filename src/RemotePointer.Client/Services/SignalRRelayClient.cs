@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Net;
 using System.Net.Http;
 using System.IO;
 using System.Security;
@@ -18,12 +19,6 @@ public sealed class SignalRRelayClient : IRelayClient
     private const int TransitionSettleMilliseconds = 5_000;
     private const int TransitionPollMilliseconds = 50;
 
-    /// <summary>
-    /// The key that puts a connection in the relay's shared open pool. It is what a client
-    /// presents to leave a password group after the password is cleared.
-    /// </summary>
-    private const string OpenGroupKey = "";
-
     private readonly SemaphoreSlim connectionGate = new(1, 1);
     private readonly IClientAuditLog? auditLog;
     private readonly HubConnection connection;
@@ -37,8 +32,9 @@ public sealed class SignalRRelayClient : IRelayClient
     private readonly object stateLock = new();
     private bool disposed;
     private SessionCredential? credential;
-    private string? groupKey;
-    private string? enteredGroupKey;
+    private string? passwordKey;
+    private string room;
+    private string? enteredRoom;
     private string? sessionId;
     private RelayConnectionStatus status = RelayConnectionStatus.Disconnected;
 
@@ -91,9 +87,10 @@ public sealed class SignalRRelayClient : IRelayClient
             sessionId = credential?.SessionId;
         }
 
-        groupKey = string.IsNullOrWhiteSpace(settings.Server.PasswordKey)
+        passwordKey = string.IsNullOrWhiteSpace(settings.Server.PasswordKey)
             ? null
             : settings.Server.PasswordKey;
+        room = RoomName.Normalize(settings.Server.Room);
         synchronizationContext = SynchronizationContext.Current;
         displayName = string.IsNullOrWhiteSpace(settings.Profile.UserName)
             ? Environment.MachineName
@@ -111,6 +108,18 @@ public sealed class SignalRRelayClient : IRelayClient
                 hubUrl,
                 options =>
                 {
+                    // The relay demands the derived key before it accepts the connection at
+                    // all. It is read fresh on every connect and reconnect, so a password
+                    // changed in Settings is presented by the next attempt, and it travels in
+                    // the Authorization header rather than the query string to keep it out of
+                    // proxy access logs.
+                    options.AccessTokenProvider = () =>
+                    {
+                        lock (stateLock)
+                        {
+                            return Task.FromResult(passwordKey);
+                        }
+                    };
                     if (messageHandlerFactory is not null)
                     {
                         options.HttpMessageHandlerFactory = _ => messageHandlerFactory();
@@ -201,12 +210,44 @@ public sealed class SignalRRelayClient : IRelayClient
     {
         lock (stateLock)
         {
-            groupKey = string.IsNullOrWhiteSpace(key) ? null : key;
+            var normalized = string.IsNullOrWhiteSpace(key) ? null : key;
+            if (string.Equals(passwordKey, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            passwordKey = normalized;
         }
 
-        // A connection that is not up yet presents the key when it starts. A live one has to
-        // present it now, because the relay scopes the directory per connection: until it
-        // does, this client is still listed to — and reachable from — the password it left.
+        // The password is presented when the connection is established, so a live connection
+        // was admitted by the old one and has to be replaced rather than told about the new
+        // one. A connection that is not up yet simply presents the new key when it starts.
+        if (disposed || connection.State == HubConnectionState.Disconnected)
+        {
+            return;
+        }
+
+        await connectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await connection.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            connectionGate.Release();
+        }
+    }
+
+    public async Task SetRoomAsync(string? name, CancellationToken cancellationToken = default)
+    {
+        lock (stateLock)
+        {
+            room = RoomName.Normalize(name);
+        }
+
+        // Unlike the password, the room is per connection state the relay holds, so a live
+        // connection has to name the new one now: until it does, this client is still listed
+        // in — and joinable from — the room it left.
         if (disposed || connection.State != HubConnectionState.Connected)
         {
             return;
@@ -215,7 +256,7 @@ public sealed class SignalRRelayClient : IRelayClient
         await connectionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await EnterGroupAsync(cancellationToken).ConfigureAwait(false);
+            await EnterRoomAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -652,12 +693,12 @@ public sealed class SignalRRelayClient : IRelayClient
 
         connection.Reconnecting += exception =>
         {
-            // The relay tracks the group per connection, and a reconnect brings a new one that
-            // starts in the open pool, so the key has to be presented again before this client
-            // can see or reach anything.
+            // The relay tracks the room per connection, and a reconnect brings a new one that
+            // starts in the default room, so this client has to name its room again before it
+            // can see or reach anyone in it.
             lock (stateLock)
             {
-                enteredGroupKey = null;
+                enteredRoom = null;
             }
 
             SetStatus(
@@ -670,7 +711,7 @@ public sealed class SignalRRelayClient : IRelayClient
         {
             lock (stateLock)
             {
-                enteredGroupKey = null;
+                enteredRoom = null;
             }
 
             if (!disposed)
@@ -687,7 +728,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private async Task EnsureConnectedAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        if (connection.State == HubConnectionState.Connected && IsGroupEntryCurrent())
+        if (connection.State == HubConnectionState.Connected && IsRoomEntryCurrent())
         {
             return;
         }
@@ -698,11 +739,34 @@ public sealed class SignalRRelayClient : IRelayClient
             await WaitForTransitionToSettleAsync(cancellationToken).ConfigureAwait(false);
             if (connection.State == HubConnectionState.Disconnected)
             {
-                await connection.StartAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await connection.StartAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException exception)
+                    when (exception.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    bool hasPassword;
+                    lock (stateLock)
+                    {
+                        hasPassword = passwordKey is not null;
+                    }
+
+                    // The relay turned this client away at the front door. Reported apart from
+                    // an unreachable relay, because the address is right and only the password
+                    // is wrong — retrying without changing it cannot help.
+                    SetStatus(
+                        RelayConnectionStatus.Unauthorized,
+                        hasPassword
+                            ? "The server password is not correct."
+                            : "This relay requires a server password.");
+                    throw;
+                }
+
                 SetStatus(RelayConnectionStatus.Connected, "Connected to relay.");
             }
 
-            await EnterGroupAsync(cancellationToken).ConfigureAwait(false);
+            await EnterRoomAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -711,50 +775,45 @@ public sealed class SignalRRelayClient : IRelayClient
     }
 
     /// <summary>
-    /// The relay tracks the group per connection, so the key is presented again after every
-    /// connect and reconnect. It is sent as a hub argument rather than a connection query
-    /// parameter to keep it out of proxy access logs.
+    /// The relay tracks the room per connection, so it is named again after every connect and
+    /// reconnect.
     /// </summary>
-    private async Task EnterGroupAsync(CancellationToken cancellationToken)
+    private async Task EnterRoomAsync(CancellationToken cancellationToken)
     {
-        string? keyToEnter;
+        string? roomToEnter;
         lock (stateLock)
         {
-            keyToEnter = GetGroupKeyToEnterNoLock();
+            roomToEnter = GetRoomToEnterNoLock();
         }
 
-        if (keyToEnter is null || connection.State != HubConnectionState.Connected)
+        if (roomToEnter is null || connection.State != HubConnectionState.Connected)
         {
             return;
         }
 
-        await connection.InvokeAsync("EnterRelayGroup", keyToEnter, cancellationToken)
+        await connection.InvokeAsync("EnterRoom", roomToEnter, cancellationToken)
             .ConfigureAwait(false);
         lock (stateLock)
         {
-            // This is now the key the relay holds for the connection. A password changed while
-            // the call was in flight simply leaves one to present, and the comparison finds it.
-            enteredGroupKey = keyToEnter;
+            // This is now the room the relay holds for the connection. A room changed while the
+            // call was in flight simply leaves one to name, and the comparison finds it.
+            enteredRoom = roomToEnter;
         }
     }
 
     /// <summary>
-    /// The key this connection still owes the relay, or null when the relay already holds the
-    /// current one. A connection starts in the relay's open pool, so a client that never set a
-    /// password owes nothing; one that cleared its password owes the empty key that returns it
-    /// there, or the relay would keep it in the group its old password derived to.
+    /// The room this connection still owes the relay, or null when the relay already holds the
+    /// current one. A fresh connection owes its room even when it is the default one, because
+    /// the relay is what decides where an unnamed connection sits.
     /// </summary>
-    private string? GetGroupKeyToEnterNoLock()
-    {
-        var desired = groupKey ?? (enteredGroupKey is null ? null : OpenGroupKey);
-        return string.Equals(desired, enteredGroupKey, StringComparison.Ordinal) ? null : desired;
-    }
+    private string? GetRoomToEnterNoLock() =>
+        string.Equals(room, enteredRoom, StringComparison.Ordinal) ? null : room;
 
-    private bool IsGroupEntryCurrent()
+    private bool IsRoomEntryCurrent()
     {
         lock (stateLock)
         {
-            return GetGroupKeyToEnterNoLock() is null;
+            return GetRoomToEnterNoLock() is null;
         }
     }
 
@@ -784,7 +843,7 @@ public sealed class SignalRRelayClient : IRelayClient
     private async Task OnReconnectedAsync(string? connectionId)
     {
         _ = connectionId;
-        await EnterGroupAsync(CancellationToken.None).ConfigureAwait(false);
+        await EnterRoomAsync(CancellationToken.None).ConfigureAwait(false);
         var currentCredential = Credential;
         if (currentCredential is null)
         {

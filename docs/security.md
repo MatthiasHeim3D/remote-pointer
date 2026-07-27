@@ -43,10 +43,11 @@ No development certificate-bypass switch will be included in production builds.
 
 - Session secrets, session tokens, and reconnect tokens are cryptographically generated; only hashes are retained in server state.
 - A host controls its own visibility for each active session and can hide it at any time. The directory is the only route into a session, so there is no operator switch to disable it — a relay that published nothing could serve nobody.
-- A server password scopes the directory. The client derives a key from it with PBKDF2-SHA256 and the relay never receives the password, so listings, join requests and directory notifications reach only clients holding the same one. `Sessions:RequireServerPassword` defaults to true and rejects clients that present none; disabling it puts passwordless clients into one open pool and the client warns about it.
-- Changing the password takes effect on the relay immediately rather than at the next hub call, and a published host moves to the new group with the connection that published it. The password it left can no longer list or reach it, and a request that no longer shares its group is cancelled before it can be approved. An annotator already approved keeps its connection, which the host ends from that annotator's row or with **Disconnect all**.
-- Only the derived key is stored on the client, under DPAPI `CurrentUser` alongside session credentials, never in the preferences file and never shown back to the user. Settings identifies the password in use by a short check code derived from that key under its own domain separator: clients showing the same code share a password, and recovering the password from a code still means guessing passwords through the same PBKDF2 cost.
-- Directory entries expose the host's chosen display name, optional profile picture, and opaque session ID to the clients that share its password. Direct requests still require host approval before any annotator credential is issued.
+- A server password guards the relay itself. The client derives a key from it with PBKDF2-SHA256 and presents only that key on the connection, in an `Authorization` header rather than the query string, so it stays out of proxy access logs. The relay derives the same key from its configured `Access:ServerPassword` once at startup and compares in constant time; a client without it is refused at the handshake and never reaches the hub. Leaving the setting empty runs the relay open, and the client warns when it finds itself on such a relay.
+- Only the derived key is stored on the client, under DPAPI `CurrentUser` alongside session credentials, never in the preferences file and never shown back to the user. Changing the password drops both role connections, because each was admitted by the old one, and the next call reconnects with the new key.
+- Rooms scope the directory and are deliberately not secret: the name is stored in the preferences file, shown back in Settings, and sent in the clear, so a user can read out which room they are in. Everyone the password admitted can name any room, so a room separates teams rather than guarding them.
+- Changing a room takes effect on the relay immediately rather than at the next hub call, and a published host moves to the new room with the connection that published it. The room it left can no longer list or reach it, and a request that no longer shares its room is cancelled before it can be approved. An annotator already approved keeps its connection, which the host ends from that annotator's row or with **Disconnect all**.
+- Directory entries expose the host's chosen display name, optional profile picture, and opaque session ID to the clients in the same room. Direct requests still require host approval before any annotator credential is issued.
 - Annotator credentials are issued only after explicit approval from the session's host connection.
 - Role and session membership are revalidated for every pointer, acknowledgement, resume, and termination operation.
 - Reconnect requires the client-instance ID, session token, role, and a single-use rotating reconnect token.
@@ -55,6 +56,8 @@ No development certificate-bypass switch will be included in production builds.
 - SignalR receive payloads are limited to 32 KB; each freehand batch is separately limited to 128 validated normalized points.
 - Structured logs omit session secrets, role tokens, reconnect tokens, and individual pointer coordinates.
 - Production refuses plaintext requests by default; the Docker profile permits it only on the unexposed relay container port behind Caddy. No certificate-validation bypass exists.
+
+- The health and version endpoints stay open, because a client has to be able to check that an address is a reachable relay before it can have been given the password for it. Neither exposes session, room, or client state.
 
 ## Phase 5 client controls
 
