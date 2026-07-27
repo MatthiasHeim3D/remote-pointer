@@ -3,6 +3,9 @@ param(
     [Parameter(Mandatory)]
     [string]$SetupPath,
 
+    [ValidateSet('CurrentUser', 'AllUsers')]
+    [string]$Scope = 'CurrentUser',
+
     [switch]$SkipCertificateTrust
 )
 
@@ -10,11 +13,26 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $resolvedSetup = (Resolve-Path -LiteralPath $SetupPath).Path
-$installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\Remote Pointer'
+
+if ($Scope -eq 'AllUsers') {
+    $isElevated = ([Security.Principal.WindowsPrincipal]::new(
+            [Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole(
+        [Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isElevated) {
+        throw 'An all-users check must run from an elevated session; setup cannot show a UAC prompt in silent mode.'
+    }
+    $installDirectory = Join-Path $env:ProgramFiles 'Remote Pointer'
+    $scopeArgument = '/ALLUSERS'
+}
+else {
+    $installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\Remote Pointer'
+    $scopeArgument = '/CURRENTUSER'
+}
+
 $executablePath = Join-Path $installDirectory 'RemotePointer.Client.exe'
 $uninstallerPath = Join-Path $installDirectory 'unins000.exe'
 
-$installArguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-'
+$installArguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- $scopeArgument"
 if ($SkipCertificateTrust) {
     $installArguments += ' /MERGETASKS="!trustrelay"'
 }
@@ -47,4 +65,9 @@ if (Test-Path -LiteralPath $executablePath) {
     throw 'Uninstall did not remove the application executable.'
 }
 
-Write-Output 'Per-user install and uninstall checks passed without elevation.'
+if ($Scope -eq 'AllUsers') {
+    Write-Output "All-users install and uninstall checks passed under $installDirectory."
+}
+else {
+    Write-Output 'Per-user install and uninstall checks passed without elevation.'
+}

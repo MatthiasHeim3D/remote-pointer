@@ -34,7 +34,7 @@ Test transitive dependencies include Microsoft TestPlatform/CodeCoverage 17.14.1
 
 | Package/tool | Version | Purpose |
 | --- | ---: | --- |
-| Inno Setup | 6.x | Build the admin-free, per-user x64 setup executable |
+| Inno Setup | 6.x | Build the x64 setup executable (admin-free per-user by default, all-users optional) |
 | Docker Compose | Current supported release | Run the relay and Caddy HTTPS proxy |
 | Caddy container | `caddy:2-alpine` | Terminate HTTPS and manage the small deployment's local CA |
 

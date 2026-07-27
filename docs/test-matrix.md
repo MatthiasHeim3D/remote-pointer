@@ -114,7 +114,8 @@
 1. Start Compose with the final DNS hostname and confirm `https://<hostname>/health` through Caddy.
 2. Export only Caddy's `root.crt`; confirm its private key remains in the persistent Docker volume.
 3. Build the Inno Setup package with the matching HTTPS URL and root, and archive the generated SHA-256 file on the restricted internal share.
-4. Run `build\Test-Installer.ps1` as a non-administrator. Confirm current-user install and uninstall succeed.
-5. Install normally and leave the HTTPS trust task selected. Confirm the Start menu shortcut is current-user and the health URL succeeds without certificate warnings.
+4. Run `build\Test-Installer.ps1` as a non-administrator. Confirm current-user install and uninstall succeed. On a machine where machine-wide installs are in scope, repeat with `-Scope AllUsers` from an elevated session.
+5. Install normally and leave the HTTPS trust task selected. Confirm setup preselects "Install for me only", that the Start menu shortcut is current-user, and that the health URL succeeds without certificate warnings.
+5a. For an all-users install, confirm setup prompts for elevation, lands in `%ProgramFiles%\Remote Pointer`, trusts the root in `Cert:\LocalMachine\Root`, and that a second standard account gets its own first-run setup with an empty relay address.
 6. Establish a real host/annotator session from two machines, including one over VPN, and repeat join approval, calibration, annotating, termination, and reconnect tests.
 7. Confirm the clients require only outbound TCP 443 and relay port 8080 is not published by Docker.

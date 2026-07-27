@@ -82,8 +82,8 @@ No development certificate-bypass switch will be included in production builds.
 
 ## Phase 7 deployment controls
 
-- Inno Setup installs the self-contained x64 client per user and requests no administrator rights.
-- The installer contains only Caddy's public CA root and adds it to the current user's root store when the clearly labelled HTTPS task is selected. Caddy's CA private key remains in its persistent server-side data volume.
+- Inno Setup installs the self-contained x64 client per user by default and requests no administrator rights. An all-users install is opt-in on setup's first page and elevates through the normal UAC prompt; it widens only the program files, the Start menu shortcut, and the certificate store below.
+- The installer contains only Caddy's public CA root and adds it to the root store when the clearly labelled HTTPS task is selected — the current user's store for a per-user install, the machine store for an all-users install. Caddy's CA private key remains in its persistent server-side data volume.
 - The relay URL is entered by the user on first launch, must use HTTPS, and still uses normal Windows certificate validation.
 - Client audit and DPAPI session files remain per-user and are not silently deleted by uninstall.
 - Endpoints require outbound TCP 443 only. The package creates no inbound firewall rule, Windows service, driver, remote-control capability, or certificate-validation bypass.

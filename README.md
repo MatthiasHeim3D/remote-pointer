@@ -62,7 +62,7 @@ When several people annotate one screen at once, the server keeps them apart for
 
 ## Installing
 
-Remote Pointer is distributed as a per-user Windows installer that needs no administrator rights and installs only for the current account. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address; add the relay's server password in the same screen.
+Remote Pointer is distributed as a Windows installer. It defaults to installing just for you, which needs no administrator rights; on a shared PC you can instead choose "Install for all users" on setup's first page, which asks for admin. Your settings stay yours either way — every Windows account gets its own relay address, server password, and profile. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address; add the relay's server password in the same screen.
 
 - Set up the relay server → [Server deployment](docs/server-deployment.md)
 - Build and install the client → [Client deployment](docs/deployment.md)
