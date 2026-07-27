@@ -1207,43 +1207,7 @@
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
                                Text="Annotation Area" />
-                    <CheckBox Style="{StaticResource ToggleSwitchStyle}"
-                              IsChecked="{Binding ShowUsageHints}"
-                              Content="Show usage hints" />
-                    <StackPanel Margin="0,18,0,0" ToolTipService.ShowDuration="30000">
-                        <StackPanel.ToolTip>
-                            <ToolTip Padding="11,9"
-                                     Background="#2B2B2B"
-                                     BorderBrush="#555555"
-                                     Foreground="#F5F5F5">
-                                <TextBlock MaxWidth="280"
-                                           Foreground="#F5F5F5"
-                                           TextWrapping="Wrap"
-                                           Text="Affects your screen only. While you draw, the same shape reaches your eyes twice: immediately here in the annotation area, and a moment later inside the shared video of your partner's screen. Turning this down keeps your local strokes faint, so the copy arriving through the video is the one you read and judge. Your partner always sees the drawing at full strength." />
-                            </ToolTip>
-                        </StackPanel.ToolTip>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Drawing opacity" />
-                            <TextBlock Grid.Column="1"
-                                       Foreground="#AFAFAF"
-                                       Text="{Binding DrawingOpacityLabel}" />
-                        </Grid>
-                        <Slider Margin="0,6,0,0"
-                                Style="{StaticResource SettingsSliderStyle}"
-                                Minimum="{Binding MinimumDrawingOpacityPercent, Mode=OneTime}"
-                                Maximum="{Binding MaximumDrawingOpacityPercent, Mode=OneTime}"
-                                SmallChange="5"
-                                LargeChange="10"
-                                TickFrequency="5"
-                                IsSnapToTickEnabled="True"
-                                Value="{Binding DrawingOpacityPercent}" />
-                    </StackPanel>
-
-                    <StackPanel Margin="0,18,0,0" ToolTipService.ShowDuration="30000">
+                    <StackPanel ToolTipService.ShowDuration="30000">
                         <StackPanel.ToolTip>
                             <ToolTip Padding="11,9"
                                      Background="#2B2B2B"
@@ -1335,6 +1299,44 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </StackPanel>
+
+                    <StackPanel Margin="0,18,0,0" ToolTipService.ShowDuration="30000">
+                        <StackPanel.ToolTip>
+                            <ToolTip Padding="11,9"
+                                     Background="#2B2B2B"
+                                     BorderBrush="#555555"
+                                     Foreground="#F5F5F5">
+                                <TextBlock MaxWidth="280"
+                                           Foreground="#F5F5F5"
+                                           TextWrapping="Wrap"
+                                           Text="Affects your screen only. While you draw, the same shape reaches your eyes twice: immediately here in the annotation area, and a moment later inside the shared video of your partner's screen. Turning this down keeps your local strokes faint, so the copy arriving through the video is the one you read and judge. Your partner always sees the drawing at full strength." />
+                            </ToolTip>
+                        </StackPanel.ToolTip>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Opacity" />
+                            <TextBlock Grid.Column="1"
+                                       Foreground="#AFAFAF"
+                                       Text="{Binding DrawingOpacityLabel}" />
+                        </Grid>
+                        <Slider Margin="0,6,0,0"
+                                Style="{StaticResource SettingsSliderStyle}"
+                                Minimum="{Binding MinimumDrawingOpacityPercent, Mode=OneTime}"
+                                Maximum="{Binding MaximumDrawingOpacityPercent, Mode=OneTime}"
+                                SmallChange="5"
+                                LargeChange="10"
+                                TickFrequency="5"
+                                IsSnapToTickEnabled="True"
+                                Value="{Binding DrawingOpacityPercent}" />
+                    </StackPanel>
+
+                    <CheckBox Margin="0,18,0,0"
+                              Style="{StaticResource ToggleSwitchStyle}"
+                              IsChecked="{Binding ShowUsageHints}"
+                              Content="Show usage hints" />
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
                                Text="Application" />
