@@ -26,6 +26,13 @@ public interface IRelayClient : IAsyncDisposable
     /// </summary>
     event EventHandler<RelayAnnotationPausedEventArgs>? AnnotationPausedChanged;
 
+    /// <summary>
+    /// Raised on an annotator when the relay allocates it a drawing colour. That is its own
+    /// preference whenever it can have it, and a free preset when an annotator ahead of it
+    /// already holds it; it is raised again with the preference once the clash clears.
+    /// </summary>
+    event EventHandler<RelayAnnotationColorEventArgs>? AnnotationColorAssigned;
+
     event EventHandler? HostDirectoryChanged;
 
     string ServerUrl { get; }
@@ -97,6 +104,14 @@ public interface IRelayClient : IAsyncDisposable
     Task SetAnnotatorPausedAsync(
         string? annotatorId,
         bool paused,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Tells the relay which colour this annotator would like. The relay answers through
+    /// <see cref="AnnotationColorAssigned"/>, which may name a different one.
+    /// </summary>
+    Task SetAnnotationColorPreferenceAsync(
+        string color,
         CancellationToken cancellationToken = default);
 
     Task<bool> SendPointerAsync(

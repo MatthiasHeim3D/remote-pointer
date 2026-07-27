@@ -317,6 +317,22 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void AnnotationColorPresets_CoverEveryColorTheRelayCanAllocate()
+    {
+        // The relay hands out palette colours the annotator never picked, so a palette entry the
+        // settings pane cannot show or name would arrive as an unexplained colour.
+        Assert.Equal(
+            AnnotationColors.Palette.Count,
+            MainWindowViewModel.AnnotationColorNames.Length);
+        Assert.Equal(
+            AnnotationColors.Palette,
+            MainWindowViewModel.AnnotationColorPresets.Select(preset => preset.Color).ToArray());
+        Assert.All(
+            MainWindowViewModel.AnnotationColorNames,
+            name => Assert.False(string.IsNullOrWhiteSpace(name)));
+    }
+
+    [Fact]
     public void MissingServer_ShowsMainScreenWithSetupGuidance()
     {
         using var overlay = new FakeOverlayService();

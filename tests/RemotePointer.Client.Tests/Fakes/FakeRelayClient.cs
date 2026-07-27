@@ -23,6 +23,8 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public event EventHandler<RelayAnnotationPausedEventArgs>? AnnotationPausedChanged;
 
+    public event EventHandler<RelayAnnotationColorEventArgs>? AnnotationColorAssigned;
+
     public event EventHandler? HostDirectoryChanged;
 
     public string ServerUrl { get; init; } = "https://relay.example";
@@ -242,6 +244,20 @@ internal sealed class FakeRelayClient : IRelayClient
         PauseRequests.Add((annotatorId, paused));
         return Task.CompletedTask;
     }
+
+    public List<string> AnnotationColorPreferences { get; } = [];
+
+    public Task SetAnnotationColorPreferenceAsync(
+        string color,
+        CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        AnnotationColorPreferences.Add(color);
+        return Task.CompletedTask;
+    }
+
+    public void RaiseAnnotationColorAssigned(string color) =>
+        AnnotationColorAssigned?.Invoke(this, new RelayAnnotationColorEventArgs(color));
 
     public Task<bool> SendPointerAsync(
         PointerEventMessage pointerEvent,

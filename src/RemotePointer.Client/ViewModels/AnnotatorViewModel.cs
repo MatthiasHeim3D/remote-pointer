@@ -36,6 +36,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
     private string statusMessage;
     private string connectionMessage;
     private string currentHostName = "Connected host";
+    private string preferredAnnotationColor = AnnotationColors.Default;
     private string annotationColor = AnnotationColors.Default;
     private byte[]? currentHostProfilePicturePng;
 
@@ -69,6 +70,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             relayClient.SessionEnded += OnSessionEnded;
             relayClient.HostDirectoryChanged += OnHostDirectoryChanged;
             relayClient.AnnotationPausedChanged += OnAnnotationPausedChanged;
+            relayClient.AnnotationColorAssigned += OnAnnotationColorAssigned;
         }
 
         calibrateCommand = new RelayCommand(
@@ -332,13 +334,84 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         targetRegionService.SetDrawingOpacityPercent(drawingOpacityPercent);
 
     /// <summary>
-    /// Sets the colour this annotator draws in, on the local target area and on every pointer
-    /// event it sends, so the host renders the drawing the same way its author does.
+    /// Records the colour this annotator would like to draw in and asks the relay for it. The
+    /// preference is applied straight away so the choice is visible at once; if another annotator
+    /// already holds it the relay answers with a different one, which arrives through
+    /// <see cref="OnAnnotationColorAssigned"/> and takes over from there.
     /// </summary>
     public void SetAnnotationColor(string? color)
     {
-        annotationColor = AnnotationColors.Normalize(color);
-        targetRegionService.SetAnnotationColor(annotationColor);
+        preferredAnnotationColor = AnnotationColors.Normalize(color);
+        ApplyAnnotationColor(preferredAnnotationColor);
+        _ = RequestAnnotationColorAsync();
+    }
+
+    /// <summary>
+    /// The colour actually being drawn in, which differs from the preference only while another
+    /// annotator holds that colour.
+    /// </summary>
+    public string AnnotationColor => annotationColor;
+
+    public string PreferredAnnotationColor => preferredAnnotationColor;
+
+    /// <summary>
+    /// True while the relay has this annotator on a colour it did not ask for, so the settings
+    /// pane can say why the swatch it shows is not the colour on screen.
+    /// </summary>
+    public bool IsAnnotationColorReassigned => !string.Equals(
+        annotationColor,
+        preferredAnnotationColor,
+        StringComparison.Ordinal);
+
+    private async Task RequestAnnotationColorAsync()
+    {
+        if (relayClient is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await relayClient.SetAnnotationColorPreferenceAsync(preferredAnnotationColor);
+        }
+        catch (Exception exception)
+        {
+            // The colour is cosmetic: a preference the relay never heard leaves this annotator
+            // drawing in it locally, which is worth a note but never worth failing the session.
+            SetStatus($"The annotation colour could not be registered: {exception.Message}", true);
+        }
+    }
+
+    private void OnAnnotationColorAssigned(object? sender, RelayAnnotationColorEventArgs e)
+    {
+        _ = sender;
+        var assigned = AnnotationColors.Normalize(e.Color);
+        var wasReassigned = IsAnnotationColorReassigned;
+        ApplyAnnotationColor(assigned);
+        if (IsAnnotationColorReassigned)
+        {
+            SetStatus(
+                "Another annotator is already using your annotation colour, so this session uses a free one.",
+                false);
+        }
+        else if (wasReassigned)
+        {
+            SetStatus("Your annotation colour is available again.", false);
+        }
+    }
+
+    private void ApplyAnnotationColor(string color)
+    {
+        if (string.Equals(annotationColor, color, StringComparison.Ordinal))
+        {
+            RaisePropertyChanged(nameof(IsAnnotationColorReassigned));
+            return;
+        }
+
+        annotationColor = color;
+        targetRegionService.SetAnnotationColor(color);
+        RaisePropertyChanged(nameof(AnnotationColor));
+        RaisePropertyChanged(nameof(IsAnnotationColorReassigned));
     }
 
     public Task ApplyClientSettingsAsync(
@@ -398,6 +471,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             relayClient.SessionEnded -= OnSessionEnded;
             relayClient.HostDirectoryChanged -= OnHostDirectoryChanged;
             relayClient.AnnotationPausedChanged -= OnAnnotationPausedChanged;
+            relayClient.AnnotationColorAssigned -= OnAnnotationColorAssigned;
             RelayClientShutdown.Complete(relayClient);
         }
 
@@ -694,6 +768,9 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             ApplyHostDisplay(e.State.HostDisplay);
         }
 
+        // The relay cannot allocate a colour it has not been told about, and the approval is the
+        // first moment there is a session to register it against.
+        _ = RequestAnnotationColorAsync();
         SetStatus("Host approved this annotator. Calibrate the target area.", false);
     }
 
@@ -764,6 +841,8 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
         IsJoinPending = false;
         IsSessionApproved = false;
         IsPaused = false;
+        // Any allocation belonged to the session that just ended, so the preference stands again.
+        ApplyAnnotationColor(preferredAnnotationColor);
         targetRegionService.SetCalibrationIdentity(null);
         hostDisplay = null;
         CurrentHostName = "Connected host";

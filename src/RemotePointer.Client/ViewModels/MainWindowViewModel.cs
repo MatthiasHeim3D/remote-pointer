@@ -604,21 +604,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public int MaximumDrawingOpacityPercent => PointerSettings.MaximumDrawingOpacityPercent;
 
     /// <summary>
-    /// The swatches offered before the colour picker. They are spaced around the wheel so two
-    /// annotators on one host land on visibly different colours, and each stays legible against
-    /// both a light and a dark screen — the shared video underneath could be either. The first is
-    /// the accent the rest of the client already uses.
+    /// Names for the swatches, in the order of <see cref="AnnotationColors.Palette"/>. The
+    /// colours themselves live in the contract because the relay allocates from the same list
+    /// when it has to move an annotator off a colour somebody else already holds — a preset the
+    /// settings pane could not name would arrive as an unexplained colour.
     /// </summary>
-    internal static readonly (string Name, string Color)[] AnnotationColorPresets =
-    [
-        ("Red", AnnotationColors.Default),
-        ("Amber", "#FFB900"),
-        ("Green", "#6CCB7F"),
-        ("Cyan", "#4FC3F7"),
-        ("Blue", "#6C8CFF"),
-        ("Violet", "#B388FF"),
-        ("Pink", "#FF6FB5"),
-    ];
+    internal static readonly string[] AnnotationColorNames =
+        ["Red", "Amber", "Green", "Cyan", "Blue", "Violet", "Pink"];
+
+    internal static IEnumerable<(string Name, string Color)> AnnotationColorPresets =>
+        AnnotationColorNames.Zip(
+            AnnotationColors.Palette,
+            (name, color) => (Name: name, Color: color));
 
     public IReadOnlyList<AnnotationColorOption> AnnotationColorOptions { get; }
 
@@ -650,6 +647,29 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         option => string.Equals(option.Color, AnnotationColor, StringComparison.Ordinal));
 
     public ICommand SelectAnnotationColorCommand { get; }
+
+    /// <summary>
+    /// Explains a colour on screen that is not the one selected here, which happens when an
+    /// annotator ahead of this one already holds the chosen colour. Empty the rest of the time,
+    /// which collapses the line.
+    /// </summary>
+    public string AnnotationColorNotice => Annotator.IsAnnotationColorReassigned
+        ? $"In use by another annotator. Drawing in {DescribeAnnotationColor(Annotator.AnnotationColor)} for this session."
+        : string.Empty;
+
+    private static string DescribeAnnotationColor(string color)
+    {
+        var index = AnnotationColors.Palette
+            .Select((paletteColor, paletteIndex) => (paletteColor, paletteIndex))
+            .FirstOrDefault(entry => string.Equals(
+                entry.paletteColor,
+                color,
+                StringComparison.Ordinal))
+            .paletteIndex;
+        return AnnotationColors.Palette.Contains(color, StringComparer.Ordinal)
+            ? AnnotationColorNames[index].ToLowerInvariant()
+            : color;
+    }
 
     private void RefreshAnnotationColorSelection()
     {
@@ -1123,6 +1143,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (e.PropertyName == nameof(AnnotatorViewModel.ConnectionMessage))
         {
             RaisePropertyChanged(nameof(FlyoutConnectionMessage));
+        }
+
+        if (e.PropertyName == nameof(AnnotatorViewModel.IsAnnotationColorReassigned))
+        {
+            RaisePropertyChanged(nameof(AnnotationColorNotice));
         }
     }
 

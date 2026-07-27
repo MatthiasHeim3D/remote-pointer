@@ -49,7 +49,9 @@ Everything you draw fades on its own after a couple of seconds — nothing is sa
 
 As an annotator you see each shape twice: right away in your own target area, and again a moment later in the remote screen you are looking at. *Drawing opacity* in Settings dims your local copy so the returning one stays readable; it starts at 50% and never changes what the host sees.
 
-*Annotation colour* in Settings picks what you draw in — seven presets, or any colour you like through the picker. Unlike opacity it travels with your drawing, so your partner's screen shows it in the same colour you do. When several people annotate one screen at once, give each a different colour and the host can tell you apart at a glance.
+*Annotation colour* in Settings picks what you draw in — seven presets, or any colour you like through the picker. It applies the moment you click, so you can try one out mid-session, and unlike opacity it travels with your drawing, so your partner's screen shows it in the same colour you do.
+
+When several people annotate one screen at once, the server keeps them apart for you: if someone already has the colour you picked, you are moved to a free preset for that session and told so under the swatches. Your own choice is kept, and you get it back as soon as they leave. Past seven annotators there are no distinct colours left and they start to repeat.
 
 ## Requirements
 

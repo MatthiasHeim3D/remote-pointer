@@ -58,6 +58,21 @@ public interface ISessionManager
         string annotatorConnectionId,
         string hostConnectionId);
 
+    /// <summary>
+    /// Records the colour an approved annotator would like to draw in and reallocates the
+    /// session, returning every annotator whose effective colour moved as a result.
+    /// </summary>
+    IReadOnlyList<AnnotationColorAssignment> SetAnnotationColorPreference(
+        string connectionId,
+        string? preferredColor);
+
+    /// <summary>
+    /// Reallocates colours for a session after its membership changed, returning only the
+    /// annotators whose colour moved. Safe to call for a session that is gone, which is what lets
+    /// callers run it unconditionally after any departure.
+    /// </summary>
+    IReadOnlyList<AnnotationColorAssignment> RefreshAnnotationColors(string sessionId);
+
     PointerRelayResult AcceptPointer(string connectionId, PointerEventMessage pointerEvent);
 
     AcknowledgementRelayResult AcceptAcknowledgement(

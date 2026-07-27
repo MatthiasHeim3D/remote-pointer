@@ -58,6 +58,13 @@ public sealed record AcknowledgementRelayResult(
     string SessionId,
     string? AnnotatorConnectionId);
 
+/// <summary>
+/// One annotator's newly effective drawing colour, to be delivered to that connection. Only
+/// annotators whose colour actually moved are reported, so a busy session does not tell everybody
+/// something they already know each time somebody joins or leaves.
+/// </summary>
+public sealed record AnnotationColorAssignment(string ConnectionId, string Color);
+
 public sealed record HostDisplayUpdateResult(
     string SessionId,
     IReadOnlyList<string> AnnotatorConnectionIds,

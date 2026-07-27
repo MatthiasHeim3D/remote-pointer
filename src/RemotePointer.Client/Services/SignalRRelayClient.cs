@@ -148,6 +148,8 @@ public sealed class SignalRRelayClient : IRelayClient
 
     public event EventHandler<RelayAnnotationPausedEventArgs>? AnnotationPausedChanged;
 
+    public event EventHandler<RelayAnnotationColorEventArgs>? AnnotationColorAssigned;
+
     public string ServerUrl { get; }
 
     public RelayConnectionStatus Status
@@ -450,6 +452,22 @@ public sealed class SignalRRelayClient : IRelayClient
             .ConfigureAwait(false);
     }
 
+    public async Task SetAnnotationColorPreferenceAsync(
+        string color,
+        CancellationToken cancellationToken = default)
+    {
+        // Only an approved annotator has a colour to allocate. Before that the preference lives
+        // in settings alone and is presented as soon as the session opens.
+        if (!CanSend(ClientRole.Annotator, Credential))
+        {
+            return;
+        }
+
+        await EnsureConnectedAsync(cancellationToken).ConfigureAwait(false);
+        await connection.InvokeAsync("SetAnnotationColorPreference", color, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<bool> SendPointerAsync(
         PointerEventMessage pointerEvent,
         CancellationToken cancellationToken = default)
@@ -600,6 +618,12 @@ public sealed class SignalRRelayClient : IRelayClient
                 () => AnnotationPausedChanged?.Invoke(
                     this,
                     new RelayAnnotationPausedEventArgs(paused))));
+        connection.On<string>(
+            "AnnotationColorAssigned",
+            color => Publish(
+                () => AnnotationColorAssigned?.Invoke(
+                    this,
+                    new RelayAnnotationColorEventArgs(color))));
         connection.On<PointerAcknowledgement>(
             "PointerDisplayed",
             acknowledgement => Publish(

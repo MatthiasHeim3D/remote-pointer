@@ -20,6 +20,12 @@ public interface IPointerClient
 
     Task AnnotationPaused(bool paused);
 
+    /// <summary>
+    /// Tells an annotator the colour it should now draw in. Sent whenever allocation moves it,
+    /// which includes being moved back onto its own preference once the clash clears.
+    /// </summary>
+    Task AnnotationColorAssigned(string color);
+
     Task SessionEnded(string reason);
 
     Task HostDirectoryChanged();

@@ -1315,6 +1315,25 @@
                                 </TextBlock>
                             </Button>
                         </StackPanel>
+                        <!-- Only ever filled while the relay has this annotator on a colour it
+                             did not choose, so the swatch strip is not left silently disagreeing
+                             with what is on screen. Empty collapses the line. -->
+                        <TextBlock Margin="0,8,0,0"
+                                   FontSize="11"
+                                   Foreground="#F0D79A"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding AnnotationColorNotice}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding AnnotationColorNotice}"
+                                                     Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"

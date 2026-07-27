@@ -110,6 +110,7 @@ public sealed class PointerHub(
             }
         }
 
+        await NotifyAnnotationColorsAsync(disconnect?.SessionId).ConfigureAwait(false);
         await NotifyDirectoryChangedAsync(groupKey, disconnect?.GroupKey).ConfigureAwait(false);
         if (exception is null)
         {
@@ -310,6 +311,7 @@ public sealed class PointerHub(
             await Clients.Client(result.HostConnectionId)
                 .SessionApproved(result.State)
                 .ConfigureAwait(false);
+            await NotifyAnnotationColorsAsync(result.SessionId).ConfigureAwait(false);
             await NotifyDirectoryChangedAsync().ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.AnnotatorApproved,
@@ -344,6 +346,48 @@ public sealed class PointerHub(
         catch (SessionOperationException exception)
         {
             throw ToHubException(exception, "RejectAnnotator");
+        }
+    }
+
+    public async Task SetAnnotationColorPreference(string color)
+    {
+        try
+        {
+            var assignments = sessionManager.SetAnnotationColorPreference(
+                Context.ConnectionId,
+                color);
+            await SendAnnotationColorsAsync(assignments).ConfigureAwait(false);
+        }
+        catch (SessionOperationException exception)
+        {
+            throw ToHubException(exception, "SetAnnotationColorPreference");
+        }
+    }
+
+    /// <summary>
+    /// Reallocates a session's colours and tells whoever moved. Called after anything that
+    /// changes who is in the session, so a departure frees the colour it was holding and hands it
+    /// straight back to whoever wanted it first.
+    /// </summary>
+    private async Task NotifyAnnotationColorsAsync(string? sessionId)
+    {
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            return;
+        }
+
+        await SendAnnotationColorsAsync(sessionManager.RefreshAnnotationColors(sessionId))
+            .ConfigureAwait(false);
+    }
+
+    private async Task SendAnnotationColorsAsync(
+        IReadOnlyList<AnnotationColorAssignment> assignments)
+    {
+        foreach (var assignment in assignments)
+        {
+            await Clients.Client(assignment.ConnectionId)
+                .AnnotationColorAssigned(assignment.Color)
+                .ConfigureAwait(false);
         }
     }
 
@@ -477,6 +521,7 @@ public sealed class PointerHub(
                     .SessionEnded("The host connection ended and is no longer available.")
                     .ConfigureAwait(false);
             }
+            await NotifyAnnotationColorsAsync(result.SessionId).ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.SessionEnded,
                 "Connection ended. SessionId={SessionId} HostPreserved={HostPreserved} PointerCount={PointerCount}",
@@ -516,6 +561,7 @@ public sealed class PointerHub(
                     .ConfigureAwait(false);
             }
 
+            await NotifyAnnotationColorsAsync(result.SessionId).ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.SessionEnded,
                 "Host disconnected all annotators. SessionId={SessionId} PointerCount={PointerCount}",
@@ -555,6 +601,7 @@ public sealed class PointerHub(
                     .ConfigureAwait(false);
             }
 
+            await NotifyAnnotationColorsAsync(result.SessionId).ConfigureAwait(false);
             logger.LogInformation(
                 AuditEventIds.SessionEnded,
                 "Host disconnected an annotator. SessionId={SessionId} AnnotatorClientInstanceId={ClientInstanceId}",

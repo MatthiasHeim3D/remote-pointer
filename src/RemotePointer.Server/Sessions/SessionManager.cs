@@ -407,7 +407,10 @@ public sealed class SessionManager : ISessionManager
                     new PointerTokenBucket(
                         rateLimitOptions.EventsPerSecond,
                         rateLimitOptions.BurstSize,
-                        timeProvider.GetUtcNow())));
+                        timeProvider.GetUtcNow()))
+                {
+                    JoinSequence = session.NextJoinSequence++,
+                });
             session.PendingAnnotator = null;
             connections[annotatorConnectionId] = new ConnectionMembership(
                 session.Id,
@@ -467,6 +470,95 @@ public sealed class SessionManager : ISessionManager
                 annotatorConnectionId,
                 hostConnectionId);
         }
+    }
+
+    public IReadOnlyList<AnnotationColorAssignment> SetAnnotationColorPreference(
+        string connectionId,
+        string? preferredColor)
+    {
+        EnsureIdentifier(connectionId, nameof(connectionId));
+
+        lock (syncRoot)
+        {
+            var membership = GetMembership(connectionId);
+            if (membership.Role != ClientRole.Annotator || !membership.Approved)
+            {
+                throw new SessionOperationException(
+                    "annotator_required",
+                    "Only an approved annotator can choose a drawing colour.");
+            }
+
+            var session = GetActiveSession(membership.SessionId);
+            if (!session.Annotators.TryGetValue(connectionId, out var annotator))
+            {
+                throw new SessionOperationException(
+                    "annotator_not_connected",
+                    "The annotator is no longer connected to this session.");
+            }
+
+            annotator.PreferredAnnotationColor = AnnotationColors.Normalize(preferredColor);
+            var changes = AllocateAnnotationColors(session);
+
+            // The caller is always answered, even when allocation left it where it was. It
+            // applied its own pick the moment the user made it, so silence here would leave it
+            // drawing in a colour the relay never granted — the exact disagreement between the
+            // two screens that allocating centrally is meant to prevent.
+            return changes.Any(change => string.Equals(
+                    change.ConnectionId,
+                    connectionId,
+                    StringComparison.Ordinal))
+                ? changes
+                : [.. changes, new AnnotationColorAssignment(
+                    connectionId,
+                    annotator.AssignedAnnotationColor)];
+        }
+    }
+
+    public IReadOnlyList<AnnotationColorAssignment> RefreshAnnotationColors(string sessionId)
+    {
+        EnsureIdentifier(sessionId, nameof(sessionId));
+
+        lock (syncRoot)
+        {
+            // Deliberately tolerant. Callers run this after anything that could have changed the
+            // membership, including departures that took the whole session with them.
+            return sessions.TryGetValue(sessionId, out var session)
+                ? AllocateAnnotationColors(session)
+                : [];
+        }
+    }
+
+    /// <summary>
+    /// Reallocates the whole session from its annotators' preferences and reports what moved.
+    /// Reallocating everything rather than patching the one that changed is what makes a
+    /// displaced annotator drop back onto its preference once the holder leaves.
+    /// </summary>
+    private static IReadOnlyList<AnnotationColorAssignment> AllocateAnnotationColors(
+        SessionRecord session)
+    {
+        var annotators = session.Annotators
+            .OrderBy(pair => pair.Value.JoinSequence)
+            .ToArray();
+        var allocated = AnnotationColorAllocator.Allocate(
+            [.. annotators.Select(pair => pair.Value.PreferredAnnotationColor)]);
+
+        var changes = new List<AnnotationColorAssignment>();
+        for (var index = 0; index < annotators.Length; index++)
+        {
+            var annotator = annotators[index].Value;
+            if (string.Equals(
+                    annotator.AssignedAnnotationColor,
+                    allocated[index],
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            annotator.AssignedAnnotationColor = allocated[index];
+            changes.Add(new AnnotationColorAssignment(annotators[index].Key, allocated[index]));
+        }
+
+        return changes;
     }
 
     public PointerRelayResult AcceptPointer(
@@ -1329,6 +1421,12 @@ public sealed class SessionManager : ISessionManager
         internal Dictionary<string, ConnectedAnnotator> Annotators { get; } =
             new(StringComparer.Ordinal);
 
+        /// <summary>
+        /// Stamped onto each admitted annotator so colour allocation has a stable oldest-first
+        /// order. The dictionary above is keyed by connection id, which a reconnect changes.
+        /// </summary>
+        internal long NextJoinSequence { get; set; }
+
         internal long PointerCount { get; set; }
 
         private Dictionary<Guid, string> PointerOrigins { get; } = [];
@@ -1408,6 +1506,18 @@ public sealed class SessionManager : ISessionManager
         /// the connection: resuming must not hand back the drawing rights the host took away.
         /// </summary>
         internal bool IsPaused { get; set; }
+
+        /// <summary>
+        /// Fixes this annotator's place in the colour queue. Allocation runs oldest first, so an
+        /// annotator already drawing keeps its colour when a later one wants the same.
+        /// </summary>
+        internal long JoinSequence { get; init; }
+
+        /// <summary>The colour this annotator asked for, which it may not be able to have.</summary>
+        internal string? PreferredAnnotationColor { get; set; }
+
+        /// <summary>The colour it was actually given, and the one it draws in.</summary>
+        internal string AssignedAnnotationColor { get; set; } = AnnotationColors.Default;
     }
 
     private sealed class Participant(

@@ -512,6 +512,79 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
+    public void ApprovedSession_RegistersTheAnnotationColorPreferenceWithTheRelay()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        viewModel.SetAnnotationColor("#B388FF");
+
+        ApproveSession(relay);
+
+        // Once before there was a session to register it against, and again on approval, which
+        // is the first point the relay can allocate anything.
+        Assert.Equal(["#B388FF", "#B388FF"], relay.AnnotationColorPreferences);
+    }
+
+    [Fact]
+    public void ReassignedColor_IsDrawnAndSentWhileThePreferenceIsKept()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        ApproveSession(relay);
+        viewModel.SetAnnotationColor("#B388FF");
+
+        relay.RaiseAnnotationColorAssigned("#6CCB7F");
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+
+        Assert.Equal("#6CCB7F", viewModel.AnnotationColor);
+        Assert.Equal("#6CCB7F", service.AnnotationColor);
+        Assert.Equal(
+            "#6CCB7F",
+            Assert.IsType<PointerEventMessage>(relay.SentPointer).Color);
+        // The pick the user made is untouched, so the settings pane keeps showing it.
+        Assert.Equal("#B388FF", viewModel.PreferredAnnotationColor);
+        Assert.True(viewModel.IsAnnotationColorReassigned);
+    }
+
+    [Fact]
+    public void PreferenceComingBackFree_ReturnsTheAnnotatorToIt()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        ApproveSession(relay);
+        viewModel.SetAnnotationColor("#B388FF");
+        relay.RaiseAnnotationColorAssigned("#6CCB7F");
+        Assert.True(viewModel.IsAnnotationColorReassigned);
+
+        relay.RaiseAnnotationColorAssigned("#B388FF");
+
+        Assert.Equal("#B388FF", viewModel.AnnotationColor);
+        Assert.Equal("#B388FF", service.AnnotationColor);
+        Assert.False(viewModel.IsAnnotationColorReassigned);
+    }
+
+    [Fact]
+    public void EndedSession_DropsTheAllocationAndRestoresThePreference()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        ApproveSession(relay);
+        viewModel.SetAnnotationColor("#B388FF");
+        relay.RaiseAnnotationColorAssigned("#6CCB7F");
+
+        relay.RaiseSessionEnded("Disconnected from the host.");
+
+        // The allocation belonged to that session; outside one the preference stands again.
+        Assert.Equal("#B388FF", viewModel.AnnotationColor);
+        Assert.Equal("#B388FF", service.AnnotationColor);
+        Assert.False(viewModel.IsAnnotationColorReassigned);
+    }
+
+    [Fact]
     public void SentPointer_CarriesTheDefaultColorWhenNoneWasChosen()
     {
         using var service = new FakeTargetRegionService();
@@ -556,4 +629,12 @@ public sealed class AnnotatorViewModelTests
         Assert.True(viewModel.IsError);
         Assert.Equal("Hotkey unavailable.", viewModel.StatusMessage);
     }
+
+    private static void ApproveSession(FakeRelayClient relay) =>
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
 }

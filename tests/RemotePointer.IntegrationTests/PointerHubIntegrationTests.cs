@@ -783,6 +783,90 @@ public sealed class PointerHubIntegrationTests
         Assert.Equal(created.SessionId, Assert.Single(available).SessionId);
     }
 
+    [Fact]
+    public async Task AnnotationColors_AreNudgedApartAndHandedBackWhenTheHolderLeaves()
+    {
+        using var factory = CreateFactory();
+        await using var host = CreateConnection(factory, "host-colour", "Host");
+        await using var firstAnnotator = CreateConnection(factory, "annotator-one", "Annotator One");
+        await using var secondAnnotator = CreateConnection(factory, "annotator-two", "Annotator Two");
+        var firstPending = CompletionSource<AnnotatorDescriptor>();
+        var secondPending = CompletionSource<AnnotatorDescriptor>();
+        var requestCount = 0;
+        host.On<AnnotatorDescriptor>(
+            "AnnotatorJoinRequested",
+            annotator =>
+            {
+                if (Interlocked.Increment(ref requestCount) == 1)
+                {
+                    firstPending.TrySetResult(annotator);
+                }
+                else
+                {
+                    secondPending.TrySetResult(annotator);
+                }
+            });
+
+        // Every colour the relay hands each annotator, newest last.
+        var firstColors = new List<string>();
+        var secondColors = new List<string>();
+        var secondWasMoved = CompletionSource<string>();
+        var secondGotItsPreferenceBack = CompletionSource<string>();
+        firstAnnotator.On<string>("AnnotationColorAssigned", firstColors.Add);
+        secondAnnotator.On<string>(
+            "AnnotationColorAssigned",
+            color =>
+            {
+                secondColors.Add(color);
+                if (string.Equals(color, "#B388FF", StringComparison.Ordinal))
+                {
+                    secondGotItsPreferenceBack.TrySetResult(color);
+                }
+                else
+                {
+                    secondWasMoved.TrySetResult(color);
+                }
+            });
+
+        await host.StartAsync();
+        await firstAnnotator.StartAsync();
+        await secondAnnotator.StartAsync();
+        var created = await host.InvokeAsync<CreateSessionResponse>(
+            "CreateHostSession",
+            CreateDisplay(),
+            new ClientProfile(),
+            2,
+            string.Empty);
+
+        Assert.True((await firstAnnotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-one", "1.0.0"),
+            string.Empty)).Accepted);
+        var first = await firstPending.Task.WaitAsync(TestTimeout);
+        await host.InvokeAsync("ApproveAnnotator", created.SessionId, first.ConnectionId);
+        await firstAnnotator.InvokeAsync("SetAnnotationColorPreference", "#B388FF");
+
+        Assert.True((await secondAnnotator.InvokeAsync<JoinResponse>(
+            "RequestToJoinHost",
+            new DirectJoinRequest(created.SessionId, "annotator-two", "1.0.0"),
+            string.Empty)).Accepted);
+        var second = await secondPending.Task.WaitAsync(TestTimeout);
+        await host.InvokeAsync("ApproveAnnotator", created.SessionId, second.ConnectionId);
+
+        // Both want violet; the one that got there first keeps it.
+        await secondAnnotator.InvokeAsync("SetAnnotationColorPreference", "#B388FF");
+        var moved = await secondWasMoved.Task.WaitAsync(TestTimeout);
+        Assert.NotEqual("#B388FF", moved);
+        Assert.Contains(moved, AnnotationColors.Palette);
+        Assert.Equal("#B388FF", firstColors[^1]);
+
+        await firstAnnotator.InvokeAsync("EndSession", created.SessionId);
+
+        Assert.Equal(
+            "#B388FF",
+            await secondGotItsPreferenceBack.Task.WaitAsync(TestTimeout));
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(
         bool requireServerPassword = false) =>
         new WebApplicationFactory<Program>()
