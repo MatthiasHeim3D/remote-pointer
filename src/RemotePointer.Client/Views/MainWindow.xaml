@@ -22,6 +22,7 @@
         <views:ProfilePictureConverter x:Key="ProfilePictureConverter" />
         <views:ProfilePictureFallbackVisibilityConverter
             x:Key="ProfilePictureFallbackVisibilityConverter" />
+        <views:AnnotationColorBrushConverter x:Key="AnnotationColorBrushConverter" />
 
         <Style TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI" />
@@ -498,6 +499,54 @@
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.5" />
                             </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A round colour chip. Selection is carried on Tag rather than read from the data
+             context, so the preset swatches and the custom one share one template even though
+             only the presets sit in an items control. -->
+        <Style x:Key="ColorSwatchButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <!-- The ring is drawn outside the chip, so selecting a colour never
+                                 changes how much of it is on screen. -->
+                            <Ellipse x:Name="SelectionRing"
+                                     Stroke="#F5F5F5"
+                                     StrokeThickness="2"
+                                     Opacity="0" />
+                            <Ellipse x:Name="Swatch"
+                                     Margin="5"
+                                     Fill="{TemplateBinding Background}"
+                                     Stroke="#59000000"
+                                     StrokeThickness="1" />
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SelectionRing"
+                                        Property="Opacity"
+                                        Value="0.45" />
+                            </Trigger>
+                            <!-- Last, so a hovered swatch that is also the selected one keeps
+                                 the full ring rather than the hover preview. -->
+                            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}"
+                                         Value="True">
+                                <Setter TargetName="SelectionRing"
+                                        Property="Opacity"
+                                        Value="1" />
+                            </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -1157,7 +1206,7 @@
                     </Grid>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
-                               Text="Input Area" />
+                               Text="Annotation Area" />
                     <CheckBox Style="{StaticResource ToggleSwitchStyle}"
                               IsChecked="{Binding ShowUsageHints}"
                               Content="Show usage hints" />
@@ -1170,7 +1219,7 @@
                                 <TextBlock MaxWidth="280"
                                            Foreground="#F5F5F5"
                                            TextWrapping="Wrap"
-                                           Text="Affects your screen only. While you draw, the same shape reaches your eyes twice: immediately here in the input area, and a moment later inside the shared video of your partner's screen. Turning this down keeps your local strokes faint, so the copy arriving through the video is the one you read and judge. Your partner always sees the drawing at full strength." />
+                                           Text="Affects your screen only. While you draw, the same shape reaches your eyes twice: immediately here in the annotation area, and a moment later inside the shared video of your partner's screen. Turning this down keeps your local strokes faint, so the copy arriving through the video is the one you read and judge. Your partner always sees the drawing at full strength." />
                             </ToolTip>
                         </StackPanel.ToolTip>
                         <Grid>
@@ -1192,6 +1241,80 @@
                                 TickFrequency="5"
                                 IsSnapToTickEnabled="True"
                                 Value="{Binding DrawingOpacityPercent}" />
+                    </StackPanel>
+
+                    <StackPanel Margin="0,18,0,0" ToolTipService.ShowDuration="30000">
+                        <StackPanel.ToolTip>
+                            <ToolTip Padding="11,9"
+                                     Background="#2B2B2B"
+                                     BorderBrush="#555555"
+                                     Foreground="#F5F5F5">
+                                <TextBlock MaxWidth="280"
+                                           Foreground="#F5F5F5"
+                                           TextWrapping="Wrap"
+                                           Text="Colours what you draw, and travels with it, so your partner's screen shows your annotations in this colour too. The annotation area's own frame stays red. Pick a colour that stands out against what you are drawing over, and a different one from anyone else annotating the same screen." />
+                            </ToolTip>
+                        </StackPanel.ToolTip>
+                        <TextBlock Text="Annotation colour" />
+                        <!-- Left-aligned rather than stretched: the swatches read as one strip of
+                             choices, which even spacing across the pane would break up. -->
+                        <StackPanel Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    Orientation="Horizontal">
+                            <ItemsControl ItemsSource="{Binding AnnotationColorOptions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ColorSwatchButtonStyle}"
+                                                Background="{Binding Color, Converter={StaticResource AnnotationColorBrushConverter}}"
+                                                Tag="{Binding IsSelected}"
+                                                ToolTip="{Binding Name}"
+                                                Command="{Binding DataContext.SelectAnnotationColorCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!-- Offers the picker while a preset is chosen, and becomes the chosen
+                                 colour once that colour is not a preset — so whichever swatch
+                                 wears the ring is also the colour that will be drawn. -->
+                            <Button Margin="6,0,0,0"
+                                    Tag="{Binding IsCustomAnnotationColor}"
+                                    ToolTip="Choose a custom colour"
+                                    Click="OnChooseAnnotationColor">
+                                <Button.Style>
+                                    <Style TargetType="Button"
+                                           BasedOn="{StaticResource ColorSwatchButtonStyle}">
+                                        <Setter Property="Background" Value="#3A3A3A" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCustomAnnotationColor}"
+                                                         Value="True">
+                                                <Setter Property="Background"
+                                                        Value="{Binding AnnotationColor, Converter={StaticResource AnnotationColorBrushConverter}}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           FontSize="13"
+                                           Foreground="#F5F5F5"
+                                           Text="&#xE790;">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCustomAnnotationColor}"
+                                                             Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Button>
+                        </StackPanel>
                     </StackPanel>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"

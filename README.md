@@ -49,6 +49,8 @@ Everything you draw fades on its own after a couple of seconds — nothing is sa
 
 As an annotator you see each shape twice: right away in your own target area, and again a moment later in the remote screen you are looking at. *Drawing opacity* in Settings dims your local copy so the returning one stays readable; it starts at 50% and never changes what the host sees.
 
+*Annotation colour* in Settings picks what you draw in — seven presets, or any colour you like through the picker. Unlike opacity it travels with your drawing, so your partner's screen shows it in the same colour you do. When several people annotate one screen at once, give each a different colour and the host can tell you apart at a glance.
+
 ## Requirements
 
 - **To use it:** Windows 11. The client is self-contained, so no separate .NET install is needed.

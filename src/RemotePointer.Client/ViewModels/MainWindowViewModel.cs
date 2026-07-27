@@ -62,6 +62,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
     private int drawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent;
+    private string annotationColor = AnnotationColors.Default;
     private bool isServerAddressVerified;
     private bool hasServerPassword;
     private bool isChangingServerPassword;
@@ -117,6 +118,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         drawingOpacityPercent = PointerSettings.ClampDrawingOpacityPercent(
             clientSettings?.Pointer.DrawingOpacityPercent
             ?? PointerSettings.DefaultDrawingOpacityPercent);
+        annotationColor = AnnotationColors.Normalize(clientSettings?.Pointer.AnnotationColor);
+        AnnotationColorOptions = [.. AnnotationColorPresets.Select(
+            preset => new AnnotationColorOption(preset.Name, preset.Color))];
+        RefreshAnnotationColorSelection();
+        SelectAnnotationColorCommand = new RelayCommand(
+            option =>
+            {
+                if (option is AnnotationColorOption selected)
+                {
+                    AnnotationColor = selected.Color;
+                }
+            });
         this.overlayService.StateChanged += OnOverlayStateChanged;
         this.targetRegionService = targetRegionService ?? new TargetRegionService();
         this.targetRegionService.UsageHintsShown += OnUsageHintsShown;
@@ -126,6 +139,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             pointerTtlMilliseconds);
         Annotator.SetUsageHintsState(showUsageHints, hasShownUsageHints);
         Annotator.SetDrawingOpacityPercent(drawingOpacityPercent);
+        Annotator.SetAnnotationColor(annotationColor);
         Annotator.PropertyChanged += OnAnnotatorPropertyChanged;
 
         hostConnectionMessage = hostRelayClient is null
@@ -588,6 +602,61 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public int MinimumDrawingOpacityPercent => PointerSettings.MinimumDrawingOpacityPercent;
 
     public int MaximumDrawingOpacityPercent => PointerSettings.MaximumDrawingOpacityPercent;
+
+    /// <summary>
+    /// The swatches offered before the colour picker. They are spaced around the wheel so two
+    /// annotators on one host land on visibly different colours, and each stays legible against
+    /// both a light and a dark screen — the shared video underneath could be either. The first is
+    /// the accent the rest of the client already uses.
+    /// </summary>
+    internal static readonly (string Name, string Color)[] AnnotationColorPresets =
+    [
+        ("Red", AnnotationColors.Default),
+        ("Amber", "#FFB900"),
+        ("Green", "#6CCB7F"),
+        ("Cyan", "#4FC3F7"),
+        ("Blue", "#6C8CFF"),
+        ("Violet", "#B388FF"),
+        ("Pink", "#FF6FB5"),
+    ];
+
+    public IReadOnlyList<AnnotationColorOption> AnnotationColorOptions { get; }
+
+    /// <summary>
+    /// The colour this client's annotations are drawn in, here and on the host it draws to.
+    /// </summary>
+    public string AnnotationColor
+    {
+        get => annotationColor;
+        set
+        {
+            if (SetProperty(ref annotationColor, AnnotationColors.Normalize(value)))
+            {
+                RefreshAnnotationColorSelection();
+                RaisePropertyChanged(nameof(IsCustomAnnotationColor));
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when the chosen colour is not one of the presets, which is what puts the ring on the
+    /// custom swatch instead.
+    /// </summary>
+    public bool IsCustomAnnotationColor => !AnnotationColorOptions.Any(
+        option => string.Equals(option.Color, AnnotationColor, StringComparison.Ordinal));
+
+    public ICommand SelectAnnotationColorCommand { get; }
+
+    private void RefreshAnnotationColorSelection()
+    {
+        foreach (var option in AnnotationColorOptions)
+        {
+            option.IsSelected = string.Equals(
+                option.Color,
+                AnnotationColor,
+                StringComparison.Ordinal);
+        }
+    }
 
     public string ConnectedAnnotatorCountLabel =>
         $"{ConnectedAnnotators.Count} annotator{(ConnectedAnnotators.Count == 1 ? string.Empty : "s")} connected";
@@ -1583,9 +1652,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             SelectedMonitor?.Display.DisplayId,
             ShowUsageHints,
             HostAvailability == HostAvailability.Available,
-            DrawingOpacityPercent);
+            DrawingOpacityPercent,
+            AnnotationColor);
         Annotator.SetUsageHintsState(ShowUsageHints, hasShownUsageHints);
         Annotator.SetDrawingOpacityPercent(DrawingOpacityPercent);
+        Annotator.SetAnnotationColor(AnnotationColor);
         startupRegistrationService?.SetEnabled(IsLaunchAtStartup);
         RaiseServerAddressCommandState();
     }
@@ -1625,6 +1696,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ?? clientSettings.Startup.LaunchAtStartup;
         ShowUsageHints = clientSettings.Pointer.ShowUsageHints;
         DrawingOpacityPercent = clientSettings.Pointer.DrawingOpacityPercent;
+        AnnotationColor = clientSettings.Pointer.AnnotationColor;
 
         var savedMonitor = Monitors.FirstOrDefault(
             monitor => string.Equals(

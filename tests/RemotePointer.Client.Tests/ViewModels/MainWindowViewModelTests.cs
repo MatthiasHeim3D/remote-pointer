@@ -231,6 +231,68 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task AnnotationColor_IsCanonicalisedAndPersistedWhenSettingsClose()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings);
+
+        Assert.Equal(AnnotationColors.Default, viewModel.AnnotationColor);
+
+        viewModel.AnnotationColor = "#4fc3f7";
+        Assert.Equal("#4FC3F7", viewModel.AnnotationColor);
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal("#4FC3F7", testSettings.Settings.Pointer.AnnotationColor);
+    }
+
+    [Fact]
+    public void AnnotationColor_MovesTheSelectionRingBetweenPresetsAndCustom()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings);
+
+        var defaultPreset = Assert.Single(
+            viewModel.AnnotationColorOptions,
+            option => option.IsSelected);
+        Assert.Equal(AnnotationColors.Default, defaultPreset.Color);
+        Assert.False(viewModel.IsCustomAnnotationColor);
+
+        var violet = viewModel.AnnotationColorOptions.Single(
+            option => option.Name == "Violet");
+        viewModel.SelectAnnotationColorCommand.Execute(violet);
+
+        Assert.Equal(violet.Color, viewModel.AnnotationColor);
+        Assert.Same(
+            violet,
+            Assert.Single(viewModel.AnnotationColorOptions, option => option.IsSelected));
+        Assert.False(viewModel.IsCustomAnnotationColor);
+
+        viewModel.AnnotationColor = "#123456";
+
+        Assert.DoesNotContain(viewModel.AnnotationColorOptions, option => option.IsSelected);
+        Assert.True(viewModel.IsCustomAnnotationColor);
+    }
+
+    [Fact]
+    public void AnnotationColorPresets_AreCanonicalAndDistinct()
+    {
+        var colors = MainWindowViewModel.AnnotationColorPresets
+            .Select(preset => preset.Color)
+            .ToArray();
+
+        Assert.All(colors, color => Assert.True(AnnotationColors.IsValid(color)));
+        Assert.Equal(colors.Length, colors.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
     public void MissingServer_ShowsMainScreenWithSetupGuidance()
     {
         using var overlay = new FakeOverlayService();

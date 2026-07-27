@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Net.Http;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Services;
+using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Tests.Configuration;
 
@@ -293,6 +294,82 @@ public sealed class ClientSettingsTests
         var settings = ClientSettings.Load(directory.Path, null);
 
         Assert.Equal(expectedPercent, settings.Pointer.DrawingOpacityPercent);
+    }
+
+    [Fact]
+    public void UserPreferences_RoundTripAnnotationColor()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUserPreferences(
+            "https://saved.example.test",
+            "Ada",
+            null,
+            annotationColor: "#4FC3F7");
+        var reloaded = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal("#4FC3F7", reloaded.Pointer.AnnotationColor);
+    }
+
+    [Fact]
+    public void SaveUserPreferences_CanonicalisesAnnotationColorBeforeStoringIt()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        settings.SaveUserPreferences(
+            "https://saved.example.test",
+            "Ada",
+            null,
+            annotationColor: " #4fc3f7 ");
+        var reloaded = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal("#4FC3F7", reloaded.Pointer.AnnotationColor);
+    }
+
+    [Fact]
+    public void Load_DefaultsAnnotationColorWhenPreferencesPredateTheSetting()
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        WriteUserPreferences(
+            directory.Path,
+            new
+            {
+                serverAddress = "https://saved.example.test",
+                userName = "Ada",
+                profilePicturePath = string.Empty,
+            });
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal(AnnotationColors.Default, settings.Pointer.AnnotationColor);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("hotpink")]
+    [InlineData("#12345")]
+    public void Load_FallsBackToDefaultForUnusableStoredAnnotationColor(string storedColor)
+    {
+        using var directory = new TemporaryDirectory();
+        WriteSettings(directory.Path, "https://packaged.example.test");
+        WriteUserPreferences(
+            directory.Path,
+            new
+            {
+                serverAddress = "https://saved.example.test",
+                userName = "Ada",
+                profilePicturePath = string.Empty,
+                annotationColor = storedColor,
+            });
+
+        var settings = ClientSettings.Load(directory.Path, null);
+
+        Assert.Equal(AnnotationColors.Default, settings.Pointer.AnnotationColor);
     }
 
     [Fact]

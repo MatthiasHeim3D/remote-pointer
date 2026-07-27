@@ -36,6 +36,7 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
     private string statusMessage;
     private string connectionMessage;
     private string currentHostName = "Connected host";
+    private string annotationColor = AnnotationColors.Default;
     private byte[]? currentHostProfilePicturePng;
 
     public AnnotatorViewModel(
@@ -329,6 +330,16 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
 
     public void SetDrawingOpacityPercent(int drawingOpacityPercent) =>
         targetRegionService.SetDrawingOpacityPercent(drawingOpacityPercent);
+
+    /// <summary>
+    /// Sets the colour this annotator draws in, on the local target area and on every pointer
+    /// event it sends, so the host renders the drawing the same way its author does.
+    /// </summary>
+    public void SetAnnotationColor(string? color)
+    {
+        annotationColor = AnnotationColors.Normalize(color);
+        targetRegionService.SetAnnotationColor(annotationColor);
+    }
 
     public Task ApplyClientSettingsAsync(
         string displayName,
@@ -626,7 +637,11 @@ public sealed class AnnotatorViewModel : ObservableObject, IDisposable
             pointerTtlMilliseconds,
             e.GestureId,
             e.Text,
-            e.PathPoints);
+            e.PathPoints,
+            // The relay overwrites AnnotatorId on the way out; the colour is left alone, so this
+            // is what the host paints the drawing in.
+            AnnotatorId: null,
+            Color: annotationColor);
         pendingAcknowledgements[pointerEvent.EventId] = sentAt;
 
         try

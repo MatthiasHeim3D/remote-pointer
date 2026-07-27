@@ -2,6 +2,7 @@ using System.IO;
 using System.Security;
 using System.Text.Json;
 using System.Windows.Media.Imaging;
+using RemotePointer.Contracts.Messages;
 namespace RemotePointer.Client.Configuration;
 
 public sealed class ClientSettings
@@ -78,7 +79,8 @@ public sealed class ClientSettings
         string? selectedDisplayId = null,
         bool? showUsageHints = null,
         bool? hostAvailable = null,
-        int? drawingOpacityPercent = null)
+        int? drawingOpacityPercent = null,
+        string? annotationColor = null)
     {
         var normalizedServerAddress = NormalizeServerAddress(serverAddress);
         var normalizedUserName = userName.Trim();
@@ -115,6 +117,10 @@ public sealed class ClientSettings
             Pointer.DrawingOpacityPercent = PointerSettings.ClampDrawingOpacityPercent(
                 drawingOpacityPercent.Value);
         }
+        if (annotationColor is not null)
+        {
+            Pointer.AnnotationColor = AnnotationColors.Normalize(annotationColor);
+        }
         WriteUserPreferences();
     }
 
@@ -149,7 +155,8 @@ public sealed class ClientSettings
                 Pointer.ShowUsageHints,
                 Host.IsAvailable,
                 Pointer.HasShownUsageHints,
-                Pointer.DrawingOpacityPercent),
+                Pointer.DrawingOpacityPercent,
+                Pointer.AnnotationColor),
             new JsonSerializerOptions(JsonSerializerDefaults.Web)
             {
                 WriteIndented = true,
@@ -300,6 +307,7 @@ public sealed class ClientSettings
         Pointer.HasShownUsageHints = preferences.HasShownUsageHints;
         Pointer.DrawingOpacityPercent = PointerSettings.ClampDrawingOpacityPercent(
             preferences.DrawingOpacityPercent);
+        Pointer.AnnotationColor = AnnotationColors.Normalize(preferences.AnnotationColor);
     }
 
     private static bool IsSupportedUserName(string? userName) =>
@@ -385,7 +393,8 @@ public sealed class ClientSettings
         bool ShowUsageHints = true,
         bool HostAvailable = false,
         bool HasShownUsageHints = false,
-        int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent);
+        int DrawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent,
+        string AnnotationColor = AnnotationColors.Default);
 }
 
 public sealed class ServerSettings
@@ -420,11 +429,18 @@ public sealed class PointerSettings
     public bool HasShownUsageHints { get; set; }
 
     /// <summary>
-    /// How opaque the annotator's own shapes are drawn inside the input area. The host always
+    /// How opaque the annotator's own shapes are drawn inside the annotation area. The host always
     /// renders at full opacity; this only softens the local copy so it competes less with the
     /// same drawing coming back through the shared video feed.
     /// </summary>
     public int DrawingOpacityPercent { get; set; } = DefaultDrawingOpacityPercent;
+
+    /// <summary>
+    /// The colour this client's annotations are drawn in, as <c>#RRGGBB</c>. Unlike
+    /// <see cref="DrawingOpacityPercent"/> it travels with every pointer event, so the host draws
+    /// the annotator's shapes in the same colour the annotator sees them in.
+    /// </summary>
+    public string AnnotationColor { get; set; } = AnnotationColors.Default;
 
     public static int ClampDrawingOpacityPercent(int percent) => Math.Clamp(
         percent <= 0 ? DefaultDrawingOpacityPercent : percent,

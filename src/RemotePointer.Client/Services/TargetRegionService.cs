@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Overlays;
 using RemotePointer.Contracts.Coordinates;
+using RemotePointer.Contracts.Messages;
 
 namespace RemotePointer.Client.Services;
 
@@ -18,6 +19,7 @@ public sealed class TargetRegionService : ITargetRegionService
     private bool showUsageHints = true;
     private bool hasShownUsageHints;
     private int drawingOpacityPercent = PointerSettings.DefaultDrawingOpacityPercent;
+    private string annotationColor = AnnotationColors.Default;
     private TargetRegionWindow? window;
 
     public event EventHandler<TargetRegionStateChangedEventArgs>? StateChanged;
@@ -52,6 +54,9 @@ public sealed class TargetRegionService : ITargetRegionService
         this.drawingOpacityPercent =
             PointerSettings.ClampDrawingOpacityPercent(drawingOpacityPercent);
 
+    public void SetAnnotationColor(string? annotationColor) =>
+        this.annotationColor = AnnotationColors.Normalize(annotationColor);
+
     public void SetAnnotationPaused(bool paused)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -80,7 +85,8 @@ public sealed class TargetRegionService : ITargetRegionService
             expectedAspectRatio,
             lockAspectRatio: true,
             showUsageHints,
-            drawingOpacity: DrawingOpacity);
+            drawingOpacity: DrawingOpacity,
+            annotationColor: annotationColor);
         window.CalibrationLocked += OnCalibrationLocked;
         window.CalibrationCancelled += OnCalibrationCancelled;
         window.Closed += OnWindowClosed;
@@ -148,7 +154,8 @@ public sealed class TargetRegionService : ITargetRegionService
             lockAspectRatio: false,
             showUsageHints,
             expandUsageHintsInitially: !hasShownUsageHints,
-            drawingOpacity: DrawingOpacity);
+            drawingOpacity: DrawingOpacity,
+            annotationColor: annotationColor);
         window.EnterAnnotatingMode();
         window.SetAnnotationPaused(isAnnotationPaused);
         if (!hasShownUsageHints)

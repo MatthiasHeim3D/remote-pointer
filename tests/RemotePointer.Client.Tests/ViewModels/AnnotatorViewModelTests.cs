@@ -159,7 +159,7 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
-    public void HostPause_StopsSendingAndMarksTheInputAreaPaused()
+    public void HostPause_StopsSendingAndMarksTheAnnotationAreaPaused()
     {
         using var service = new FakeTargetRegionService();
         var relay = new FakeRelayClient();
@@ -425,7 +425,7 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
-    public void SetUsageHintsState_ForwardsPreferencesToInputArea()
+    public void SetUsageHintsState_ForwardsPreferencesToAnnotationArea()
     {
         using var service = new FakeTargetRegionService();
         using var viewModel = new AnnotatorViewModel(service);
@@ -437,7 +437,7 @@ public sealed class AnnotatorViewModelTests
     }
 
     [Fact]
-    public void SetDrawingOpacityPercent_ForwardsPreferenceToInputArea()
+    public void SetDrawingOpacityPercent_ForwardsPreferenceToAnnotationArea()
     {
         using var service = new FakeTargetRegionService();
         using var viewModel = new AnnotatorViewModel(service);
@@ -445,6 +445,58 @@ public sealed class AnnotatorViewModelTests
         viewModel.SetDrawingOpacityPercent(35);
 
         Assert.Equal(35, service.DrawingOpacityPercent);
+    }
+
+    [Fact]
+    public void SetAnnotationColor_CanonicalisesAndForwardsToTheAnnotationArea()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        viewModel.SetAnnotationColor("#4fc3f7");
+
+        Assert.Equal("#4FC3F7", service.AnnotationColor);
+    }
+
+    [Fact]
+    public void SentPointer_CarriesTheChosenAnnotationColor()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+        viewModel.SetAnnotationColor("#B388FF");
+
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        Assert.Equal("#B388FF", sent.Color);
+        // Stamped by the relay, never by the annotator, unlike the colour beside it.
+        Assert.Null(sent.AnnotatorId);
+    }
+
+    [Fact]
+    public void SentPointer_CarriesTheDefaultColorWhenNoneWasChosen()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        Assert.Equal(AnnotationColors.Default, sent.Color);
     }
 
     [Fact]
@@ -516,6 +568,11 @@ public sealed class AnnotatorViewModelTests
 
         public void SetDrawingOpacityPercent(int drawingOpacityPercent) =>
             DrawingOpacityPercent = drawingOpacityPercent;
+
+        public string AnnotationColor { get; private set; } = AnnotationColors.Default;
+
+        public void SetAnnotationColor(string? annotationColor) =>
+            AnnotationColor = annotationColor ?? AnnotationColors.Default;
 
         public bool IsAnnotationPaused { get; private set; }
 

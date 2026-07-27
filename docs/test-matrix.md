@@ -8,7 +8,8 @@
 | Denormalization | Negative-origin rectangle and invalid normalized input |
 | Numeric safety | NaN, positive/negative infinity, zero/negative dimensions |
 | Aspect ratio | Landscape, portrait, ultrawide, exact and over-2% tolerance |
-| Pointer validation | Inclusive boundaries, stale TTL, TTL boundary, future timestamps, identity, sequence, gesture identity, bounded text, kind |
+| Pointer validation | Inclusive boundaries, stale TTL, TTL boundary, future timestamps, identity, sequence, gesture identity, bounded text, kind, annotation colour format |
+| Annotation colour | Canonical form accepted, case/whitespace normalized, malformed and alpha-bearing values fall back to the default, channel parsing and darkening, preset canonicality and distinctness, selection ring across presets and custom, settings round trip, colour carried on every sent pointer event |
 | Display/join validation | Dimensions, DPI scale, rotation, required identity/version |
 | Sequence handling | Increasing values, duplicates, bounded reordering, significantly old values |
 | JSON policy | camelCase, string enums, integer enum rejection, unknown-member rejection |
@@ -72,11 +73,12 @@
 5. Reset and lock the rectangle. Confirm the target window disappears and state changes to Ready.
 6. Enable annotating. Verify left-click highlights, left-drag draws a fading path, Shift+left-drag draws a fading line, Shift+left-click opens a text box finalized by Enter, right-drag draws a fading box, and Shift+right-drag draws a fading circle centered at the initial click. Confirm each appears locally and on the host. Verify the help panel includes the Escape shortcut and settings guidance, opens on first use, and starts collapsed on later uses. Confirm `H` always toggles the full panel, while disabling **Show usage hints** removes the collapsed help badge.
 7. With annotating active, change **Drawing opacity** in Settings and re-enter annotating. Confirm the annotator's own shapes, ripples, and placed text notes are dimmed by the chosen percentage, that the host still renders them at full opacity, and that the value survives a client restart.
-8. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
-9. Click outside the rectangle and confirm the underlying application behaves normally.
-10. Press Escape and confirm normal clicking is restored immediately.
-11. Repeat entry and exit with `Ctrl+Alt+P`, including while another application is active.
-12. Repeat on mixed-DPI monitors and with a target rectangle on a monitor left of the primary display.
+8. Pick each preset under **Annotation colour** and re-enter annotating. Confirm ripples, shapes, freehand ink, and placed text notes all take that colour, and that the host draws the same colour. Confirm the target-area frame and the box text is typed into stay the standard red at every colour. Open the custom picker, choose a colour that is not a preset, and confirm the selection ring moves to the custom swatch and the colour survives a client restart. With two annotators connected to one host, give them different colours and confirm the host tells their simultaneous drawings apart. Confirm changing colour mid-gesture does not repaint a stroke already on screen.
+9. Place the rectangle over a clickable test button and confirm an inside click does not activate the underlying button.
+10. Click outside the rectangle and confirm the underlying application behaves normally.
+11. Press Escape and confirm normal clicking is restored immediately.
+12. Repeat entry and exit with `Ctrl+Alt+P`, including while another application is active.
+13. Repeat on mixed-DPI monitors and with a target rectangle on a monitor left of the primary display.
 
 ## Phase 5 manual procedure
 

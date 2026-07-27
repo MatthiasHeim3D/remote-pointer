@@ -28,6 +28,10 @@ public static class ContractValidator
         AddNormalizedCoordinate(errors, message.NormalizedX, nameof(message.NormalizedX));
         AddNormalizedCoordinate(errors, message.NormalizedY, nameof(message.NormalizedY));
         AddValue(errors, Enum.IsDefined(message.Kind), nameof(message.Kind));
+        AddValue(
+            errors,
+            message.Color is null || AnnotationColors.IsValid(message.Color),
+            nameof(message.Color));
         AddPointerPayloadErrors(errors, message);
         AddRange(errors, message.SentAtUnixMilliseconds >= 0, nameof(message.SentAtUnixMilliseconds));
         AddRange(

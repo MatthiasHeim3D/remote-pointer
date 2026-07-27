@@ -21,7 +21,17 @@ public partial class TargetRegionWindow : Window
     private const int GestureUpdateIntervalMilliseconds = 16;
     private const int GestureKeepAliveIntervalMilliseconds = 500;
 
+    /// <summary>
+    /// The window's own chrome — the frame around the annotation area and the box text is typed
+    /// into — stays the client's accent whatever colour the annotator draws in. It marks where
+    /// the tool is rather than being part of a drawing, and letting it follow the colour makes
+    /// the chosen colour harder to judge against the shape actually drawn in it.
+    /// </summary>
+    private static readonly SolidColorBrush ChromeAccentBrush =
+        AnnotationPalette.CreateStrokeBrush(AnnotationPalette.DefaultAccent);
+
     private readonly RectangleD resetRectangle;
+    private readonly SolidColorBrush annotationBrush;
     private readonly PointerVisualRenderer pointerVisuals;
     private readonly DispatcherTimer gestureUpdateTimer;
     private readonly List<Point> pendingPathPoints = [];
@@ -58,7 +68,8 @@ public partial class TargetRegionWindow : Window
         bool lockAspectRatio,
         bool showUsageHints = true,
         bool expandUsageHintsInitially = false,
-        double drawingOpacity = 1d)
+        double drawingOpacity = 1d,
+        string? annotationColor = null)
     {
         if (!double.IsFinite(expectedAspectRatio) || expectedAspectRatio <= 0d)
         {
@@ -72,12 +83,16 @@ public partial class TargetRegionWindow : Window
         DrawingOpacity = double.IsFinite(drawingOpacity)
             ? Math.Clamp(drawingOpacity, 0d, 1d)
             : 1d;
+        AnnotationColor = AnnotationPalette.ToColor(annotationColor);
+        annotationBrush = AnnotationPalette.CreateStrokeBrush(AnnotationColor);
 
         InitializeComponent();
         // Every shape the annotator draws lives on this canvas, so one canvas-level opacity
         // multiplies through them without touching the fade animations on the shapes.
         RippleCanvas.Opacity = DrawingOpacity;
-        pointerVisuals = new PointerVisualRenderer(RippleCanvas);
+        pointerVisuals = new PointerVisualRenderer(
+            RippleCanvas,
+            defaultAccent: AnnotationColor);
         gestureUpdateTimer = new DispatcherTimer(DispatcherPriority.Input)
         {
             Interval = TimeSpan.FromMilliseconds(GestureUpdateIntervalMilliseconds),
@@ -105,6 +120,13 @@ public partial class TargetRegionWindow : Window
 
     public double DrawingOpacity { get; }
 
+    /// <summary>
+    /// The colour this annotator draws in. It reaches the drawings only — shapes, freehand ink,
+    /// click ripples and placed text notes — and not the window's own chrome. The same value
+    /// travels with every pointer event, so the host's copy of a drawing matches this one.
+    /// </summary>
+    public Color AnnotationColor { get; }
+
     public void EnterAnnotatingMode()
     {
         isAnnotatingMode = true;
@@ -114,7 +136,7 @@ public partial class TargetRegionWindow : Window
         isUsageHelpCollapsed = !ExpandUsageHintsInitially;
         CalibrationPanel.Visibility = Visibility.Collapsed;
         UpdateUsageHelpVisibility();
-        OuterBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92));
+        OuterBorder.BorderBrush = ChromeAccentBrush;
         OuterBorder.BorderThickness = new Thickness(2d);
         OuterBorder.Background = Brushes.Transparent;
         // A zero-alpha pixel in an AllowsTransparency window can be omitted from the
@@ -769,7 +791,7 @@ public partial class TargetRegionWindow : Window
             FontSize = 17d,
             Foreground = Brushes.White,
             Background = new SolidColorBrush(Color.FromArgb(240, 17, 23, 32)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(255, 92, 92)),
+            BorderBrush = ChromeAccentBrush,
             BorderThickness = new Thickness(2d),
             CaretBrush = Brushes.White,
             AcceptsReturn = false,
@@ -974,7 +996,7 @@ public partial class TargetRegionWindow : Window
         {
             Width = diameter,
             Height = diameter,
-            Stroke = new SolidColorBrush(Color.FromRgb(255, 92, 92)),
+            Stroke = annotationBrush,
             StrokeThickness = 4d,
             IsHitTestVisible = false,
             RenderTransformOrigin = new System.Windows.Point(0.5d, 0.5d),

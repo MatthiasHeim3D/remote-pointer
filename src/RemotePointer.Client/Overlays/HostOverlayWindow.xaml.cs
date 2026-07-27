@@ -19,6 +19,7 @@ public partial class HostOverlayWindow : Window
     private const int MarkerDiameter = 72;
     private const int MarkerDurationMilliseconds = 900;
     private const int MaximumMarkers = 5;
+    private const double MarkerDotShade = 0.7d;
 
     private readonly IMonitorService monitorService;
     private readonly IDisplayCoordinateMapper coordinateMapper;
@@ -60,9 +61,12 @@ public partial class HostOverlayWindow : Window
         var normalizedPoint = new NormalizedPoint(
             pointerEvent.NormalizedX,
             pointerEvent.NormalizedY);
+        // The colour is the annotator's own, so what the host paints matches what the hand that
+        // drew it saw. An event that names none falls back to the default accent.
+        var accent = AnnotationPalette.ToColor(pointerEvent.Color);
         if (pointerEvent.Kind is PointerKind.Click or PointerKind.DoubleClick or PointerKind.Attention)
         {
-            ShowMarker(normalizedPoint);
+            ShowMarker(normalizedPoint, accent);
             return;
         }
 
@@ -73,19 +77,20 @@ public partial class HostOverlayWindow : Window
             pointerEvent.Text,
             pointerEvent.PathPoints?
                 .Select(ToOverlayPoint)
-                .ToArray());
+                .ToArray(),
+            accent);
     }
 
-    private void ShowMarker(NormalizedPoint normalizedPoint)
+    private void ShowMarker(NormalizedPoint normalizedPoint, Color accent)
     {
         if (!Dispatcher.CheckAccess())
         {
-            _ = Dispatcher.InvokeAsync(() => ShowMarker(normalizedPoint));
+            _ = Dispatcher.InvokeAsync(() => ShowMarker(normalizedPoint, accent));
             return;
         }
 
         var point = ToOverlayPoint(normalizedPoint);
-        var marker = CreateMarker();
+        var marker = CreateMarker(accent);
 
         while (markers.Count >= MaximumMarkers)
         {
@@ -208,7 +213,7 @@ public partial class HostOverlayWindow : Window
         return new Point(point.X, point.Y);
     }
 
-    private static Grid CreateMarker()
+    private static Grid CreateMarker(Color accent)
     {
         var marker = new Grid
         {
@@ -220,7 +225,7 @@ public partial class HostOverlayWindow : Window
         var ring = new Ellipse
         {
             Margin = new Thickness(5d),
-            Stroke = new SolidColorBrush(Color.FromRgb(255, 92, 92)),
+            Stroke = AnnotationPalette.CreateStrokeBrush(accent),
             StrokeThickness = 4d,
             RenderTransformOrigin = new Point(0.5d, 0.5d),
             RenderTransform = new ScaleTransform(0.25d, 0.25d),
@@ -230,7 +235,11 @@ public partial class HostOverlayWindow : Window
             Width = 12d,
             Height = 12d,
             Fill = Brushes.White,
-            Stroke = new SolidColorBrush(Color.FromRgb(204, 38, 38)),
+            // Darker than the ring so the dot keeps an edge against its own white fill. The
+            // fixed red pair this replaces was hand-picked; a uniform scale is what generalises
+            // to a colour the annotator chose.
+            Stroke = AnnotationPalette.CreateStrokeBrush(
+                AnnotationPalette.Darken(accent, MarkerDotShade)),
             StrokeThickness = 3d,
         };
 

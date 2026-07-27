@@ -259,6 +259,48 @@ public sealed class PointerEventValidationTests
         Assert.True(result.Errors.Count >= 2);
     }
 
+    [Theory]
+    [InlineData("#FF5C5C")]
+    [InlineData("#000000")]
+    [InlineData("#FFFFFF")]
+    public void Validate_AcceptsCanonicalAnnotationColor(string color)
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with { Color = color },
+            Now);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_AcceptsMissingAnnotationColor()
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with { Color = null },
+            Now);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("FF5C5C")]
+    [InlineData("#ff5c5c")]
+    [InlineData("#FF5C5")]
+    [InlineData("#FF5C5CC")]
+    [InlineData("#GGGGGG")]
+    [InlineData("red")]
+    [InlineData("#80FF5C5C")]
+    public void Validate_RejectsMalformedAnnotationColor(string color)
+    {
+        var result = ContractValidator.Validate(
+            CreateValidMessage() with { Color = color },
+            Now);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.Code == ValidationErrors.InvalidValue);
+    }
+
     private static PointerEventMessage CreateValidMessage() => new(
         Guid.Parse("4b646d0f-bfd8-4f77-949f-d18d67cc1879"),
         "session-id",

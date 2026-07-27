@@ -22,13 +22,15 @@ internal sealed class PointerVisualRenderer
     // so this only bites when an annotator opens gestures it never ends.
     private const int MaximumActiveGestures = 16;
 
-    private static readonly Brush AccentBrush =
-        new SolidColorBrush(Color.FromRgb(255, 92, 92));
-    private static readonly Brush AccentFillBrush =
-        new SolidColorBrush(Color.FromArgb(38, 255, 92, 92));
+    // One entry per colour actually seen. Sixteen annotators can pick sixteen colours and each
+    // may change its own, so the cache is emptied rather than grown once it stops paying for
+    // itself; the next gesture simply builds its brushes again.
+    private const int MaximumCachedAccents = 32;
 
     private readonly Canvas canvas;
     private readonly bool smoothRemoteGestures;
+    private readonly Color defaultAccent;
+    private readonly Dictionary<Color, AccentBrushes> accentBrushes = [];
     private readonly Dictionary<Guid, ActiveGesture> activeGestures = [];
     private readonly List<ActiveGesture> arrivedGestures = [];
     private readonly LinkedList<FrameworkElement> transientVisuals = [];
@@ -48,10 +50,20 @@ internal sealed class PointerVisualRenderer
     /// off: those points are the local mouse, and smoothing would only put lag between the
     /// hand and the ink it is aiming with.
     /// </param>
-    public PointerVisualRenderer(Canvas canvas, bool smoothRemoteGestures = false)
+    /// <param name="defaultAccent">
+    /// The colour used for gestures that name none. The annotator's target area sets its own
+    /// configured colour here and never overrides it per gesture; the host leaves it at the
+    /// default and colours each gesture from the event that opened it, so two annotators drawing
+    /// at once stay told apart.
+    /// </param>
+    public PointerVisualRenderer(
+        Canvas canvas,
+        bool smoothRemoteGestures = false,
+        Color? defaultAccent = null)
     {
         this.canvas = canvas ?? throw new ArgumentNullException(nameof(canvas));
         this.smoothRemoteGestures = smoothRemoteGestures;
+        this.defaultAccent = defaultAccent ?? AnnotationPalette.DefaultAccent;
         gestureLeaseTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(GestureLeaseCheckMilliseconds),
@@ -59,17 +71,26 @@ internal sealed class PointerVisualRenderer
         gestureLeaseTimer.Tick += OnGestureLeaseTimerTick;
     }
 
+    /// <summary>
+    /// Draws one arriving pointer event.
+    /// </summary>
+    /// <param name="accent">
+    /// The colour the annotator drew in, honoured only by the events that create a visual: a
+    /// gesture keeps the colour it opened with for its whole life, so a colour changed mid-stroke
+    /// cannot repaint what is already on the canvas.
+    /// </param>
     public void Show(
         PointerKind kind,
         Point point,
         Guid? gestureId,
         string? text,
-        IReadOnlyList<Point>? pathPoints = null)
+        IReadOnlyList<Point>? pathPoints = null,
+        Color? accent = null)
     {
         switch (kind)
         {
             case PointerKind.PathStart:
-                StartPath(gestureId, point);
+                StartPath(gestureId, point, accent);
                 break;
             case PointerKind.PathUpdate:
                 UpdatePath(gestureId, point, pathPoints, end: false);
@@ -78,7 +99,7 @@ internal sealed class PointerVisualRenderer
                 UpdatePath(gestureId, point, pathPoints, end: true);
                 break;
             case PointerKind.LineStart:
-                StartLine(gestureId, point);
+                StartLine(gestureId, point, accent);
                 break;
             case PointerKind.LineUpdate:
                 UpdateLine(gestureId, point, end: false);
@@ -87,7 +108,7 @@ internal sealed class PointerVisualRenderer
                 UpdateLine(gestureId, point, end: true);
                 break;
             case PointerKind.RectangleStart:
-                StartRectangle(gestureId, point);
+                StartRectangle(gestureId, point, accent);
                 break;
             case PointerKind.RectangleUpdate:
                 UpdateRectangle(gestureId, point, end: false);
@@ -96,7 +117,7 @@ internal sealed class PointerVisualRenderer
                 UpdateRectangle(gestureId, point, end: true);
                 break;
             case PointerKind.CircleStart:
-                StartCircle(gestureId, point);
+                StartCircle(gestureId, point, accent);
                 break;
             case PointerKind.CircleUpdate:
                 UpdateCircle(gestureId, point, end: false);
@@ -105,7 +126,7 @@ internal sealed class PointerVisualRenderer
                 UpdateCircle(gestureId, point, end: true);
                 break;
             case PointerKind.Text when !string.IsNullOrWhiteSpace(text):
-                ShowText(point, text);
+                ShowText(point, text, accent);
                 break;
         }
     }
@@ -120,9 +141,35 @@ internal sealed class PointerVisualRenderer
         canvas.Children.Clear();
     }
 
-    private void StartPath(Guid? gestureId, Point point)
+    /// <summary>
+    /// The stroke and fill brushes for one accent, built once and reused. Every gesture start
+    /// would otherwise allocate a pair, and a freehand stroke starts as often as the hand moves
+    /// between shapes.
+    /// </summary>
+    private AccentBrushes GetAccentBrushes(Color? accent)
     {
-        if (!TryStartGesture(gestureId, CreatePath(point), point, out var gesture))
+        var color = accent ?? defaultAccent;
+        if (accentBrushes.TryGetValue(color, out var brushes))
+        {
+            return brushes;
+        }
+
+        if (accentBrushes.Count >= MaximumCachedAccents)
+        {
+            accentBrushes.Clear();
+        }
+
+        brushes = new AccentBrushes(
+            AnnotationPalette.CreateStrokeBrush(color),
+            AnnotationPalette.CreateFillBrush(color));
+        accentBrushes.Add(color, brushes);
+        return brushes;
+    }
+
+    private void StartPath(Guid? gestureId, Point point, Color? accent)
+    {
+        var path = CreatePath(point, GetAccentBrushes(accent).Stroke);
+        if (!TryStartGesture(gestureId, path, point, out var gesture))
         {
             return;
         }
@@ -183,7 +230,7 @@ internal sealed class PointerVisualRenderer
         AnimateOrClose(gesture, end);
     }
 
-    private void StartLine(Guid? gestureId, Point point)
+    private void StartLine(Guid? gestureId, Point point, Color? accent)
     {
         var line = new Line
         {
@@ -191,7 +238,7 @@ internal sealed class PointerVisualRenderer
             Y1 = point.Y,
             X2 = point.X,
             Y2 = point.Y,
-            Stroke = AccentBrush,
+            Stroke = GetAccentBrushes(accent).Stroke,
             StrokeThickness = 5d,
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round,
@@ -211,13 +258,14 @@ internal sealed class PointerVisualRenderer
         }
     }
 
-    private void StartRectangle(Guid? gestureId, Point point)
+    private void StartRectangle(Guid? gestureId, Point point, Color? accent)
     {
+        var brushes = GetAccentBrushes(accent);
         var rectangle = new Rectangle
         {
-            Stroke = AccentBrush,
+            Stroke = brushes.Stroke,
             StrokeThickness = 4d,
-            Fill = AccentFillBrush,
+            Fill = brushes.Fill,
             IsHitTestVisible = false,
         };
         Canvas.SetLeft(rectangle, point.X);
@@ -236,13 +284,14 @@ internal sealed class PointerVisualRenderer
         }
     }
 
-    private void StartCircle(Guid? gestureId, Point point)
+    private void StartCircle(Guid? gestureId, Point point, Color? accent)
     {
+        var brushes = GetAccentBrushes(accent);
         var circle = new Ellipse
         {
-            Stroke = AccentBrush,
+            Stroke = brushes.Stroke,
             StrokeThickness = 4d,
-            Fill = AccentFillBrush,
+            Fill = brushes.Fill,
             IsHitTestVisible = false,
         };
         Canvas.SetLeft(circle, point.X);
@@ -458,7 +507,7 @@ internal sealed class PointerVisualRenderer
             && (pending.Count == 0 || gesture.HasReachedSettleDeadline);
     }
 
-    private void ShowText(Point point, string text)
+    private void ShowText(Point point, string text, Color? accent)
     {
         var textBlock = new TextBlock
         {
@@ -473,7 +522,7 @@ internal sealed class PointerVisualRenderer
         {
             Padding = new Thickness(9d, 6d, 9d, 6d),
             Background = new SolidColorBrush(Color.FromArgb(230, 17, 23, 32)),
-            BorderBrush = AccentBrush,
+            BorderBrush = GetAccentBrushes(accent).Stroke,
             BorderThickness = new Thickness(2d),
             CornerRadius = new CornerRadius(5d),
             Child = textBlock,
@@ -645,10 +694,10 @@ internal sealed class PointerVisualRenderer
         canvas.Children.Remove(element);
     }
 
-    private static Polyline CreatePath(Point point) => new()
+    private static Polyline CreatePath(Point point, Brush stroke) => new()
     {
         Points = new PointCollection([point]),
-        Stroke = AccentBrush,
+        Stroke = stroke,
         StrokeThickness = 5d,
         StrokeLineJoin = PenLineJoin.Round,
         StrokeStartLineCap = PenLineCap.Round,
@@ -669,6 +718,8 @@ internal sealed class PointerVisualRenderer
         fade.Completed += (_, _) => completed();
         element.BeginAnimation(UIElement.OpacityProperty, fade);
     }
+
+    private sealed record AccentBrushes(Brush Stroke, Brush Fill);
 
     private sealed class ActiveGesture(Guid id, FrameworkElement element, Point start)
     {

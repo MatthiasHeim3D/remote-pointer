@@ -29,7 +29,7 @@ The annotator sends each captured pointer event immediately as a `PointerEventMe
 ## Initial messages
 
 - `DisplayDescriptor`: stable display identity, friendly name, pixel dimensions, scale, and clockwise rotation.
-- `PointerEventMessage`: unique event ID, session identity, monotonic sequence, normalized coordinate, kind, send time, and TTL.
+- `PointerEventMessage`: unique event ID, session identity, monotonic sequence, normalized coordinate, kind, send time, TTL, and an optional annotation colour.
 - `PointerAcknowledgement`: event identity and host display time.
 - `DirectJoinRequest`: opaque session identity for an explicitly visible host, durable client-instance identity, and version.
 - `ClientProfile`: optional PNG profile thumbnail capped to fit within the relay message limit.
@@ -98,6 +98,8 @@ Implemented server-to-client methods are `AnnotatorJoinRequested`, `AnnotatorJoi
 A pause is not a disconnect: the annotator keeps its session, its credential, and its place in the host's list, and only its pointer events stop being relayed. The relay drops them silently rather than rejecting them, so an event already in flight when the pause took effect does not surface as an error, and the paused annotator is told through `AnnotationPaused` so it can show that its input is going nowhere. The pause is stored on the annotator record, so it survives a reconnect and is repeated to the resuming annotator in the `SessionApproved` state.
 
 The relay stamps `PointerEventMessage.AnnotatorId` with the sending annotator on the way to the host; whatever an annotator puts there is replaced, so the host can attribute a drawing to a listed annotator without trusting the sender.
+
+`PointerEventMessage.Color` runs the other way: the annotator chooses it and the relay passes it through untouched, so a drawing looks the same on the host as it does under the hand that made it, and two annotators drawing at once stay told apart by colour. It is `#RRGGBB` — exactly seven characters, upper-case hex, no alpha — and validation rejects anything else rather than coercing it. Opacity is deliberately not carried: how strongly each end draws is a local viewing preference, not the annotator's to dictate. An event that omits the colour is drawn in the default accent `#FF5C5C`. A gesture keeps the colour of the event that opened it for its whole life, so a colour changed mid-stroke cannot repaint what is already on screen.
 
 `EndSession` means different things by role. The host ends the whole session; an approved annotator leaves it; an annotator still waiting for approval withdraws its request, which the relay reports to the host as `AnnotatorJoinCancelled` so the approval prompt closes.
 

@@ -7,6 +7,7 @@ using System.Diagnostics;
 using Microsoft.Win32;
 using RemotePointer.Client.Configuration;
 using RemotePointer.Client.Native;
+using RemotePointer.Client.Overlays;
 using RemotePointer.Client.Services;
 using RemotePointer.Client.ViewModels;
 
@@ -408,6 +409,41 @@ public partial class MainWindow : Window
             if (dialog.ShowDialog(this) == true)
             {
                 viewModel.ProfilePicturePath = dialog.FileName;
+            }
+        }
+        finally
+        {
+            suppressAutoHide = false;
+            Activate();
+        }
+    }
+
+    /// <summary>
+    /// Opens the system colour picker for the annotation colour. WPF ships no colour dialog, and
+    /// the Windows Forms one is already available to this project; it also gives the user the
+    /// familiar custom-colour panel rather than a hex field to type into.
+    /// </summary>
+    private void OnChooseAnnotationColor(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        suppressAutoHide = true;
+        try
+        {
+            var current = AnnotationPalette.ToColor(viewModel.AnnotationColor);
+            using var dialog = new System.Windows.Forms.ColorDialog
+            {
+                Color = System.Drawing.Color.FromArgb(current.R, current.G, current.B),
+                FullOpen = true,
+                AnyColor = true,
+                SolidColorOnly = true,
+            };
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                viewModel.AnnotationColor = AnnotationPalette.ToAnnotationColor(
+                    dialog.Color.R,
+                    dialog.Color.G,
+                    dialog.Color.B);
             }
         }
         finally

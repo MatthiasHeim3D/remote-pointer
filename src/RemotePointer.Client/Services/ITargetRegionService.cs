@@ -17,6 +17,12 @@ public interface ITargetRegionService : IDisposable
     void SetDrawingOpacityPercent(int drawingOpacityPercent);
 
     /// <summary>
+    /// Sets the <c>#RRGGBB</c> colour the target area draws in. It takes effect the next time the
+    /// window opens, so a colour changed mid-session applies from the next calibration on.
+    /// </summary>
+    void SetAnnotationColor(string? annotationColor);
+
+    /// <summary>
     /// Marks the target region as paused by the host: it stops capturing input and says so, but
     /// stays open and calibrated so annotating resumes the moment the host lifts the pause.
     /// </summary>
