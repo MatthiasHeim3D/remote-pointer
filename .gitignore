@@ -6,3 +6,4 @@ TestResults/
 *.suo
 artifacts/
 deploy/server/.env
+CLAUDE.md
