@@ -361,7 +361,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public string EmptyClientListMessage => !IsServerAvailable
         ? ServerConnectionGuidance
-        : $"No available clients in {Room}";
+        : $"No available clients in room \"{Room}\"";
 
     public bool IsAvailabilityMenuOpen
     {
