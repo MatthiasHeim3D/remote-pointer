@@ -200,6 +200,32 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task AServerPasswordTheRelayRefuses_IsReportedWhenItIsApplied()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        settings.Server.PasswordKey = ServerPasswordKey.Derive("the working password");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: settings);
+
+        viewModel.ChangeServerPasswordCommand.Execute(null);
+        viewModel.ServerPasswordInput = "not the relay password";
+        relay.RejectsServerPassword = true;
+        await viewModel.ApplyServerPasswordDraftAsync();
+
+        // Handing the key over only drops the connection, so without a probe of its own the
+        // client would sit there disconnected and never learn the password was the reason.
+        Assert.Equal(1, relay.RelayCapabilitiesRequestCount);
+        Assert.True(viewModel.IsServerPasswordRejected);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Equal("This relay did not accept this password.", viewModel.ServerPasswordWarning);
+    }
+
+    [Fact]
     public async Task Room_IsPersistedAsTypedAndNamedToBothRelayConnections()
     {
         using var testSettings = new TemporaryClientSettings("https://relay.example.test");

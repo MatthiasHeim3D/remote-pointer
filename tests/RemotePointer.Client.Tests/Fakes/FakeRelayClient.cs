@@ -1,3 +1,4 @@
+using System.Net;
 using RemotePointer.Client.Services;
 using RemotePointer.Contracts.Messages;
 
@@ -82,10 +83,31 @@ internal sealed class FakeRelayClient : IRelayClient
 
     public int ResumeCount { get; private set; }
 
+    public int RelayCapabilitiesRequestCount { get; private set; }
+
+    /// <summary>
+    /// Turns the next probe away the way a relay turns away a key it does not recognise: the
+    /// status goes first, the call then fails.
+    /// </summary>
+    public bool RejectsServerPassword { get; set; }
+
     public Task<RelayCapabilities> GetRelayCapabilitiesAsync(
         CancellationToken cancellationToken = default)
     {
         _ = cancellationToken;
+        RelayCapabilitiesRequestCount++;
+        if (RejectsServerPassword)
+        {
+            RaiseConnectionStatus(
+                RelayConnectionStatus.Unauthorized,
+                "The server password is not correct.");
+            return Task.FromException<RelayCapabilities>(
+                new HttpRequestException(
+                    "Response status code does not indicate success: 401 (Unauthorized).",
+                    inner: null,
+                    HttpStatusCode.Unauthorized));
+        }
+
         return Task.FromResult(Capabilities);
     }
 

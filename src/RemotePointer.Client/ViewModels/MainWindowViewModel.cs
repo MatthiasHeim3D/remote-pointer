@@ -816,16 +816,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var annotatorInitialization = Annotator.InitializeAsync();
         if (hostRelayClient is not null)
         {
-            try
+            var failure = await RefreshRelayCapabilitiesAsync();
+            if (failure is not null)
             {
-                var capabilities = await hostRelayClient.GetRelayCapabilitiesAsync();
-                hasRelayCapabilities = true;
-                ServerPasswordRequired = capabilities.ServerPasswordRequired;
-                RaiseServerPasswordProperties();
-            }
-            catch (Exception exception)
-            {
-                SetStatus($"Relay capabilities could not be loaded: {exception.Message}", true);
+                SetStatus($"Relay capabilities could not be loaded: {failure.Message}", true);
             }
         }
 
@@ -1996,6 +1990,42 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             SetStatus(
                 $"The server password was saved, but the relay could not be updated: {exception.Message}",
                 true);
+            return;
+        }
+
+        // Handing the key over only drops the connection that the old one was admitted on. The
+        // relay's verdict on the new key arrives when this client presents it, so ask now: that
+        // is what turns a wrong password into the warning here instead of a silent disconnection
+        // the user meets later as an unreachable relay.
+        _ = await RefreshRelayCapabilitiesAsync();
+    }
+
+    /// <summary>
+    /// Asks the relay what it requires, which means presenting the current password to it.
+    /// Returns the failure rather than throwing: being turned away is an answer, and it reaches
+    /// the settings warning through the connection status rather than through an exception.
+    /// </summary>
+    private async Task<Exception?> RefreshRelayCapabilitiesAsync()
+    {
+        if (hostRelayClient is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var capabilities = await hostRelayClient.GetRelayCapabilitiesAsync();
+            hasRelayCapabilities = true;
+            ServerPasswordRequired = capabilities.ServerPasswordRequired;
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+        finally
+        {
+            RaiseServerPasswordProperties();
         }
     }
 
