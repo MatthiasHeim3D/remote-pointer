@@ -2,13 +2,13 @@
 
 ## System boundary
 
-Remote Pointer has three deployable or reusable components:
+Remote Annotate has three deployable or reusable components:
 
 | Component | Responsibility | Must not do |
 | --- | --- | --- |
-| `RemotePointer.Client` | Annotator calibration/capture and host marker overlays | Capture screens or inject remote input |
-| `RemotePointer.Server` | Validate, authorize, rate-limit, and relay transient pointer events | Access either user's desktop |
-| `RemotePointer.Contracts` | Transport-neutral messages, coordinate math, JSON policy, and structural validation | Depend on WPF, SignalR, or ASP.NET Core |
+| `RemoteAnnotate.Client` | Annotator calibration/capture and host marker overlays | Capture screens or inject remote input |
+| `RemoteAnnotate.Server` | Validate, authorize, rate-limit, and relay transient pointer events | Access either user's desktop |
+| `RemoteAnnotate.Contracts` | Transport-neutral messages, coordinate math, JSON policy, and structural validation | Depend on WPF, SignalR, or ASP.NET Core |
 
 Clients establish outbound HTTPS/WSS connections to the server. The server places the approved annotators and host in a session-specific SignalR group. Peer-to-peer connectivity is deliberately excluded.
 
@@ -76,20 +76,20 @@ SignalR automatic reconnect invokes `ResumeSession` with the role credential and
 
 The production relay normally rejects plaintext without redirecting it. The small Docker deployment explicitly enables private HTTP between Caddy and the relay, but publishes only Caddy's HTTPS port. HSTS, hidden detailed hub errors, and safe production exception handling remain enabled. Stable audit event IDs cover connection, creation, join, rejection, approval, resume, termination, expiry, plaintext refusal, validation failure, and unexpected hub faults.
 
-The client persists only `SessionCredential` recovery documents. They are serialized, encrypted with Windows DPAPI `CurrentUser`, atomically replaced under `%LocalAppData%\RemotePointer\Sessions`, and discarded on normal shutdown or when corrupt, expired, wrong-role, or bound to a different client identity. Startup after an ungraceful interruption may resume an empty host shell and atomically protect the rotated token. Host display selection is reconstructed from server session state; annotator calibration geometry remains intentionally ephemeral.
+The client persists only `SessionCredential` recovery documents. They are serialized, encrypted with Windows DPAPI `CurrentUser`, atomically replaced under `%LocalAppData%\RemoteAnnotate\Sessions`, and discarded on normal shutdown or when corrupt, expired, wrong-role, or bound to a different client identity. Startup after an ungraceful interruption may resume an empty host shell and atomically protect the rotated token. Host display selection is reconstructed from server session state; annotator calibration geometry remains intentionally ephemeral.
 
 Automatic startup recovery runs only when the Windows profile contains one saved role. If both role files exist—as in a two-process, same-profile local test—neither process automatically replaces the other process's SignalR route. Creating or joining a new session discards only that role's recovered credential before binding the new connection.
 
-Client lifecycle and fault events are JSON Lines records under `%LocalAppData%\RemotePointer\Logs`. The fixed schema permits event, level, session ID, role, exception type, and numeric error code; it has no coordinate, credential, exception-message, or arbitrary payload field. WPF dispatcher, AppDomain, and unobserved-task boundaries record failures without exposing details to the user.
+Client lifecycle and fault events are JSON Lines records under `%LocalAppData%\RemoteAnnotate\Logs`. The fixed schema permits event, level, session ID, role, exception type, and numeric error code; it has no coordinate, credential, exception-message, or arbitrary payload field. WPF dispatcher, AppDomain, and unobserved-task boundaries record failures without exposing details to the user.
 
 Release analyzers remain warnings-as-errors. The dependency inventory and vulnerability scan are documented.
 
 ## Dependency direction
 
 ```text
-RemotePointer.Client ----+
-                         +--> RemotePointer.Contracts
-RemotePointer.Server ----+
+RemoteAnnotate.Client ----+
+                         +--> RemoteAnnotate.Contracts
+RemoteAnnotate.Server ----+
 ```
 
 No reference is permitted from contracts back to either application. Client and server tests reference only the corresponding production project and contracts as needed.
@@ -106,6 +106,6 @@ No reference is permitted from contracts back to either application. Client and 
 
 ## Phase 7 deployment boundary
 
-The client is published self-contained for `win-x64` and packaged with Inno Setup, which offers a current-user install under `%LocalAppData%\Programs\Remote Pointer` (the default, requiring no administrator rights) or an elevated all-users install under `%ProgramFiles%\Remote Pointer`. The install mode only moves the program files, the Start menu shortcut, and — when the optional certificate task is selected — whether Caddy's public root is trusted for the current Windows account or for the machine. The installer does not contain a relay URL. Preferences, DPAPI recovery data, and audit records stay per-user under `%LocalAppData%\RemotePointer` in both modes, so every account on a shared PC has its own identity and configuration.
+The client is published self-contained for `win-x64` and packaged with Inno Setup, which offers a current-user install under `%LocalAppData%\Programs\Remote Annotate` (the default, requiring no administrator rights) or an elevated all-users install under `%ProgramFiles%\Remote Annotate`. The install mode only moves the program files, the Start menu shortcut, and — when the optional certificate task is selected — whether Caddy's public root is trusted for the current Windows account or for the machine. The installer does not contain a relay URL. Preferences, DPAPI recovery data, and audit records stay per-user under `%LocalAppData%\RemoteAnnotate` in both modes, so every account on a shared PC has its own identity and configuration.
 
-The packaged `appsettings.json` ships an empty relay URL; the user enters it on first launch, stored in `user-settings.json` under `%LocalAppData%\RemotePointer`, with a process environment override retained for development. `REMOTEPOINTER_DATA_DIRECTORY` redirects that whole per-user tree — preferences, durable client identity, protected credentials, calibrations, and logs — which is what lets `build\Start-Development.ps1` run several clients side by side as if they were separate users. It is read once at startup, and DPAPI is scoped to the Windows account rather than the path, so a redirected client protects and reads its own credentials normally. Both paths enforce HTTPS. In Docker, Caddy is the only published service and proxies to the non-root relay on the private Compose network. The relay's in-memory session boundary means process restart terminates active sessions.
+The packaged `appsettings.json` ships an empty relay URL; the user enters it on first launch, stored in `user-settings.json` under `%LocalAppData%\RemoteAnnotate`, with a process environment override retained for development. `REMOTEANNOTATE_DATA_DIRECTORY` redirects that whole per-user tree — preferences, durable client identity, protected credentials, calibrations, and logs — which is what lets `build\Start-Development.ps1` run several clients side by side as if they were separate users. It is read once at startup, and DPAPI is scoped to the Windows account rather than the path, so a redirected client protects and reads its own credentials normally. Both paths enforce HTTPS. In Docker, Caddy is the only published service and proxies to the non-root relay on the private Compose network. The relay's in-memory session boundary means process restart terminates active sessions.

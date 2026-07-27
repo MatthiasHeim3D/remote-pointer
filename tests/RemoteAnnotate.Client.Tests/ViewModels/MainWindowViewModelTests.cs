@@ -1,0 +1,1469 @@
+using RemoteAnnotate.Client.Native;
+using RemoteAnnotate.Client.Configuration;
+using RemoteAnnotate.Client.Services;
+using RemoteAnnotate.Client.Tests.Fakes;
+using RemoteAnnotate.Client.ViewModels;
+using RemoteAnnotate.Contracts.Coordinates;
+using RemoteAnnotate.Contracts.Messages;
+using RemoteAnnotate.Contracts.Security;
+
+namespace RemoteAnnotate.Client.Tests.ViewModels;
+
+public sealed class MainWindowViewModelTests
+{
+    [Theory]
+    [InlineData("Ada", "A")]
+    [InlineData("ada lovelace", "AL")]
+    [InlineData("\U0001F600 Grin", "\U0001F600G")]
+    [InlineData("\U0001F600", "\U0001F600")]
+    public void FirstCharacter_KeepsCharactersOutsideTheBasicPlaneIntact(
+        string userName,
+        string expected)
+    {
+        var parts = userName.Split(
+            ' ',
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var initials = parts.Length == 1
+            ? MainWindowViewModel.FirstCharacter(parts[0])
+            : $"{MainWindowViewModel.FirstCharacter(parts[0])}{MainWindowViewModel.FirstCharacter(parts[^1])}";
+
+        Assert.Equal(expected, initials);
+    }
+
+    [Fact]
+    public void RefusedServerPassword_WarnsAndSaysWhyTheListIsEmpty()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: testSettings.Settings);
+
+        // Being turned away is all a client without the password ever learns about a protected
+        // relay: it never connects, so it never gets to ask what the relay requires.
+        relay.RaiseConnectionStatus(
+            RelayConnectionStatus.Unauthorized,
+            "This relay requires a server password.");
+
+        Assert.False(viewModel.HasServerPassword);
+        Assert.True(viewModel.ServerPasswordRequired);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Contains(
+            "requires a server password",
+            viewModel.ServerPasswordWarning,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            "The server password was not accepted. Check it in Settings.",
+            viewModel.EmptyClientListMessage);
+    }
+
+    [Fact]
+    public void WrongServerPassword_IsReportedApartFromNotHavingOne()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        settings.Server.PasswordKey = "stored-key";
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: settings);
+
+        relay.RaiseConnectionStatus(
+            RelayConnectionStatus.Unauthorized,
+            "The server password is not correct.");
+
+        Assert.Contains(
+            "did not accept this password",
+            viewModel.ServerPasswordWarning,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OpenRelay_WarnsThatAnyoneWhoReachesItIsAClient()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: new ClientSettings());
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(viewModel.ServerPasswordRequired);
+        Assert.True(viewModel.IsRelayUnprotected);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Contains(
+            "has no password of its own",
+            viewModel.ServerPasswordWarning,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            $"No available clients in room \"{RoomName.DefaultDisplayName}\"",
+            viewModel.EmptyClientListMessage);
+    }
+
+    [Fact]
+    public async Task StoredServerPassword_SuppressesTheWarningAndAllowsRemoval()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        settings.Server.PasswordKey = "stored-group-key";
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: settings);
+
+        Assert.True(viewModel.HasServerPassword);
+        Assert.False(viewModel.ShowServerPasswordWarning);
+        Assert.True(viewModel.ClearServerPasswordCommand.CanExecute(null));
+
+        await viewModel.ClearServerPasswordAsync();
+
+        Assert.False(viewModel.HasServerPassword);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Null(settings.Server.PasswordKey);
+        Assert.Null(relay.ServerPasswordKey);
+        Assert.Equal(1, relay.ServerPasswordKeyUpdateCount);
+    }
+
+    [Fact]
+    public void WithoutAStoredServerPassword_TheBoxIsOfferedWithoutAChangeStep()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: new ClientSettings());
+
+        Assert.True(viewModel.ShowServerPasswordEditor);
+        Assert.False(viewModel.ShowServerPasswordSetState);
+        Assert.False(viewModel.IsChangingServerPassword);
+        Assert.False(viewModel.ChangeServerPasswordCommand.CanExecute(null));
+        Assert.False(viewModel.ClearServerPasswordCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task ChangingAStoredServerPassword_OffersTheBoxUntilItIsAppliedOrCancelled()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        var storedKey = ServerPasswordKey.Derive("first team password");
+        settings.Server.PasswordKey = storedKey;
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: settings);
+
+        Assert.True(viewModel.ShowServerPasswordSetState);
+        Assert.False(viewModel.ShowServerPasswordEditor);
+
+        viewModel.ChangeServerPasswordCommand.Execute(null);
+
+        Assert.True(viewModel.IsChangingServerPassword);
+        Assert.True(viewModel.ShowServerPasswordEditor);
+        Assert.False(viewModel.ShowServerPasswordSetState);
+        Assert.False(viewModel.ApplyServerPasswordCommand.CanExecute(null));
+
+        viewModel.ServerPasswordInput = "short";
+
+        Assert.False(viewModel.ApplyServerPasswordCommand.CanExecute(null));
+
+        viewModel.CancelServerPasswordChangeCommand.Execute(null);
+
+        Assert.False(viewModel.IsChangingServerPassword);
+        Assert.True(viewModel.ShowServerPasswordSetState);
+        Assert.Empty(viewModel.ServerPasswordInput);
+        Assert.Equal(storedKey, settings.Server.PasswordKey);
+
+        viewModel.ChangeServerPasswordCommand.Execute(null);
+        viewModel.ServerPasswordInput = "second team password";
+
+        Assert.True(viewModel.ApplyServerPasswordCommand.CanExecute(null));
+        await viewModel.ApplyServerPasswordDraftAsync();
+
+        Assert.False(viewModel.IsChangingServerPassword);
+        Assert.True(viewModel.ShowServerPasswordSetState);
+        Assert.Empty(viewModel.ServerPasswordInput);
+        Assert.Equal(ServerPasswordKey.Derive("second team password"), relay.ServerPasswordKey);
+        Assert.Equal(relay.ServerPasswordKey, settings.Server.PasswordKey);
+    }
+
+    [Fact]
+    public async Task AServerPasswordTheRelayRefuses_IsReportedWhenItIsApplied()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        var settings = new ClientSettings();
+        settings.Server.PasswordKey = ServerPasswordKey.Derive("the working password");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: settings);
+
+        viewModel.ChangeServerPasswordCommand.Execute(null);
+        viewModel.ServerPasswordInput = "not the relay password";
+        relay.RejectsServerPassword = true;
+        await viewModel.ApplyServerPasswordDraftAsync();
+
+        // Handing the key over only drops the connection, so without a probe of its own the
+        // client would sit there disconnected and never learn the password was the reason.
+        Assert.Equal(1, relay.RelayCapabilitiesRequestCount);
+        Assert.True(viewModel.IsServerPasswordRejected);
+        Assert.True(viewModel.ShowServerPasswordWarning);
+        Assert.Equal("This relay did not accept this password.", viewModel.ServerPasswordWarning);
+    }
+
+    [Fact]
+    public async Task Room_IsPersistedAsTypedAndNamedToBothRelayConnections()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: testSettings.Settings);
+
+        Assert.Equal(RoomName.DefaultDisplayName, viewModel.RoomInput);
+        Assert.Equal(RoomName.DefaultDisplayName, viewModel.Room);
+
+        viewModel.RoomInput = "Engineering";
+        await viewModel.CloseSettingsAsync();
+
+        // Kept as typed, because the settings screen shows it back; the relay is what folds
+        // case, so a colleague who typed it differently is still in the same room.
+        Assert.Equal("Engineering", viewModel.Room);
+        Assert.Equal("Engineering", testSettings.Settings.Server.Room);
+        Assert.Equal("Engineering", relay.Room);
+        Assert.Equal("Engineering", TemporaryClientSettings.Reload(testSettings).Server.Room);
+    }
+
+    [Fact]
+    public void UnusableRoom_IsReportedAndLeavesTheStoredOneAlone()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: new ClientSettings());
+
+        viewModel.RoomInput = new string('r', RoomName.MaximumLength + 1);
+
+        Assert.NotEmpty(viewModel.RoomValidationMessage);
+        Assert.Equal(RoomName.DefaultDisplayName, viewModel.Room);
+    }
+
+    [Fact]
+    public async Task DrawingOpacity_IsClampedAndPersistedWhenSettingsClose()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings);
+
+        Assert.Equal(
+            PointerSettings.DefaultDrawingOpacityPercent,
+            viewModel.DrawingOpacityPercent);
+
+        viewModel.DrawingOpacityPercent = 250;
+        Assert.Equal(PointerSettings.MaximumDrawingOpacityPercent, viewModel.DrawingOpacityPercent);
+
+        viewModel.DrawingOpacityPercent = 30;
+        Assert.Equal("30%", viewModel.DrawingOpacityLabel);
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(30, testSettings.Settings.Pointer.DrawingOpacityPercent);
+    }
+
+    [Fact]
+    public async Task AnnotationColor_IsCanonicalisedAndPersistedWhenSettingsClose()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings);
+
+        Assert.Equal(AnnotationColors.Default, viewModel.AnnotationColor);
+
+        viewModel.AnnotationColor = "#4fc3f7";
+        Assert.Equal("#4FC3F7", viewModel.AnnotationColor);
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal("#4FC3F7", testSettings.Settings.Pointer.AnnotationColor);
+    }
+
+    [Fact]
+    public void AnnotationColor_MovesTheSelectionRingBetweenPresetsAndCustom()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings);
+
+        var defaultPreset = Assert.Single(
+            viewModel.AnnotationColorOptions,
+            option => option.IsSelected);
+        Assert.Equal(AnnotationColors.Default, defaultPreset.Color);
+        Assert.False(viewModel.IsCustomAnnotationColor);
+
+        var violet = viewModel.AnnotationColorOptions.Single(
+            option => option.Name == "Violet");
+        viewModel.SelectAnnotationColorCommand.Execute(violet);
+
+        Assert.Equal(violet.Color, viewModel.AnnotationColor);
+        Assert.Same(
+            violet,
+            Assert.Single(viewModel.AnnotationColorOptions, option => option.IsSelected));
+        Assert.False(viewModel.IsCustomAnnotationColor);
+
+        viewModel.AnnotationColor = "#123456";
+
+        Assert.DoesNotContain(viewModel.AnnotationColorOptions, option => option.IsSelected);
+        Assert.True(viewModel.IsCustomAnnotationColor);
+    }
+
+    [Fact]
+    public async Task AnnotationColor_ReachesTheAnnotationAreaOnSelectionRatherThanOnSave()
+    {
+        using var testSettings = new TemporaryClientSettings("https://relay.example.test");
+        using var overlay = new FakeOverlayService();
+        using var targetRegion = new FakeTargetRegionService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            targetRegionService: targetRegion,
+            clientSettings: testSettings.Settings);
+
+        var cyan = viewModel.AnnotationColorOptions.Single(option => option.Name == "Cyan");
+        viewModel.SelectAnnotationColorCommand.Execute(cyan);
+
+        // Applied before the pane is closed, so the colour can be judged against a live drawing.
+        Assert.Equal(cyan.Color, targetRegion.AnnotationColor);
+        Assert.NotEqual(cyan.Color, testSettings.Settings.Pointer.AnnotationColor);
+
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(cyan.Color, testSettings.Settings.Pointer.AnnotationColor);
+    }
+
+    [Fact]
+    public void AnnotationColorPresets_AreCanonicalAndDistinct()
+    {
+        var colors = MainWindowViewModel.AnnotationColorPresets
+            .Select(preset => preset.Color)
+            .ToArray();
+
+        Assert.All(colors, color => Assert.True(AnnotationColors.IsValid(color)));
+        Assert.Equal(colors.Length, colors.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void AnnotationColorPresets_CoverEveryColorTheRelayCanAllocate()
+    {
+        // The relay hands out palette colours the annotator never picked, so a palette entry the
+        // settings pane cannot show or name would arrive as an unexplained colour.
+        Assert.Equal(
+            AnnotationColors.Palette.Count,
+            MainWindowViewModel.AnnotationColorNames.Length);
+        Assert.Equal(
+            AnnotationColors.Palette,
+            MainWindowViewModel.AnnotationColorPresets.Select(preset => preset.Color).ToArray());
+        Assert.All(
+            MainWindowViewModel.AnnotationColorNames,
+            name => Assert.False(string.IsNullOrWhiteSpace(name)));
+    }
+
+    [Fact]
+    public void MissingServer_ShowsMainScreenWithSetupGuidance()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: new ClientSettings());
+
+        Assert.True(viewModel.IsServerConfigurationMissing);
+        Assert.False(viewModel.IsSettingsOpen);
+        Assert.Equal("Set the server address in Settings.", viewModel.ServerConnectionGuidance);
+        Assert.Equal(viewModel.ServerConnectionGuidance, viewModel.EmptyClientListMessage);
+    }
+
+    [Fact]
+    public void ServerAddressInput_StripsPastedHttpsPrefixAndRejectsHttp()
+    {
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay);
+
+        viewModel.ServerAddressInput = "https://relay.example.test/path/";
+
+        Assert.Equal("relay.example.test/path/", viewModel.ServerAddressInput);
+        Assert.Equal("https://relay.example.test/path/", viewModel.ServerAddress);
+        Assert.Empty(viewModel.ServerAddressValidationMessage);
+
+        viewModel.ServerAddressInput = "http://relay.example.test";
+
+        Assert.Contains("HTTPS", viewModel.ServerAddressValidationMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InvalidServerAddress_DoesNotPreventClosingSettings()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings);
+        viewModel.ServerAddressInput = "http://relay.example.test";
+
+        await viewModel.CloseSettingsAsync();
+
+        Assert.False(viewModel.IsSettingsOpen);
+        Assert.Empty(viewModel.ServerAddressInput);
+    }
+
+    [Fact]
+    public async Task TestServerConnection_SuccessSavesAddressAndShowsCheckmark()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful."));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "relay.example.test";
+
+        Assert.True(viewModel.TestServerConnectionCommand.CanExecute(null));
+        await viewModel.TestServerConnectionAsync();
+
+        Assert.Equal(["https://relay.example.test"], tester.TestedAddresses);
+        Assert.Equal("https://relay.example.test", testSettings.Settings.Server.BaseUrl);
+        Assert.True(viewModel.IsServerAddressVerified);
+        Assert.True(viewModel.IsSettingsOpen);
+
+        // The saved address stays testable so a reachability check never needs a fake edit first.
+        Assert.True(viewModel.TestServerConnectionCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task TestServerConnection_AdvertisedVersionIsShownAndClearedOnEdit()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful.", "1.2.3"));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "relay.example.test";
+
+        await viewModel.TestServerConnectionAsync();
+
+        Assert.True(viewModel.HasServerVersion);
+        Assert.Equal("Server version 1.2.3", viewModel.ServerVersionLabel);
+
+        viewModel.ServerAddressInput = "other.example.test";
+
+        Assert.False(viewModel.HasServerVersion);
+        Assert.Empty(viewModel.ServerVersionLabel);
+    }
+
+    [Fact]
+    public async Task TestServerConnection_UnreachableServerDropsStaleVersion()
+    {
+        using var testSettings = new TemporaryClientSettings(string.Empty);
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful.", "1.2.3"));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "relay.example.test";
+        await viewModel.TestServerConnectionAsync();
+
+        tester.Result = new ServerConnectionTestResult(
+            false,
+            "The server could not be reached.");
+        await viewModel.TestServerConnectionAsync();
+
+        Assert.False(viewModel.HasServerVersion);
+        Assert.Empty(viewModel.ServerVersionLabel);
+    }
+
+    [Fact]
+    public async Task ClosingSettings_UntestedReachableAddressTestsAndSavesIt()
+    {
+        using var testSettings = new TemporaryClientSettings("https://old.example.test");
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(true, "Connection successful."));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        var relayReinitializationRequested = false;
+        viewModel.RelayReinitializationRequested += (_, _) =>
+            relayReinitializationRequested = true;
+        viewModel.ToggleSettingsCommand.Execute(null);
+        viewModel.ServerAddressInput = "new.example.test";
+
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(["https://new.example.test"], tester.TestedAddresses);
+        Assert.Equal("https://new.example.test", testSettings.Settings.Server.BaseUrl);
+        Assert.False(viewModel.IsSettingsOpen);
+        Assert.True(relayReinitializationRequested);
+    }
+
+    [Fact]
+    public async Task ClosingSettings_UnreachableAddressRestoresConfiguredAddress()
+    {
+        using var testSettings = new TemporaryClientSettings("https://old.example.test");
+        using var overlay = new FakeOverlayService();
+        var tester = new FakeServerConnectionTester(
+            new ServerConnectionTestResult(false, "The server could not be reached."));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            clientSettings: testSettings.Settings,
+            serverConnectionTester: tester);
+        viewModel.ServerAddressInput = "unreachable.example.test";
+
+        await viewModel.CloseSettingsAsync();
+
+        Assert.Equal(["https://unreachable.example.test"], tester.TestedAddresses);
+        Assert.Equal("https://old.example.test", testSettings.Settings.Server.BaseUrl);
+        Assert.Equal("old.example.test", viewModel.ServerAddressInput);
+        Assert.False(viewModel.IsSettingsOpen);
+    }
+
+    [Fact]
+    public void DisconnectedServer_ShowsReachabilityGuidance()
+    {
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        relay.RaiseConnectionStatus(RelayConnectionStatus.Disconnected, "Connection failed.");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([CreateMonitor("DISPLAY1", isPrimary: true)]),
+            overlay,
+            hostRelayClient: relay);
+
+        Assert.False(viewModel.IsServerAvailable);
+        Assert.Equal(
+            "Server not reachable. Check the server address in Settings.",
+            viewModel.ServerConnectionGuidance);
+    }
+
+    [Fact]
+    public async Task Initialize_RestoresSavedAvailableState()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        var settings = new ClientSettings
+        {
+            Host = new HostSettings
+            {
+                IsAvailable = true,
+            },
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay,
+            clientSettings: settings);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(HostAvailability.Available, viewModel.HostAvailability);
+        Assert.True(viewModel.HasHostSession);
+        Assert.True(relay.IsDiscoverable);
+    }
+
+    [Fact]
+    public async Task HostAvailability_PublishesTheSessionAndUpdatesTheServer()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+
+        Assert.True(viewModel.CanSetHostAvailability);
+        Assert.Equal(HostAvailability.Available, viewModel.HostAvailability);
+        Assert.True(relay.IsDiscoverable);
+    }
+
+    [Fact]
+    public async Task HostResolutionChange_IsSentForActiveSelectedDisplay()
+    {
+        var initial = CreateMonitor("DISPLAY1", isPrimary: true, width: 1_920);
+        var monitors = new FakeMonitorService([initial]);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            monitors,
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        monitors.Monitors = [CreateMonitor("DISPLAY1", isPrimary: true, width: 2_560)];
+
+        await viewModel.HandleDisplayConfigurationChangedAsync();
+
+        Assert.Equal(2_560, relay.UpdatedHostDisplay?.WidthPixels);
+    }
+
+    [Fact]
+    public async Task RestoreSessions_SkipsBothRolesForSharedProfileTestClients()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(1);
+        var hostRelay = new FakeRelayClient
+        {
+            Credential = new SessionCredential(
+                "host-session",
+                ClientRole.Host,
+                "shared-client",
+                new string('s', 32),
+                new string('r', 32),
+                expiresAt),
+            SessionId = "host-session",
+            ResumeResult = true,
+        };
+        var annotatorRelay = new FakeRelayClient
+        {
+            Credential = new SessionCredential(
+                "annotator-session",
+                ClientRole.Annotator,
+                "shared-client",
+                new string('t', 32),
+                new string('u', 32),
+                expiresAt),
+            SessionId = "annotator-session",
+            ResumeResult = true,
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: hostRelay,
+            annotatorRelayClient: annotatorRelay);
+
+        await viewModel.RestoreSessionsAsync();
+
+        Assert.Equal(0, hostRelay.ResumeCount);
+        Assert.Equal(0, annotatorRelay.ResumeCount);
+        Assert.Contains(
+            "skipped",
+            viewModel.HostConnectionMessage,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task HostSession_ApprovesAnnotatorAndDisplaysFreshPointerWithAcknowledgement()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        byte[] picture = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        var annotator = new AnnotatorDescriptor(
+            "connection-1",
+            "annotator-1",
+            "Annotator PC",
+            "1.0.0",
+            picture);
+        relay.RaiseJoinRequest(annotator);
+        Assert.Equal(picture, viewModel.PendingAnnotatorProfilePicturePng);
+        viewModel.ApproveAnnotatorCommand.Execute(null);
+        var pointer = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.25d,
+            0.75d,
+            PointerKind.Click,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            2_000);
+
+        relay.RaisePointer(pointer);
+
+        Assert.Equal("connection-1", relay.ApprovedAnnotator?.ConnectionId);
+        Assert.Equal(new NormalizedPoint(0.25d, 0.75d), Assert.Single(overlay.Markers));
+        Assert.Equal(pointer.EventId, relay.SentAcknowledgement?.EventId);
+        Assert.True(viewModel.CanSelectMonitor);
+    }
+
+    [Fact]
+    public async Task ConnectedAnnotatorRow_PausesDisconnectsAndTracksAnnotating()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1")));
+        var row = Assert.Single(viewModel.ConnectedAnnotators);
+
+        Assert.Equal("Connected", row.StatusLabel);
+        Assert.False(row.IsAnnotating);
+        Assert.False(viewModel.HasMultipleConnectedAnnotators);
+
+        relay.RaisePointer(CreatePointerFrom("annotator-1"));
+
+        Assert.True(row.IsAnnotating);
+
+        row.TogglePauseCommand.Execute(null);
+
+        Assert.Equal(("annotator-1", true), Assert.Single(relay.PauseRequests));
+
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1", true)));
+
+        // The same row is reused, so the pause lands on it rather than replacing it.
+        Assert.Same(row, Assert.Single(viewModel.ConnectedAnnotators));
+        Assert.True(row.IsPaused);
+        Assert.Equal("Paused", row.StatusLabel);
+        Assert.False(row.IsAnnotating);
+
+        row.DisconnectCommand.Execute(null);
+
+        Assert.Equal("annotator-1", Assert.Single(relay.DisconnectedAnnotatorIds));
+    }
+
+    [Fact]
+    public async Task SecondConnectedAnnotator_RevealsTheBulkPauseAndDisconnectButtons()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1"),
+                new ConnectedAnnotatorDescriptor("Annotator Two", null, "annotator-2")));
+
+        Assert.True(viewModel.HasMultipleConnectedAnnotators);
+        Assert.Equal("Pause all", viewModel.PauseAllActionLabel);
+
+        viewModel.TogglePauseAllCommand.Execute(null);
+
+        Assert.Equal((null, true), Assert.Single(relay.PauseRequests));
+
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator One", null, "annotator-1", true),
+                new ConnectedAnnotatorDescriptor("Annotator Two", null, "annotator-2", true)));
+
+        Assert.True(viewModel.AreAllAnnotatorsPaused);
+        Assert.Equal("Resume all", viewModel.PauseAllActionLabel);
+
+        relay.RaiseApproved(
+            CreateHostState(
+                monitor,
+                new ConnectedAnnotatorDescriptor("Annotator Two", null, "annotator-2", true)));
+
+        Assert.Equal(
+            "annotator-2",
+            Assert.Single(viewModel.ConnectedAnnotators).AnnotatorId);
+        Assert.False(viewModel.HasMultipleConnectedAnnotators);
+    }
+
+    [Fact]
+    public async Task ConnectedAnnotator_EnablesHostDisconnectAllCommand()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                HostDiscoverable: true,
+                ConnectedAnnotators:
+                [
+                    new ConnectedAnnotatorDescriptor("Annotator One"),
+                    new ConnectedAnnotatorDescriptor("Annotator Two"),
+                ]));
+
+        Assert.True(viewModel.HasConnectedAnnotator);
+        Assert.Equal(2, viewModel.ConnectedAnnotators.Count);
+        Assert.Equal("2 annotators connected", viewModel.ConnectedAnnotatorCountLabel);
+        Assert.False(viewModel.Annotator.RoleEnabled);
+        Assert.False(viewModel.Annotator.JoinDiscoveredHostCommand.CanExecute(
+            new AvailableHostDescriptor("other-session", "Other host")));
+        // The profile bar tracks availability alone; the connected annotators report themselves.
+        Assert.Equal("Available", viewModel.AvailabilityLabel);
+        Assert.Equal("#6CCB7F", viewModel.AvailabilityColor);
+        Assert.True(viewModel.CanSetHostAvailability);
+
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Invisible);
+
+        Assert.True(viewModel.HasConnectedAnnotator);
+        Assert.False(relay.IsDiscoverable);
+        Assert.Equal("Invisible", viewModel.AvailabilityLabel);
+        Assert.Equal("#8B8B8B", viewModel.AvailabilityColor);
+        Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));
+        viewModel.DisconnectAllConnectionsCommand.Execute(null);
+
+        Assert.Equal(1, relay.DisconnectAllConnectionsCount);
+    }
+
+    [Fact]
+    public async Task LastAnnotatorDisconnecting_BringsBackTheAvailableClientList()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var hostRelay = CreateHostRelay();
+        var annotatorRelay = new FakeRelayClient
+        {
+            AvailableHosts = [new AvailableHostDescriptor("peer-session", "Peer PC")],
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: hostRelay,
+            annotatorRelayClient: annotatorRelay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        Assert.Single(viewModel.Annotator.AvailableHosts);
+
+        hostRelay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                HostDiscoverable: true,
+                ConnectedAnnotators: [new ConnectedAnnotatorDescriptor("Peer PC")]));
+        Assert.Empty(viewModel.Annotator.AvailableHosts);
+
+        hostRelay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                false,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                HostDiscoverable: true,
+                ConnectedAnnotators: []));
+
+        Assert.False(viewModel.HasConnectedAnnotator);
+        Assert.True(viewModel.Annotator.RoleEnabled);
+        Assert.Equal(
+            "peer-session",
+            Assert.Single(viewModel.Annotator.AvailableHosts).SessionId);
+    }
+
+    [Fact]
+    public async Task JoiningAHost_ReportsConnectedOnTheHostRowAndNotTheProfileBar()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var hostRelay = CreateHostRelay();
+        var annotatorRelay = new FakeRelayClient
+        {
+            AvailableHosts = [new AvailableHostDescriptor("peer-session", "Peer PC")],
+        };
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: hostRelay,
+            annotatorRelayClient: annotatorRelay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+
+        annotatorRelay.RaiseApproved(
+            new SessionStateMessage(
+                "peer-session",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                HostDisplayName: "Peer PC"));
+
+        Assert.True(viewModel.Annotator.IsSessionApproved);
+        Assert.Equal("Connected", viewModel.Annotator.ConnectionStatusLabel);
+        // Availability is a separate signal, so joining a host must not restate the session here.
+        Assert.Equal("Available", viewModel.AvailabilityLabel);
+        Assert.Equal("#6CCB7F", viewModel.AvailabilityColor);
+    }
+
+    [Fact]
+    public void RestoredHostState_NotifiesThatDisconnectAllBecameEnabled()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        relay.Credential = new SessionCredential(
+            "restored-session",
+            ClientRole.Host,
+            "host-client",
+            new string('s', 32),
+            new string('r', 32),
+            DateTimeOffset.UtcNow.AddHours(1));
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        var observedEnabledState = false;
+        viewModel.DisconnectAllConnectionsCommand.CanExecuteChanged +=
+            (_, _) => observedEnabledState |=
+                viewModel.DisconnectAllConnectionsCommand.CanExecute(null);
+
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "restored-session",
+                true,
+                monitor.Display,
+                DateTimeOffset.UtcNow.AddHours(1),
+                ConnectedAnnotators: [new ConnectedAnnotatorDescriptor("Annotator")]));
+
+        Assert.True(observedEnabledState);
+        Assert.True(viewModel.DisconnectAllConnectionsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task PendingAnnotator_CanBeExplicitlyRejected()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        var annotator = new AnnotatorDescriptor(
+            "pending-connection",
+            "pending-client",
+            "Pending Annotator",
+            "1.0.0");
+        relay.RaiseJoinRequest(annotator);
+
+        await viewModel.RejectPendingAnnotatorAsync();
+
+        Assert.False(viewModel.HasPendingAnnotator);
+        Assert.Equal("pending-connection", relay.RejectedAnnotator?.ConnectionId);
+    }
+
+    [Fact]
+    public void PendingAnnotatorDisconnect_ClearsStaleApprovalRequest()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        relay.RaiseJoinRequest(
+            new AnnotatorDescriptor(
+                "pending-connection",
+                "pending-client",
+                "Pending Annotator",
+                "1.0.0"));
+
+        relay.RaiseJoinRequestCancelled("pending-connection");
+
+        Assert.False(viewModel.HasPendingAnnotator);
+        Assert.Contains("withdrew", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task HostSession_DropsExpiredPointerWithoutAcknowledging()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        var expired = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.5d,
+            0.5d,
+            PointerKind.Click,
+            DateTimeOffset.UtcNow.AddSeconds(-3).ToUnixTimeMilliseconds(),
+            2_000);
+
+        relay.RaisePointer(expired);
+
+        Assert.Empty(overlay.Markers);
+        Assert.Null(relay.SentAcknowledgement);
+    }
+
+    [Fact]
+    public async Task HostSession_ForwardsGesturePayloadToOverlay()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        var gestureId = Guid.NewGuid();
+        var pointer = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.2d,
+            0.8d,
+            PointerKind.RectangleUpdate,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            2_000,
+            gestureId);
+
+        relay.RaisePointer(pointer);
+
+        Assert.Same(pointer, Assert.Single(overlay.Pointers));
+        Assert.Equal(pointer.EventId, relay.SentAcknowledgement?.EventId);
+    }
+
+    [Fact]
+    public void HostWithoutActiveSession_DropsPointerWithoutAcknowledging()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        overlay.Show(monitor);
+        var pointer = new PointerEventMessage(
+            Guid.NewGuid(),
+            "session-1",
+            1,
+            0.5d,
+            0.5d,
+            PointerKind.Click,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            2_000);
+
+        relay.RaisePointer(pointer);
+
+        Assert.Empty(overlay.Markers);
+        Assert.Null(relay.SentAcknowledgement);
+    }
+
+    [Fact]
+    public async Task HostAvailability_UpdateFailureKeepsRequestedStateAndRetries()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+        relay.DiscoverabilityException = new InvalidOperationException("Relay unavailable.");
+
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Invisible);
+
+        Assert.True(viewModel.HasHostSession);
+        Assert.Equal(HostAvailability.Invisible, viewModel.HostAvailability);
+        Assert.True(viewModel.IsError);
+        Assert.Contains("availability", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+
+        relay.DiscoverabilityException = null;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(4);
+        while (relay.IsDiscoverable && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.False(relay.IsDiscoverable);
+    }
+
+    [Fact]
+    public async Task SelectingInvisibleBeforeHostSession_RemainsInvisibleWithoutRelayUpdate()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Invisible);
+
+        Assert.False(viewModel.HasHostSession);
+        Assert.Equal(HostAvailability.Invisible, viewModel.HostAvailability);
+        Assert.False(relay.IsDiscoverable);
+        Assert.Equal(0, relay.DiscoverabilityUpdateCount);
+    }
+
+    [Fact]
+    public async Task SelectingAvailableWhileServerIsOffline_KeepsChoiceAndQueuesRetry()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        var relay = CreateHostRelay();
+        relay.CreateException = new InvalidOperationException("Server unavailable.");
+        relay.RaiseConnectionStatus(RelayConnectionStatus.Disconnected, "Server unavailable.");
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay,
+            hostRelayClient: relay);
+        await viewModel.InitializeAsync();
+
+        await viewModel.SetHostAvailabilityAsync(HostAvailability.Available);
+
+        Assert.True(viewModel.SetHostAvailabilityCommand.CanExecute(
+            HostAvailability.Invisible));
+        Assert.False(viewModel.HasHostSession);
+        Assert.Equal(HostAvailability.Available, viewModel.HostAvailability);
+        Assert.Equal("Server unavailable", viewModel.AvailabilityLabel);
+        Assert.True(viewModel.IsError);
+
+        relay.CreateException = null;
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(4);
+        while (!viewModel.HasHostSession && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+        }
+
+        Assert.True(viewModel.HasHostSession);
+        Assert.Equal("Available", viewModel.AvailabilityLabel);
+        Assert.True(relay.IsDiscoverable);
+    }
+
+    [Fact]
+    public void Constructor_LoadsAndSelectsFirstMonitor()
+    {
+        var primary = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([primary]),
+            overlay);
+
+        Assert.Single(viewModel.Monitors);
+        Assert.Same(primary, viewModel.SelectedMonitor);
+        Assert.False(viewModel.IsError);
+    }
+
+    [Fact]
+    public void RefreshMonitors_PreservesSelectionByDisplayId()
+    {
+        var first = CreateMonitor("DISPLAY1", isPrimary: true);
+        var second = CreateMonitor("DISPLAY2", isPrimary: false);
+        var monitorService = new FakeMonitorService([first, second]);
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(monitorService, overlay)
+        {
+            SelectedMonitor = second,
+        };
+
+        var refreshedSecond = CreateMonitor("DISPLAY2", isPrimary: false, width: 2_560);
+        monitorService.Monitors = [first, refreshedSecond];
+        viewModel.RefreshMonitors();
+
+        Assert.Same(refreshedSecond, viewModel.SelectedMonitor);
+    }
+
+    [Fact]
+    public void RefreshMonitors_RemovesOverlayWhenSelectionDisconnects()
+    {
+        var first = CreateMonitor("DISPLAY1", isPrimary: true);
+        var second = CreateMonitor("DISPLAY2", isPrimary: false);
+        var monitorService = new FakeMonitorService([first, second]);
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(monitorService, overlay)
+        {
+            SelectedMonitor = second,
+        };
+        overlay.Show(second);
+
+        monitorService.Monitors = [first];
+        viewModel.RefreshMonitors();
+
+        Assert.True(overlay.HideWasCalled);
+        Assert.False(viewModel.IsOverlayVisible);
+        Assert.True(viewModel.IsError);
+        Assert.Contains("disconnected", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Same(first, viewModel.SelectedMonitor);
+    }
+
+    [Fact]
+    public void OverlayDisconnectionState_IsPresentedAsError()
+    {
+        var monitor = CreateMonitor("DISPLAY1", isPrimary: true);
+        using var overlay = new FakeOverlayService();
+        using var viewModel = new MainWindowViewModel(
+            new FakeMonitorService([monitor]),
+            overlay);
+
+        overlay.RaiseDisconnected();
+
+        Assert.False(viewModel.IsOverlayVisible);
+        Assert.True(viewModel.IsError);
+        Assert.Contains("disconnected", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static MonitorDescriptor CreateMonitor(
+        string id,
+        bool isPrimary,
+        int width = 1_920) => new(
+            Handle: 1,
+            new DisplayDescriptor(id, id, width, 1_080, 1d, 0),
+            new PhysicalRectangle(isPrimary ? 0 : -width, 0, width, 1_080),
+            new PhysicalRectangle(isPrimary ? 0 : -width, 0, width, 1_040),
+            isPrimary);
+
+    private static SessionStateMessage CreateHostState(
+        MonitorDescriptor monitor,
+        params ConnectedAnnotatorDescriptor[] annotators) => new(
+        "session-1",
+        annotators.Length > 0,
+        monitor.Display,
+        DateTimeOffset.UtcNow.AddHours(1),
+        HostDiscoverable: true,
+        ConnectedAnnotators: annotators);
+
+    private static PointerEventMessage CreatePointerFrom(string annotatorId) => new(
+        Guid.NewGuid(),
+        "session-1",
+        1,
+        0.25d,
+        0.75d,
+        PointerKind.Click,
+        DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        2_000,
+        AnnotatorId: annotatorId);
+
+    private static FakeRelayClient CreateHostRelay()
+    {
+        var expiresAt = DateTimeOffset.UtcNow.AddHours(8);
+        var credential = new SessionCredential(
+            "session-1",
+            ClientRole.Host,
+            "host-1",
+            new string('s', 32),
+            new string('r', 32),
+            expiresAt);
+        return new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
+            CreateResponse = new CreateSessionResponse(
+                "session-1",
+                new string('x', 32),
+                credential),
+        };
+    }
+
+    private sealed class FakeMonitorService(IReadOnlyList<MonitorDescriptor> monitors)
+        : IMonitorService
+    {
+        public IReadOnlyList<MonitorDescriptor> Monitors { get; set; } = monitors;
+
+        public IReadOnlyList<MonitorDescriptor> GetMonitors() => Monitors;
+
+        public MonitorDescriptor? FindByDisplayId(string displayId) =>
+            Monitors.FirstOrDefault(
+                monitor => string.Equals(
+                    monitor.Display.DisplayId,
+                    displayId,
+                    StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class FakeServerConnectionTester(ServerConnectionTestResult result)
+        : IServerConnectionTester
+    {
+        public List<string> TestedAddresses { get; } = [];
+
+        public ServerConnectionTestResult Result { get; set; } = result;
+
+        public Task<ServerConnectionTestResult> TestAsync(
+            string serverAddress,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            TestedAddresses.Add(serverAddress);
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class TemporaryClientSettings : IDisposable
+    {
+        private readonly string directory;
+
+        public TemporaryClientSettings(string serverAddress)
+        {
+            directory = Path.Combine(
+                Path.GetTempPath(),
+                $"RemoteAnnotate.ViewModelTests.{Guid.NewGuid():N}");
+            Directory.CreateDirectory(directory);
+            var json = System.Text.Json.JsonSerializer.Serialize(
+                new
+                {
+                    Server = new
+                    {
+                        BaseUrl = serverAddress,
+                        ReconnectDelaysSeconds = new[] { 0, 2 },
+                    },
+                    Pointer = new
+                    {
+                        DefaultTtlMilliseconds = 2_000,
+                    },
+                });
+            File.WriteAllText(Path.Combine(directory, "appsettings.json"), json);
+            Settings = ClientSettings.Load(directory, null);
+        }
+
+        public ClientSettings Settings { get; }
+
+        /// <summary>Reads the same directory again, to see what actually reached the disk.</summary>
+        public static ClientSettings Reload(TemporaryClientSettings settings) =>
+            ClientSettings.Load(settings.directory, null);
+
+        public void Dispose() => Directory.Delete(directory, recursive: true);
+    }
+
+    private sealed class FakeOverlayService : IHostOverlayService
+    {
+        public event EventHandler<OverlayStateChangedEventArgs>? StateChanged;
+
+        public bool IsVisible { get; private set; }
+
+        public bool HideWasCalled { get; private set; }
+
+        public MonitorDescriptor? ShownMonitor { get; private set; }
+
+        public List<NormalizedPoint> Markers { get; } = [];
+
+        public List<PointerEventMessage> Pointers { get; } = [];
+
+        public void Show(MonitorDescriptor monitor)
+        {
+            ShownMonitor = monitor;
+            IsVisible = true;
+            StateChanged?.Invoke(
+                this,
+                new OverlayStateChangedEventArgs("Overlay active.", false, true));
+        }
+
+        public void Hide()
+        {
+            HideWasCalled = true;
+            IsVisible = false;
+            StateChanged?.Invoke(
+                this,
+                new OverlayStateChangedEventArgs("Overlay hidden.", false, false));
+        }
+
+        public bool ShowPointer(PointerEventMessage pointerEvent)
+        {
+            if (!IsVisible)
+            {
+                return false;
+            }
+
+            Pointers.Add(pointerEvent);
+            if (pointerEvent.Kind == PointerKind.Click)
+            {
+                Markers.Add(new NormalizedPoint(
+                    pointerEvent.NormalizedX,
+                    pointerEvent.NormalizedY));
+            }
+
+            return true;
+        }
+
+        public void RaiseDisconnected()
+        {
+            IsVisible = false;
+            StateChanged?.Invoke(
+                this,
+                new OverlayStateChangedEventArgs(
+                    "The selected monitor was disconnected.",
+                    true,
+                    false));
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+}

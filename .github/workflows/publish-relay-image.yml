@@ -42,7 +42,7 @@ jobs:
           fi
 
           echo "value=$(dotnet nbgv get-version --public-release -v NuGetPackageVersion)" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/remote-pointer-relay" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/remote-annotate-relay" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -61,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: src/RemotePointer.Server/Dockerfile
+          file: src/RemoteAnnotate.Server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |

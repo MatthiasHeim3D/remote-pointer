@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 900 326" width="900" height="326" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The annotator starts with an empty screen. A screen-sharing app connects the two machines and the host's screen appears in a window. Remote Pointer then connects them as well, and its target area is moved and resized until it matches that shared image; pressing Start turns the border red and begins annotating. Three clicks and a circle drawn around a block of code appear on the host's real screen as they are made, each fading on its own.">
-  <title>Remote Pointer — how a session runs</title>
+<svg viewBox="0 0 900 326" width="900" height="326" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The annotator starts with an empty screen. A screen-sharing app connects the two machines and the host's screen appears in a window. Remote Annotate then connects them as well, and its target area is moved and resized until it matches that shared image; pressing Start turns the border red and begins annotating. Three clicks and a circle drawn around a block of code appear on the host's real screen as they are made, each fading on its own.">
+  <title>Remote Annotate — how a session runs</title>
 
   <defs>
     <!-- An abstract dark-mode code editor: whatever is on the host's screen. Drawn once,
@@ -161,7 +161,7 @@
       .link-muted    { fill: #8F8F8F;   animation: share-lit-fill 14.5s linear infinite; }
       .arrow-share   { fill: #8F8F8F;   animation: share-lit-fill 14.5s linear infinite; }
 
-      /* The Remote Pointer link carries the annotation colour while a gesture is going
+      /* The Remote Annotate link carries the annotation colour while a gesture is going
          over it, so it is visible that this is what reaches the host. */
       .wire-pointer  { stroke: #60CDFF;
                        animation: ants 0.9s linear infinite, pointer-lit-stroke 14.5s linear infinite; }
@@ -196,7 +196,7 @@
       @keyframes ants { to { stroke-dashoffset: -18; } }
 
       /* Setup, one piece at a time: the screen share connects, its window opens on the
-         annotator, then Remote Pointer connects and its target area appears. */
+         annotator, then Remote Annotate connects and its target area appears. */
       @keyframes link-share-show {
         0%, 1.72%     { opacity: 0; }
         4.48%, 88.97% { opacity: 1; }
@@ -400,13 +400,13 @@
   </g>
 
   <!-- The two links, side by side between the screens: the screen share carries the
-       picture one way, Remote Pointer carries the gestures back the other. -->
+       picture one way, Remote Annotate carries the gestures back the other. -->
   <g class="link-share">
     <text class="link-label link-muted" x="450" y="96">Any Screen Sharing App</text>
     <line class="wire wire-share" x1="348" y1="108" x2="546" y2="108" marker-end="url(#arrow-muted)" />
   </g>
   <g class="link-pointer">
-    <text class="link-label link-accent" x="450" y="158">Remote Pointer</text>
+    <text class="link-label link-accent" x="450" y="158">Remote Annotate</text>
     <line class="wire wire-pointer" x1="552" y1="170" x2="354" y2="170" marker-end="url(#arrow-accent)" />
   </g>
 

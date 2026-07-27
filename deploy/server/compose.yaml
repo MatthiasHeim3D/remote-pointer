@@ -1,15 +1,15 @@
 services:
   relay:
-    image: remote-pointer-relay:local
+    image: remote-annotate-relay:local
     build:
       context: ../..
-      dockerfile: src/RemotePointer.Server/Dockerfile
+      dockerfile: src/RemoteAnnotate.Server/Dockerfile
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       Deployment__BehindHttpsProxy: "true"
-      Access__ServerPassword: ${REMOTEPOINTER_SERVER_PASSWORD:?Set REMOTEPOINTER_SERVER_PASSWORD in .env}
+      Access__ServerPassword: ${REMOTEANNOTATE_SERVER_PASSWORD:?Set REMOTEANNOTATE_SERVER_PASSWORD in .env}
 
   caddy:
     image: caddy:2-alpine
@@ -19,7 +19,7 @@ services:
     ports:
       - "443:443"
     environment:
-      REMOTEPOINTER_HOSTNAME: ${REMOTEPOINTER_HOSTNAME:?Set REMOTEPOINTER_HOSTNAME in .env}
+      REMOTEANNOTATE_HOSTNAME: ${REMOTEANNOTATE_HOSTNAME:?Set REMOTEANNOTATE_HOSTNAME in .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

@@ -3,8 +3,8 @@
 Inventory generated on 2026-07-23 with:
 
 ```powershell
-dotnet list RemotePointer.sln package --include-transitive
-dotnet list RemotePointer.sln package --vulnerable --include-transitive
+dotnet list RemoteAnnotate.sln package --include-transitive
+dotnet list RemoteAnnotate.sln package --vulnerable --include-transitive
 ```
 
 ## Production dependencies

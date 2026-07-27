@@ -1,0 +1,21 @@
+namespace RemoteAnnotate.Contracts.Messages;
+
+public enum PointerKind
+{
+    Click,
+    DoubleClick,
+    Attention,
+    PathStart,
+    PathUpdate,
+    PathEnd,
+    LineStart,
+    LineUpdate,
+    LineEnd,
+    Text,
+    RectangleStart,
+    RectangleUpdate,
+    RectangleEnd,
+    CircleStart,
+    CircleUpdate,
+    CircleEnd,
+}

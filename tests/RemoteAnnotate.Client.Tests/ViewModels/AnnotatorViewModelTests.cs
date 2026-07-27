@@ -1,0 +1,640 @@
+using RemoteAnnotate.Client.Configuration;
+using RemoteAnnotate.Client.Services;
+using RemoteAnnotate.Client.Tests.Fakes;
+using RemoteAnnotate.Client.ViewModels;
+using RemoteAnnotate.Contracts.Coordinates;
+using RemoteAnnotate.Contracts.Messages;
+
+namespace RemoteAnnotate.Client.Tests.ViewModels;
+
+public sealed class AnnotatorViewModelTests
+{
+    [Fact]
+    public async Task DiscoveryInitialization_LoadsHostsAndDirectJoinRequestsSelection()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
+            AvailableHosts =
+            [
+                new AvailableHostDescriptor(
+                    "session-visible",
+                    "Host PC",
+                    ProfilePicturePng: [1, 2, 3]),
+            ],
+        };
+        using var viewModel = new AnnotatorViewModel(service, relay);
+
+        await viewModel.InitializeAsync();
+        viewModel.JoinDiscoveredHostCommand.Execute(null);
+
+        Assert.Equal("session-visible", relay.RequestedHostSessionId);
+        Assert.True(viewModel.IsJoinPending);
+        Assert.Equal("Host PC", viewModel.CurrentHostName);
+        Assert.Equal(new byte[] { 1, 2, 3 }, viewModel.CurrentHostProfilePicturePng);
+        Assert.Equal(
+            "Request sent. Waiting for approval.",
+            viewModel.ConnectionStatusLabel);
+        Assert.Equal("Cancel connection request", viewModel.EndSessionActionLabel);
+        Assert.True(viewModel.EndSessionCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task PendingRequest_CanBeCancelledFromTheAnnotatorPanel()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
+            AvailableHosts = [new AvailableHostDescriptor("session-visible", "Host PC")],
+        };
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        viewModel.JoinDiscoveredHostCommand.Execute(null);
+        Assert.True(viewModel.IsJoinPending);
+
+        viewModel.EndSessionCommand.Execute(null);
+
+        Assert.Equal(1, relay.EndCount);
+        Assert.False(viewModel.IsJoinPending);
+        Assert.False(viewModel.IsError);
+        Assert.Equal("Connection request cancelled.", viewModel.StatusMessage);
+        Assert.False(viewModel.EndSessionCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task DirectoryChange_AutomaticallyRefreshesAvailableHosts()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Capabilities = new RelayCapabilities(ServerPasswordRequired: false),
+        };
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        relay.AvailableHosts =
+        [
+            new AvailableHostDescriptor("new-session", "New host"),
+        ];
+
+        relay.RaiseHostDirectoryChanged();
+
+        Assert.Equal("new-session", Assert.Single(viewModel.AvailableHosts).SessionId);
+    }
+
+    [Fact]
+    public async Task ReturningAnnotatorRole_ReloadsTheListingItDroppedWhileReceiving()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            AvailableHosts = [new AvailableHostDescriptor("peer-session", "Peer PC")],
+        };
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        Assert.Single(viewModel.AvailableHosts);
+
+        viewModel.SetRoleEnabled(false);
+        Assert.Empty(viewModel.AvailableHosts);
+
+        viewModel.SetRoleEnabled(true);
+
+        Assert.Equal("peer-session", Assert.Single(viewModel.AvailableHosts).SessionId);
+    }
+
+    [Fact]
+    public async Task DirectoryChangeDuringASession_IsHonouredWhenTheSessionEnds()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        await viewModel.InitializeAsync();
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(1)));
+        relay.AvailableHosts =
+        [
+            new AvailableHostDescriptor("listed-while-busy", "Late host"),
+        ];
+
+        relay.RaiseHostDirectoryChanged();
+        Assert.Empty(viewModel.AvailableHosts);
+
+        relay.RaiseSessionEnded("Disconnected from the host.");
+
+        Assert.Equal(
+            "listed-while-busy",
+            Assert.Single(viewModel.AvailableHosts).SessionId);
+    }
+
+    [Fact]
+    public void ApprovedPointer_IsSentAndAcknowledgementLatencyIsShown()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 2_560, 1_440, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        relay.RaiseAcknowledgement(
+            new PointerAcknowledgement(sent.EventId, sent.SentAtUnixMilliseconds + 42));
+
+        Assert.Equal("session-1", sent.SessionId);
+        Assert.Equal(0.25d, sent.NormalizedX);
+        Assert.Equal(0.75d, sent.NormalizedY);
+        Assert.Equal(2_000, sent.TimeToLiveMilliseconds);
+        Assert.True(sent.SequenceNumber > 1_000_000);
+        Assert.Contains("2560 × 1440", viewModel.HostDisplayShape, StringComparison.Ordinal);
+        Assert.Contains("42 ms", viewModel.LastAcknowledgement, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HostPause_StopsSendingAndMarksTheAnnotationAreaPaused()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        relay.RaiseAnnotationPaused(true);
+        service.RaisePointer(new NormalizedPoint(0.5d, 0.5d));
+
+        Assert.True(viewModel.IsPaused);
+        Assert.True(service.IsAnnotationPaused);
+        Assert.Equal("Paused by host", viewModel.ConnectionStatusLabel);
+        Assert.Null(relay.SentPointer);
+
+        relay.RaiseAnnotationPaused(false);
+        service.RaisePointer(new NormalizedPoint(0.5d, 0.5d));
+
+        Assert.False(viewModel.IsPaused);
+        Assert.False(service.IsAnnotationPaused);
+        Assert.Equal("Connected", viewModel.ConnectionStatusLabel);
+        Assert.NotNull(relay.SentPointer);
+    }
+
+    [Fact]
+    public void ResumedSession_RestoresThePauseTheHostSetBeforeTheDrop()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            Credential = new SessionCredential(
+                "session-1",
+                ClientRole.Annotator,
+                "annotator-1",
+                new string('s', 32),
+                new string('r', 32),
+                DateTimeOffset.UtcNow.AddHours(8)),
+        };
+        using var viewModel = new AnnotatorViewModel(service, relay);
+
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8),
+                ConnectedAnnotators:
+                [
+                    new ConnectedAnnotatorDescriptor("Annotator", null, "annotator-1", true),
+                ]));
+
+        Assert.True(viewModel.IsPaused);
+        Assert.True(service.IsAnnotationPaused);
+    }
+
+    [Fact]
+    public void ReconnectingPointer_IsDroppedInsteadOfQueued()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+        relay.RaiseConnectionStatus(RelayConnectionStatus.Reconnecting, "Reconnecting.");
+
+        service.RaisePointer(new NormalizedPoint(0.5d, 0.5d));
+
+        Assert.True(viewModel.IsError);
+        Assert.Contains("dropped", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GesturePointer_PreservesKindGestureIdAndPathBatch()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+        var gestureId = Guid.NewGuid();
+        NormalizedPoint[] pathPoints = [new(0.2d, 0.3d), new(0.3d, 0.4d)];
+
+        service.RaisePointer(
+            new NormalizedPoint(0.3d, 0.4d),
+            PointerKind.PathUpdate,
+            gestureId,
+            pathPoints: pathPoints);
+
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        Assert.Equal(PointerKind.PathUpdate, sent.Kind);
+        Assert.Equal(gestureId, sent.GestureId);
+        Assert.Equal(pathPoints, sent.PathPoints);
+    }
+
+    [Fact]
+    public void SessionHeading_NamesTheApprovalWaitSeparatelyFromTheSession()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        var headingChanges = 0;
+        viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AnnotatorViewModel.SessionHeading))
+            {
+                headingChanges++;
+            }
+        };
+
+        Assert.Equal("Connecting", viewModel.SessionHeading);
+
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        Assert.Equal("Connected Host", viewModel.SessionHeading);
+        Assert.True(headingChanges > 0);
+    }
+
+    [Fact]
+    public void SessionEnded_ExitsAnnotatingAndClearsApproval()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        relay.RaiseSessionEnded("Ended by host.");
+
+        Assert.False(viewModel.IsSessionApproved);
+        Assert.Equal(1, service.ExitCount);
+    }
+
+    [Fact]
+    public void EndSessionFailure_KeepsAnnotatorSessionActive()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient
+        {
+            EndException = new InvalidOperationException("Relay unavailable."),
+        };
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        viewModel.EndSessionCommand.Execute(null);
+
+        Assert.True(viewModel.IsSessionApproved);
+        Assert.True(viewModel.IsError);
+        Assert.Contains("could not confirm", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CalibrateCommand_UsesSyncedHostAspectRatio()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 2_560, 1_440, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8),
+                HostClientInstanceId: "host-client-id"));
+
+        viewModel.CalibrateCommand.Execute(null);
+
+        Assert.Equal(16d / 9d, service.RequestedAspectRatio, precision: 12);
+        Assert.Equal("host-client-id", service.CalibrationIdentity);
+    }
+
+    [Fact]
+    public void HostDisplayChange_UpdatesShapeAndInvalidatesDifferentAspectCalibration()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        relay.RaiseHostDisplayChanged(
+            new DisplayDescriptor("display", "Display", 1_200, 1_920, 1d, 90));
+
+        Assert.Contains("1200 × 1920", viewModel.HostDisplayShape, StringComparison.Ordinal);
+        Assert.Equal(1_200d / 1_920d, service.UpdatedAspectRatio, precision: 12);
+    }
+
+    [Fact]
+    public void LocalDisplayChange_InvalidatesCalibration()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        viewModel.HandleLocalDisplayConfigurationChanged();
+
+        Assert.Equal(1, service.InvalidateCount);
+    }
+
+    [Fact]
+    public void ToggleAnnotatingMode_OpensCalibrationWhenInactive()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        viewModel.ToggleAnnotatingMode();
+
+        Assert.Equal(1, service.ToggleCount);
+        Assert.False(viewModel.IsError);
+    }
+
+    [Fact]
+    public void ToggleAnnotatingMode_ForwardsWhenReady()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+        service.RaiseState(TargetRegionState.Ready, "Ready");
+
+        viewModel.ToggleAnnotatingMode();
+
+        Assert.Equal(1, service.ToggleCount);
+    }
+
+    [Fact]
+    public void PointerCaptured_UpdatesCountAndCoordinates()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+
+        Assert.Equal(1, viewModel.CapturedPointerCount);
+        Assert.Contains("0.2500", viewModel.LastPointer, StringComparison.Ordinal);
+        Assert.Contains("0.7500", viewModel.LastPointer, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SetUsageHintsState_ForwardsPreferencesToAnnotationArea()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        viewModel.SetUsageHintsState(showUsageHints: false, hasShownUsageHints: true);
+
+        Assert.False(service.ShowUsageHints);
+        Assert.True(service.HasShownUsageHints);
+    }
+
+    [Fact]
+    public void SetDrawingOpacityPercent_ForwardsPreferenceToAnnotationArea()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        viewModel.SetDrawingOpacityPercent(35);
+
+        Assert.Equal(35, service.DrawingOpacityPercent);
+    }
+
+    [Fact]
+    public void SetAnnotationColor_CanonicalisesAndForwardsToTheAnnotationArea()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        viewModel.SetAnnotationColor("#4fc3f7");
+
+        Assert.Equal("#4FC3F7", service.AnnotationColor);
+    }
+
+    [Fact]
+    public void SentPointer_CarriesTheChosenAnnotationColor()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+        viewModel.SetAnnotationColor("#B388FF");
+
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        Assert.Equal("#B388FF", sent.Color);
+        // Stamped by the relay, never by the annotator, unlike the colour beside it.
+        Assert.Null(sent.AnnotatorId);
+    }
+
+    [Fact]
+    public void AnnotationColorChangedMidSession_AppliesWithoutReconnectingOrRecalibrating()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+        service.RaiseState(TargetRegionState.Annotating, "Annotating active");
+        service.RaisePointer(new NormalizedPoint(0.1d, 0.1d));
+        Assert.Equal(
+            AnnotationColors.Default,
+            Assert.IsType<PointerEventMessage>(relay.SentPointer).Color);
+
+        viewModel.SetAnnotationColor("#6CCB7F");
+        service.RaisePointer(new NormalizedPoint(0.2d, 0.2d));
+
+        // The open annotation area is recoloured in place, and the very next event already
+        // carries the new colour, so the host follows without the session being touched.
+        Assert.Equal("#6CCB7F", service.AnnotationColor);
+        Assert.Equal(
+            "#6CCB7F",
+            Assert.IsType<PointerEventMessage>(relay.SentPointer).Color);
+        Assert.True(viewModel.IsSessionApproved);
+        Assert.Equal(TargetRegionState.Annotating, viewModel.State);
+    }
+
+    [Fact]
+    public void ApprovedSession_RegistersTheAnnotationColorPreferenceWithTheRelay()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        viewModel.SetAnnotationColor("#B388FF");
+
+        ApproveSession(relay);
+
+        // Once before there was a session to register it against, and again on approval, which
+        // is the first point the relay can allocate anything.
+        Assert.Equal(["#B388FF", "#B388FF"], relay.AnnotationColorPreferences);
+    }
+
+    [Fact]
+    public void ReassignedColor_IsDrawnAndSentWhileThePreferenceIsKept()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        ApproveSession(relay);
+        viewModel.SetAnnotationColor("#B388FF");
+
+        relay.RaiseAnnotationColorAssigned("#6CCB7F");
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+
+        Assert.Equal("#6CCB7F", viewModel.AnnotationColor);
+        Assert.Equal("#6CCB7F", service.AnnotationColor);
+        Assert.Equal(
+            "#6CCB7F",
+            Assert.IsType<PointerEventMessage>(relay.SentPointer).Color);
+        // The pick the user made is untouched, so the settings pane keeps showing it.
+        Assert.Equal("#B388FF", viewModel.PreferredAnnotationColor);
+        Assert.True(viewModel.IsAnnotationColorReassigned);
+    }
+
+    [Fact]
+    public void PreferenceComingBackFree_ReturnsTheAnnotatorToIt()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        ApproveSession(relay);
+        viewModel.SetAnnotationColor("#B388FF");
+        relay.RaiseAnnotationColorAssigned("#6CCB7F");
+        Assert.True(viewModel.IsAnnotationColorReassigned);
+
+        relay.RaiseAnnotationColorAssigned("#B388FF");
+
+        Assert.Equal("#B388FF", viewModel.AnnotationColor);
+        Assert.Equal("#B388FF", service.AnnotationColor);
+        Assert.False(viewModel.IsAnnotationColorReassigned);
+    }
+
+    [Fact]
+    public void EndedSession_DropsTheAllocationAndRestoresThePreference()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        ApproveSession(relay);
+        viewModel.SetAnnotationColor("#B388FF");
+        relay.RaiseAnnotationColorAssigned("#6CCB7F");
+
+        relay.RaiseSessionEnded("Disconnected from the host.");
+
+        // The allocation belonged to that session; outside one the preference stands again.
+        Assert.Equal("#B388FF", viewModel.AnnotationColor);
+        Assert.Equal("#B388FF", service.AnnotationColor);
+        Assert.False(viewModel.IsAnnotationColorReassigned);
+    }
+
+    [Fact]
+    public void SentPointer_CarriesTheDefaultColorWhenNoneWasChosen()
+    {
+        using var service = new FakeTargetRegionService();
+        var relay = new FakeRelayClient();
+        using var viewModel = new AnnotatorViewModel(service, relay);
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+
+        service.RaisePointer(new NormalizedPoint(0.25d, 0.75d));
+
+        var sent = Assert.IsType<PointerEventMessage>(relay.SentPointer);
+        Assert.Equal(AnnotationColors.Default, sent.Color);
+    }
+
+    [Fact]
+    public void StateChanges_UpdateAnnotatingAndStatusProperties()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        service.RaiseState(TargetRegionState.Annotating, "Annotating active");
+
+        Assert.True(viewModel.IsAnnotating);
+        Assert.Equal("Stop annotating", viewModel.AnnotatingActionLabel);
+        Assert.Equal("Annotating", viewModel.StateLabel);
+        Assert.Equal("Annotating active", viewModel.StatusMessage);
+        Assert.False(viewModel.IsError);
+    }
+
+    [Fact]
+    public void ReportHotKeyRegistrationFailure_PresentsError()
+    {
+        using var service = new FakeTargetRegionService();
+        using var viewModel = new AnnotatorViewModel(service);
+
+        viewModel.ReportHotKeyRegistrationFailure("Hotkey unavailable.");
+
+        Assert.True(viewModel.IsError);
+        Assert.Equal("Hotkey unavailable.", viewModel.StatusMessage);
+    }
+
+    private static void ApproveSession(FakeRelayClient relay) =>
+        relay.RaiseApproved(
+            new SessionStateMessage(
+                "session-1",
+                true,
+                new DisplayDescriptor("display", "Display", 1_920, 1_080, 1d, 0),
+                DateTimeOffset.UtcNow.AddHours(8)));
+}

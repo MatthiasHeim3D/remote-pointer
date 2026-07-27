@@ -56,8 +56,8 @@ if ([string]::IsNullOrWhiteSpace($InnoSetupCompilerPath) -or
 }
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$clientProject = Join-Path $repositoryRoot 'src\RemotePointer.Client\RemotePointer.Client.csproj'
-$installerScript = Join-Path $repositoryRoot 'installer\RemotePointer.Client.iss'
+$clientProject = Join-Path $repositoryRoot 'src\RemoteAnnotate.Client\RemoteAnnotate.Client.csproj'
+$installerScript = Join-Path $repositoryRoot 'installer\RemoteAnnotate.Client.iss'
 $publishDirectory = Join-Path $repositoryRoot 'artifacts\publish\client\win-x64'
 $installerDirectory = Join-Path $repositoryRoot 'artifacts\installer'
 
@@ -102,7 +102,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup failed with exit code $LASTEXITCODE."
 }
 
-$installerPath = Join-Path $installerDirectory "RemotePointer.Client-$Version-x64-Setup.exe"
+$installerPath = Join-Path $installerDirectory "RemoteAnnotate.Client-$Version-x64-Setup.exe"
 if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
     throw "The expected installer was not produced: $installerPath"
 }

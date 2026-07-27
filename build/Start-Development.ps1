@@ -36,7 +36,7 @@ param(
     [int]$ClientCount = 2,
 
     [ValidateNotNullOrEmpty()]
-    [string]$ServerPassword = 'remote-pointer-dev',
+    [string]$ServerPassword = 'remote-annotate-dev',
 
     [switch]$KeepClientData
 )
@@ -46,11 +46,11 @@ Set-StrictMode -Version Latest
 
 $configuration = 'Debug'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
-$solutionPath = Join-Path $repositoryRoot 'RemotePointer.sln'
-$serverProject = 'src\RemotePointer.Server\RemotePointer.Server.csproj'
+$solutionPath = Join-Path $repositoryRoot 'RemoteAnnotate.sln'
+$serverProject = 'src\RemoteAnnotate.Server\RemoteAnnotate.Server.csproj'
 $clientDirectory = Join-Path $repositoryRoot (
-    "src\RemotePointer.Client\bin\$configuration\net10.0-windows\win-x64")
-$clientExecutable = Join-Path $clientDirectory 'RemotePointer.Client.exe'
+    "src\RemoteAnnotate.Client\bin\$configuration\net10.0-windows\win-x64")
+$clientExecutable = Join-Path $clientDirectory 'RemoteAnnotate.Client.exe'
 $developmentServerUrl = 'https://localhost:7243'
 $serverPort = 7243
 $processes = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
@@ -60,13 +60,13 @@ $clientDataRoot = $null
 # Mirrors of the shared derivation constants. Assert-ClientCryptoConstant checks each one against
 # the source below, so a change there fails this script loudly instead of quietly seeding clients
 # with a key the relay will not accept.
-$passwordSaltText = 'RemotePointer.ServerPassword.v1'
+$passwordSaltText = 'RemoteAnnotate.ServerPassword.v1'
 $passwordIterations = 210000
 $passwordKeyBytes = 32
-$protectionEntropyText = 'RemotePointer.SessionCredential.v1'
+$protectionEntropyText = 'RemoteAnnotate.SessionCredential.v1'
 $minimumPasswordLength = 8
-$dataDirectoryVariable = 'REMOTEPOINTER_DATA_DIRECTORY'
-$serverUrlVariable = 'REMOTEPOINTER_SERVER_BASEURL'
+$dataDirectoryVariable = 'REMOTEANNOTATE_DATA_DIRECTORY'
+$serverUrlVariable = 'REMOTEANNOTATE_SERVER_BASEURL'
 $serverPasswordVariable = 'Access__ServerPassword'
 $developmentRoom = 'Public'
 
@@ -229,23 +229,23 @@ try {
     }
 
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Contracts\Security\ServerPasswordKey.cs' `
+        -RelativePath 'src\RemoteAnnotate.Contracts\Security\ServerPasswordKey.cs' `
         -Pattern "`"$passwordSaltText`"" `
         -Description 'the expected password salt'
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Contracts\Security\ServerPasswordKey.cs' `
+        -RelativePath 'src\RemoteAnnotate.Contracts\Security\ServerPasswordKey.cs' `
         -Pattern 'Iterations = 210_000' `
         -Description 'the expected password iteration count'
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Contracts\Security\ServerPasswordKey.cs' `
+        -RelativePath 'src\RemoteAnnotate.Contracts\Security\ServerPasswordKey.cs' `
         -Pattern "KeyBytes = $passwordKeyBytes" `
         -Description 'the expected derived key length'
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Client\Services\DpapiDataProtector.cs' `
+        -RelativePath 'src\RemoteAnnotate.Client\Services\DpapiDataProtector.cs' `
         -Pattern "`"$protectionEntropyText`"" `
         -Description 'the expected data-protection entropy'
     Assert-ClientCryptoConstant `
-        -RelativePath 'src\RemotePointer.Client\Configuration\ClientDataDirectory.cs' `
+        -RelativePath 'src\RemoteAnnotate.Client\Configuration\ClientDataDirectory.cs' `
         -Pattern "OverrideVariableName = `"$dataDirectoryVariable`"" `
         -Description 'the expected data-directory override variable'
 
@@ -253,14 +253,14 @@ try {
         throw "Port $serverPort is already in use. Stop the existing development server first."
     }
 
-    $existingClients = @(Get-Process -Name 'RemotePointer.Client' -ErrorAction SilentlyContinue)
+    $existingClients = @(Get-Process -Name 'RemoteAnnotate.Client' -ErrorAction SilentlyContinue)
     if ($existingClients.Count -gt 0) {
         Write-Warning (
-            'Remote Pointer is already running. Its settings are untouched by this script, but ' +
+            'Remote Annotate is already running. Its settings are untouched by this script, but ' +
             'its tray icon is easy to confuse with the development clients.')
     }
 
-    Write-Host "Building RemotePointer.sln ($configuration development build)..." -ForegroundColor Cyan
+    Write-Host "Building RemoteAnnotate.sln ($configuration development build)..." -ForegroundColor Cyan
     & dotnet build $solutionPath --configuration $configuration
     if ($LASTEXITCODE -ne 0) {
         throw "Solution build failed with exit code $LASTEXITCODE."
@@ -315,10 +315,10 @@ try {
 
     # This process-only override ensures saved production settings cannot redirect a
     # development client away from the local relay.
-    $env:REMOTEPOINTER_SERVER_BASEURL = $developmentServerUrl
+    $env:REMOTEANNOTATE_SERVER_BASEURL = $developmentServerUrl
 
     $clientDataRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
-        "RemotePointer.Development\$([Guid]::NewGuid().ToString('N'))")
+        "RemoteAnnotate.Development\$([Guid]::NewGuid().ToString('N'))")
     New-Item -ItemType Directory -Path $clientDataRoot -Force | Out-Null
     $derivedKey = Get-ServerPasswordKey -Password $ServerPassword
 
@@ -333,7 +333,7 @@ try {
 
         # Set immediately before each start: a child inherits this process's environment as it
         # stands at that moment, which is what gives every client its own directory.
-        $env:REMOTEPOINTER_DATA_DIRECTORY = $dataDirectory
+        $env:REMOTEANNOTATE_DATA_DIRECTORY = $dataDirectory
         $client = Start-Process `
             -FilePath $clientExecutable `
             -WorkingDirectory $clientDirectory `

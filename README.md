@@ -1,8 +1,10 @@
-# Remote Pointer
+# Remote Annotate
 
-Add a shared, on-screen pointer to any remote-desktop or screen-sharing session, so you can point at and annotate what's on someone else's Windows screen while you talk them through it.
+**Annotate someone else's screen remotely, through whatever screen-share you already use.**
 
-Remote Pointer is **not** a remote-desktop tool and doesn't replace one. It doesn't show you the other screen or let you control their PC — you already see their screen through whatever tool you use (Teams, Zoom, RDP, a screen-share, and so on). What Remote Pointer adds on top is a **temporary** pointer: one or more people draw gestures and short text notes that appear on the other person's real screen, like a laser pointer you can use remotely. Because it drives the host's own screen, it works alongside any remote-desktop or screen-sharing tool.
+![The host's screen reaches the annotator through whatever screen-sharing app they already use. The annotator lines Remote Annotate's target area up with that shared image, then draws in it — and the marks appear on the host's real screen.](docs/media/user-flow.svg)
+
+Remote Annotate is **not** a remote-desktop tool and doesn't replace one. It doesn't show you the other screen or let you control their PC — you already see their screen through whatever tool you use (Teams, Zoom, RDP, a screen-share, and so on). What Remote Annotate adds on top is a **temporary** pointer: one or more people draw gestures and short text notes that appear on the other person's real screen, like a laser pointer you can use remotely. Because it drives the host's own screen, it works alongside any remote-desktop or screen-sharing tool.
 
 It only ever sends the *position* of your gestures and the text you type — it never captures or streams the screen, records anything, or moves the other person's mouse or keyboard.
 
@@ -12,9 +14,7 @@ Good for walking a colleague through an app, pointing out details during a scree
 
 ## How it works
 
-![The host's screen reaches the annotator through whatever screen-sharing app they already use. The annotator lines Remote Pointer's target area up with that shared image, then draws in it — and the marks appear on the host's real screen.](docs/media/user-flow.svg)
-
-Remote Pointer has two roles and a small server that connects them:
+Remote Annotate has two roles and a small server that connects them:
 
 - **Host** — the person whose screen is being annotated. A transparent, click-through overlay shows the incoming markers while they keep using their PC normally underneath.
 - **Annotator** — the person doing the annotating. In their remote-desktop or screen-share view, they line up a target area over the host's screen, then draw. Their gestures show up on the host's real screen (and so are visible back in the shared view).
@@ -59,12 +59,12 @@ When several people annotate one screen at once, the server keeps them apart for
 ## Requirements
 
 - **To use it:** Windows 11. The client is self-contained, so no separate .NET install is needed.
-- **To see the other screen:** any remote-desktop or screen-sharing tool (Teams, Zoom, RDP, and so on). Remote Pointer adds the pointer on top; it does not provide the screen view itself.
+- **To see the other screen:** any remote-desktop or screen-sharing tool (Teams, Zoom, RDP, and so on). Remote Annotate adds the pointer on top; it does not provide the screen view itself.
 - **To run the relay:** a machine with Docker, reachable over HTTPS from everyone taking part.
 
 ## Installing
 
-Remote Pointer is distributed as a Windows installer. It defaults to installing just for you, which needs no administrator rights; on a shared PC you can instead choose "Install for all users" on setup's first page, which asks for admin. Your settings stay yours either way — every Windows account gets its own relay address, server password, and profile. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address; add the relay's server password in the same screen.
+Remote Annotate is distributed as a Windows installer. It defaults to installing just for you, which needs no administrator rights; on a shared PC you can instead choose "Install for all users" on setup's first page, which asks for admin. Your settings stay yours either way — every Windows account gets its own relay address, server password, and profile. There is no public download — whoever runs your relay builds and shares the installer. On first launch, the client asks for your relay's HTTPS address; add the relay's server password in the same screen.
 
 - Set up the relay server → [Server deployment](docs/server-deployment.md)
 - Build and install the client → [Client deployment](docs/deployment.md)
@@ -74,8 +74,8 @@ Remote Pointer is distributed as a Windows installer. It defaults to installing 
 Prerequisites: Windows 11 and the .NET 10 SDK.
 
 ```powershell
-dotnet build RemotePointer.sln --configuration Release
-dotnet test RemotePointer.sln --configuration Release
+dotnet build RemoteAnnotate.sln --configuration Release
+dotnet test RemoteAnnotate.sln --configuration Release
 ```
 
 To try the whole thing on one machine — a local relay plus a couple of client windows so you can play both roles — run:
@@ -101,7 +101,7 @@ Everything shuts down and the temporary directories are deleted when the last cl
 
 ## Development
 
-Remote Pointer was developed with the use of AI coding agents.
+Remote Annotate was developed with the use of AI coding agents.
 
 ## License
 

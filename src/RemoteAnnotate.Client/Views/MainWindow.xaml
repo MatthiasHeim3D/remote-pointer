@@ -1,0 +1,1702 @@
+<Window x:Class="RemoteAnnotate.Client.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
+        xmlns:viewModels="clr-namespace:RemoteAnnotate.Client.ViewModels"
+        xmlns:views="clr-namespace:RemoteAnnotate.Client.Views"
+        Title="Remote Annotate"
+        Icon="/RemoteAnnotate.Client;component/Assets/exe_icon.ico"
+        Width="400"
+        Height="520"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        PreviewMouseDown="OnPreviewMouseDown"
+        SizeChanged="OnSizeChanged"
+        Deactivated="OnDeactivated">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <views:ProfilePictureConverter x:Key="ProfilePictureConverter" />
+        <views:ProfilePictureFallbackVisibilityConverter
+            x:Key="ProfilePictureFallbackVisibilityConverter" />
+        <views:AnnotationColorBrushConverter x:Key="AnnotationColorBrushConverter" />
+
+        <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+        </Style>
+
+        <Style TargetType="Image">
+            <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
+        </Style>
+
+        <Style x:Key="ThinScrollBarStyle" TargetType="ScrollBar">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Track x:Name="PART_Track"
+                               Orientation="{TemplateBinding Orientation}"
+                               IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton x:Name="DecreaseButton"
+                                              Command="ScrollBar.PageUpCommand"
+                                              Opacity="0"
+                                              Focusable="False" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb MinWidth="0"
+                                       MinHeight="0"
+                                       Background="#686868">
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="3" />
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton x:Name="IncreaseButton"
+                                              Command="ScrollBar.PageDownCommand"
+                                              Opacity="0"
+                                              Focusable="False" />
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter TargetName="PART_Track"
+                                        Property="IsDirectionReversed"
+                                        Value="False" />
+                                <Setter TargetName="DecreaseButton"
+                                        Property="Command"
+                                        Value="ScrollBar.PageLeftCommand" />
+                                <Setter TargetName="IncreaseButton"
+                                        Property="Command"
+                                        Value="ScrollBar.PageRightCommand" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Vertical">
+                    <Setter Property="Width" Value="6" />
+                    <Setter Property="Margin" Value="2,0,0,0" />
+                </Trigger>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Height" Value="6" />
+                    <Setter Property="Margin" Value="0,2,0,0" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource ThinScrollBarStyle}" />
+
+        <Style x:Key="CompactVerticalScrollViewerStyle" TargetType="ScrollViewer">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollViewer">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                    CanContentScroll="{TemplateBinding CanContentScroll}"
+                                                    Content="{TemplateBinding Content}"
+                                                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                    ContentTemplateSelector="{TemplateBinding ContentTemplateSelector}"
+                                                    Margin="{TemplateBinding Padding}" />
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Grid.Column="1"
+                                       Style="{StaticResource ThinScrollBarStyle}"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#E8E8E8" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#353535" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#454545" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Session row actions — start/stop annotating, pause, disconnect — share one reduced
+             chrome so the host and annotator panels read as the same control set. -->
+        <Style x:Key="SessionIconButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="FontSize" Value="18" />
+        </Style>
+
+        <Style x:Key="DestructiveIconButtonStyle" TargetType="Button" BasedOn="{StaticResource SessionIconButtonStyle}">
+            <Setter Property="Foreground" Value="#FF8A80" />
+        </Style>
+
+        <!-- The bulk forms of those same actions. They carry a label because "all" needs saying,
+             but keep the reduced chrome so they do not outrank the rows they act on. -->
+        <Style x:Key="SessionTextButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+            <Setter Property="Width" Value="Auto" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <!-- Annotating is what the app is for, so its button keeps an accent tint and a little
+             extra size that the neighbouring session actions give up. -->
+        <Style x:Key="AccentIconButtonStyle" TargetType="Button" BasedOn="{StaticResource SessionIconButtonStyle}">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="FontSize" Value="19" />
+            <Setter Property="Foreground" Value="#60CDFF" />
+            <Setter Property="Background" Value="#1D3C4B" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#27536A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#2F6480" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="Background" Value="#60CDFF" />
+            <Setter Property="Foreground" Value="#101010" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.88" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SecondaryButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource PrimaryButtonStyle}">
+            <Setter Property="Background" Value="#343434" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+        </Style>
+
+        <Style x:Key="AvailabilityOptionButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#353535" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#484848" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal">
+                            <Border x:Name="Track"
+                                    Width="38"
+                                    Height="20"
+                                    VerticalAlignment="Center"
+                                    Background="#555555"
+                                    CornerRadius="10">
+                                <Ellipse x:Name="Knob"
+                                         Width="14"
+                                         Height="14"
+                                         Margin="3"
+                                         HorizontalAlignment="Left"
+                                         Fill="White" />
+                            </Border>
+                            <ContentPresenter Margin="9,0,0,0"
+                                              VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#60CDFF" />
+                                <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="Knob" Property="Fill" Value="#17242A" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SettingsSliderStyle" TargetType="Slider">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="IsMoveToPointEnabled" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid Background="Transparent">
+                            <Border Height="4"
+                                    Margin="7,0"
+                                    VerticalAlignment="Center"
+                                    Background="#4A4A4A"
+                                    CornerRadius="2" />
+                            <primitives:Track x:Name="PART_Track">
+                                <primitives:Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Grid Background="Transparent">
+                                                    <Border Height="4"
+                                                            Margin="7,0,0,0"
+                                                            VerticalAlignment="Center"
+                                                            Background="#60CDFF"
+                                                            CornerRadius="2" />
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </primitives:Track.DecreaseRepeatButton>
+                                <primitives:Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent" />
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </primitives:Track.IncreaseRepeatButton>
+                                <primitives:Track.Thumb>
+                                    <primitives:Thumb Width="14" Height="14">
+                                        <primitives:Thumb.Template>
+                                            <ControlTemplate TargetType="primitives:Thumb">
+                                                <Ellipse x:Name="Knob" Fill="#F5F5F5" />
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Knob"
+                                                                Property="Fill"
+                                                                Value="#FFFFFF" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </primitives:Thumb.Template>
+                                    </primitives:Thumb>
+                                </primitives:Track.Thumb>
+                            </primitives:Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Background" Value="#292929" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="BorderBrush" Value="#555555" />
+            <Setter Property="SelectionBrush" Value="#39789C" />
+            <Setter Property="CaretBrush" Value="White" />
+        </Style>
+
+        <Style TargetType="PasswordBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Background" Value="#292929" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="BorderBrush" Value="#555555" />
+            <Setter Property="SelectionBrush" Value="#39789C" />
+            <Setter Property="CaretBrush" Value="White" />
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="9,7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="3">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#353535" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#39789C" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Background" Value="#292929" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="BorderBrush" Value="#555555" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Chrome"
+                                    Grid.ColumnSpan="2"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="4" />
+                            <!-- Carries the whole face: a click anywhere on it opens the list. -->
+                            <ToggleButton Grid.ColumnSpan="2"
+                                          Background="Transparent"
+                                          ClickMode="Press"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{TemplateBinding Background}" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="Center"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}" />
+                            <TextBlock Grid.Column="1"
+                                       Margin="0,0,11,0"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="9"
+                                       Foreground="#D8D8D8"
+                                       IsHitTestVisible="False"
+                                       Text="&#xE70D;" />
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade">
+                                <Border MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Margin="0,2,0,0"
+                                        Padding="3"
+                                        Background="#2B2B2B"
+                                        BorderBrush="#555555"
+                                        BorderThickness="1"
+                                        CornerRadius="4">
+                                    <ScrollViewer Style="{StaticResource CompactVerticalScrollViewerStyle}"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#333333" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- A round colour chip. Selection is carried on Tag rather than read from the data
+             context, so the preset swatches and the custom one share one template even though
+             only the presets sit in an items control. -->
+        <Style x:Key="ColorSwatchButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid Background="Transparent">
+                            <!-- The ring is drawn outside the chip, so selecting a colour never
+                                 changes how much of it is on screen. -->
+                            <Ellipse x:Name="SelectionRing"
+                                     Stroke="#F5F5F5"
+                                     StrokeThickness="2"
+                                     Opacity="0" />
+                            <Ellipse x:Name="Swatch"
+                                     Margin="5"
+                                     Fill="{TemplateBinding Background}"
+                                     Stroke="#59000000"
+                                     StrokeThickness="1" />
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="SelectionRing"
+                                        Property="Opacity"
+                                        Value="0.45" />
+                            </Trigger>
+                            <!-- Last, so a hovered swatch that is also the selected one keeps
+                                 the full ring rather than the hover preview. -->
+                            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}"
+                                         Value="True">
+                                <Setter TargetName="SelectionRing"
+                                        Property="Opacity"
+                                        Value="1" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SettingsSectionHeaderStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,22,0,10" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#F5F5F5" />
+        </Style>
+
+        <!-- Collapses while its text is empty so no blank line is reserved for it. -->
+        <Style x:Key="ValidationMessageStyle" TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,6,0,0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#FF8A80" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource Self}}"
+                             Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="LinkButtonStyle" TargetType="Button">
+            <Setter Property="Padding" Value="7,3" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#60CDFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#2C3A42" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="8"
+            Background="#242424"
+            BorderBrush="#454545"
+            BorderThickness="1"
+            CornerRadius="8">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="24"
+                              Direction="270"
+                              Opacity="0.55"
+                              ShadowDepth="6"
+                              Color="Black" />
+        </Border.Effect>
+
+        <Grid ClipToBounds="True">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="58" />
+            </Grid.RowDefinitions>
+
+            <!-- Main annotator view -->
+            <Grid Grid.Row="0" Margin="20,18,20,14">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSettingsOpen}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <!-- Disconnected client list -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Annotator.IsJoinPending}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Annotator.IsSessionApproved}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HasConnectedAnnotator}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="Available" />
+                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                        <ListBox ItemsSource="{Binding Annotator.AvailableHosts}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0,0,0,6" />
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Focusable" Value="False" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="ClientRow"
+                                            Height="58"
+                                            Padding="12,0,8,0"
+                                            Background="#2D2D2D"
+                                            CornerRadius="6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="36" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="32"
+                                                    Height="32"
+                                                    Background="#3A3A3A"
+                                                    CornerRadius="16">
+                                                <Grid>
+                                                    <TextBlock HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontFamily="Segoe MDL2 Assets"
+                                                               FontSize="16"
+                                                               Foreground="#60CDFF"
+                                                               Visibility="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                                               Text="&#xE77B;" />
+                                                    <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                                        <Ellipse.Fill>
+                                                            <ImageBrush ImageSource="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                                                        Stretch="UniformToFill" />
+                                                        </Ellipse.Fill>
+                                                    </Ellipse>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Grid.Column="1"
+                                                       Margin="9,0"
+                                                       VerticalAlignment="Center"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="#F5F5F5"
+                                                       Text="{Binding DisplayName}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <Button Grid.Column="2"
+                                                    Height="32"
+                                                    Padding="13,0"
+                                                    Command="{Binding DataContext.Annotator.JoinDiscoveredHostCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Content="Connect">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource PrimaryButtonStyle}">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsMouseOver, ElementName=ClientRow}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <StackPanel HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    IsHitTestVisible="False">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Annotator.AvailableHosts.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock HorizontalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="30"
+                                       Foreground="#777777"
+                                       Text="&#xE774;" />
+                            <TextBlock Margin="0,10,0,0"
+                                       Foreground="#C8C8C8"
+                                       TextAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding EmptyClientListMessage}" />
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+
+                <!-- Connected annotator controls -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Annotator.IsSessionApproved}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Annotator.IsJoinPending}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HasConnectedAnnotator}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="{Binding Annotator.SessionHeading}" />
+                    <!-- Same 52 as a connected-annotator row on the host, so a session looks the
+                         same height from either side. -->
+                    <Grid Grid.Row="1"
+                          Height="52"
+                          Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="42" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="42"
+                                Height="42"
+                                Background="#343434"
+                                CornerRadius="21">
+                            <Grid>
+                                <TextBlock HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="18"
+                                           Foreground="#60CDFF"
+                                           Visibility="{Binding Annotator.CurrentHostProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                           Text="&#xE77B;" />
+                                <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding Annotator.CurrentHostProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                                    Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+                        <StackPanel Grid.Column="1"
+                                    Margin="10,0,8,0"
+                                    VerticalAlignment="Center">
+                            <TextBlock FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Text="{Binding Annotator.CurrentHostName}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock FontSize="10"
+                                       Text="{Binding Annotator.ConnectionStatusLabel}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#AFAFAF" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Annotator.IsSessionApproved}" Value="True">
+                                                <Setter Property="Foreground" Value="#6CCB7F" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                        <Grid Grid.Column="2"
+                              Width="38"
+                              Height="38"
+                              Margin="0,0,7,0"
+                              ToolTip="Waiting for host approval">
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Annotator.IsJoinPending}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Ellipse Width="22"
+                                     Height="22"
+                                     Stroke="#60CDFF"
+                                     StrokeThickness="3"
+                                     StrokeDashArray="1,2"
+                                     RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform />
+                                </Ellipse.RenderTransform>
+                                <Ellipse.Triggers>
+                                    <EventTrigger RoutedEvent="Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                 From="0"
+                                                                 To="360"
+                                                                 Duration="0:0:1"
+                                                                 RepeatBehavior="Forever" />
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Ellipse.Triggers>
+                            </Ellipse>
+                        </Grid>
+                        <Button Grid.Column="2"
+                                Margin="0,0,7,0"
+                                Command="{Binding Annotator.ToggleAnnotatingCommand}"
+                                Content="{Binding Annotator.AnnotatingActionIcon}"
+                                ToolTip="{Binding Annotator.AnnotatingActionLabel}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource AccentIconButtonStyle}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Annotator.IsSessionApproved}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Grid.Column="3"
+                                Command="{Binding Annotator.EndSessionCommand}"
+                                Content="&#xE711;"
+                                ToolTip="{Binding Annotator.EndSessionActionLabel}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource DestructiveIconButtonStyle}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Annotator.IsSessionApproved}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <!-- Waiting for approval is the other state this panel
+                                             shows, and the request can be taken back from here. -->
+                                        <DataTrigger Binding="{Binding Annotator.IsJoinPending}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
+                </Grid>
+
+                <!-- Host-connected state takes precedence over annotator discovery. -->
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasConnectedAnnotator}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="Annotators" />
+                    <!-- Sized to its rows rather than to the panel: a single annotator sits
+                         directly above its buttons instead of across a stretched gap. -->
+                    <ListBox Grid.Row="1"
+                             Margin="0,12,0,0"
+                             MaxHeight="216"
+                             ItemsSource="{Binding ConnectedAnnotators}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             Padding="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Focusable" Value="False" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Height="52">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="42" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="42"
+                                            Height="42"
+                                            Background="#343434"
+                                            CornerRadius="21">
+                                        <Grid>
+                                            <TextBlock HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="Segoe MDL2 Assets"
+                                                       FontSize="18"
+                                                       Foreground="#60CDFF"
+                                                       Visibility="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                                       Text="&#xE77B;" />
+                                            <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                                <Ellipse.Fill>
+                                                    <ImageBrush ImageSource="{Binding ProfilePicturePng, Converter={StaticResource ProfilePictureConverter}}"
+                                                                Stretch="UniformToFill" />
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Grid.Column="1"
+                                                Margin="10,0,8,0"
+                                                VerticalAlignment="Center">
+                                        <TextBlock FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#F5F5F5"
+                                                   Text="{Binding DisplayName}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock FontSize="10"
+                                                   Foreground="{Binding StatusColor}"
+                                                   Text="{Binding StatusLabel}" />
+                                    </StackPanel>
+                                    <!-- Lit only while this annotator's pointer events are
+                                         still arriving. -->
+                                    <TextBlock Grid.Column="2"
+                                               Margin="0,0,6,0"
+                                               VerticalAlignment="Center"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               FontSize="15"
+                                               Foreground="#60CDFF"
+                                               Text="&#xE70F;"
+                                               ToolTip="Annotating now"
+                                               Visibility="{Binding IsAnnotating, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button Grid.Column="3"
+                                            Style="{StaticResource SessionIconButtonStyle}"
+                                            Command="{Binding TogglePauseCommand}"
+                                            Content="{Binding PauseActionIcon}"
+                                            ToolTip="{Binding PauseActionLabel}"
+                                            Visibility="{Binding CanControl, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                    <Button Grid.Column="4"
+                                            Style="{StaticResource DestructiveIconButtonStyle}"
+                                            Command="{Binding DisconnectCommand}"
+                                            Content="&#xE711;"
+                                            ToolTip="{Binding DisconnectActionLabel}"
+                                            Visibility="{Binding CanControl, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <!-- Only worth showing once the per-annotator buttons would mean repeating
+                         the same click for every row. -->
+                    <StackPanel Grid.Row="2"
+                                Margin="0,12,0,0"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal"
+                                Visibility="{Binding HasMultipleConnectedAnnotators, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Button Margin="0,0,4,0"
+                                Style="{StaticResource SessionTextButtonStyle}"
+                                Command="{Binding TogglePauseAllCommand}"
+                                ToolTip="{Binding PauseAllActionLabel}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="15"
+                                           Foreground="#E8E8E8"
+                                           Text="{Binding PauseAllActionIcon}" />
+                                <TextBlock Margin="7,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="#E8E8E8"
+                                           Text="{Binding PauseAllActionLabel}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource SessionTextButtonStyle}"
+                                Command="{Binding DisconnectAllConnectionsCommand}"
+                                ToolTip="Disconnect all">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Center"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="15"
+                                           Foreground="#FF8A80"
+                                           Text="&#xE711;" />
+                                <TextBlock Margin="7,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="#FF8A80"
+                                           Text="Disconnect all" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- Settings view -->
+            <Grid Grid.Row="0"
+                  Margin="20,14,14,14"
+                  Visibility="{Binding IsSettingsOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               Text="Settings" />
+                    <Button Grid.Column="1"
+                            Style="{StaticResource IconButtonStyle}"
+                            Command="{Binding CloseSettingsCommand}"
+                            Content="&#xE711;"
+                            ToolTip="Close settings" />
+                </Grid>
+                <ScrollViewer Grid.Row="1"
+                              Style="{StaticResource CompactVerticalScrollViewerStyle}"
+                              Padding="0,0,5,0"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Profile" />
+                    <TextBlock Margin="0,0,0,6" Text="Username" />
+                    <TextBox MaxLength="128"
+                             Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,16,0,6" Text="Profile picture" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="38"
+                                Height="38"
+                                Background="#3A3A3A"
+                                CornerRadius="19">
+                            <Grid>
+                                <TextBlock HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontWeight="SemiBold"
+                                           Visibility="{Binding ProfilePicturePath, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                           Text="{Binding ProfileInitials}" />
+                                <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding ProfilePicturePath}"
+                                                    Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+                        <TextBlock Grid.Column="1"
+                                   Margin="8,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="#AFAFAF"
+                                   Text="{Binding ProfilePicturePath}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <Button Grid.Column="2"
+                                Width="80"
+                                Height="34"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Click="OnBrowseProfilePicture"
+                                Content="Browse" />
+                    </Grid>
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Host" />
+                    <TextBlock Margin="0,0,0,6" Text="Receiving screen" />
+                    <!-- An item template rather than DisplayMemberPath: the closed selection box
+                         of the dark template renders through SelectionBoxItemTemplate, which only
+                         an explicit template fills in. -->
+                    <ComboBox ItemsSource="{Binding Monitors}"
+                              SelectedItem="{Binding SelectedMonitor}"
+                              SelectionChanged="OnReceivingScreenSelectionChanged"
+                              IsEnabled="{Binding CanSelectMonitor}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding SelectionLabel}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Margin="0,16,0,6" Text="Maximum simultaneous connections" />
+                    <Grid Height="38">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="28" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.ColumnSpan="2"
+                                 MaxLength="2"
+                                 Padding="10,7,32,7"
+                                 Text="{Binding MaximumAnnotatorConnections, UpdateSourceTrigger=PropertyChanged}" />
+                        <Grid Grid.Column="1" Margin="0,1,1,1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+                            <Button Width="Auto"
+                                    Height="Auto"
+                                    Padding="0"
+                                    Style="{StaticResource IconButtonStyle}"
+                                    Background="#343434"
+                                    BorderThickness="0"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    FontSize="9"
+                                    Command="{Binding IncrementMaximumAnnotatorsCommand}"
+                                    Content="&#xE70E;" />
+                            <Button Grid.Row="1"
+                                    Width="Auto"
+                                    Height="Auto"
+                                    Padding="0"
+                                    Style="{StaticResource IconButtonStyle}"
+                                    Background="#343434"
+                                    BorderThickness="0"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    FontSize="9"
+                                    Command="{Binding DecrementMaximumAnnotatorsCommand}"
+                                    Content="&#xE70D;" />
+                        </Grid>
+                    </Grid>
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Annotator" />
+                    <StackPanel ToolTipService.ShowDuration="30000">
+                        <StackPanel.ToolTip>
+                            <ToolTip Padding="11,9"
+                                     Background="#2B2B2B"
+                                     BorderBrush="#555555"
+                                     Foreground="#F5F5F5">
+                                <TextBlock MaxWidth="280"
+                                           Foreground="#F5F5F5"
+                                           TextWrapping="Wrap"
+                                           Text="Colours what you draw, and travels with it, so your partner's screen shows your annotations in this colour too. Takes effect the moment you pick it, so you can try one out while annotating. The annotation area's own frame stays red. Pick a colour that stands out against what you are drawing over, and a different one from anyone else annotating the same screen." />
+                            </ToolTip>
+                        </StackPanel.ToolTip>
+                        <TextBlock Text="Color" />
+                        <!-- Left-aligned rather than stretched: the swatches read as one strip of
+                             choices, which even spacing across the pane would break up. -->
+                        <StackPanel Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    Orientation="Horizontal">
+                            <ItemsControl ItemsSource="{Binding AnnotationColorOptions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ColorSwatchButtonStyle}"
+                                                Background="{Binding Color, Converter={StaticResource AnnotationColorBrushConverter}}"
+                                                Tag="{Binding IsSelected}"
+                                                ToolTip="{Binding Name}"
+                                                Command="{Binding DataContext.SelectAnnotationColorCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!-- Offers the picker while a preset is chosen, and becomes the chosen
+                                 colour once that colour is not a preset — so whichever swatch
+                                 wears the ring is also the colour that will be drawn. -->
+                            <Button Margin="6,0,0,0"
+                                    Tag="{Binding IsCustomAnnotationColor}"
+                                    ToolTip="Choose a custom colour"
+                                    Click="OnChooseAnnotationColor">
+                                <Button.Style>
+                                    <Style TargetType="Button"
+                                           BasedOn="{StaticResource ColorSwatchButtonStyle}">
+                                        <Setter Property="Background" Value="#3A3A3A" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsCustomAnnotationColor}"
+                                                         Value="True">
+                                                <Setter Property="Background"
+                                                        Value="{Binding AnnotationColor, Converter={StaticResource AnnotationColorBrushConverter}}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock FontFamily="Segoe MDL2 Assets"
+                                           FontSize="13"
+                                           Foreground="#F5F5F5"
+                                           Text="&#xE790;">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsCustomAnnotationColor}"
+                                                             Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Button>
+                        </StackPanel>
+                        <!-- Only ever filled while the relay has this annotator on a colour it
+                             did not choose, so the swatch strip is not left silently disagreeing
+                             with what is on screen. Empty collapses the line. -->
+                        <TextBlock Margin="0,8,0,0"
+                                   FontSize="11"
+                                   Foreground="#F0D79A"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding AnnotationColorNotice}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding AnnotationColorNotice}"
+                                                     Value="">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <StackPanel Margin="0,18,0,0" ToolTipService.ShowDuration="30000">
+                        <StackPanel.ToolTip>
+                            <ToolTip Padding="11,9"
+                                     Background="#2B2B2B"
+                                     BorderBrush="#555555"
+                                     Foreground="#F5F5F5">
+                                <TextBlock MaxWidth="280"
+                                           Foreground="#F5F5F5"
+                                           TextWrapping="Wrap"
+                                           Text="Affects your screen only. While you draw, the same shape reaches your eyes twice: immediately here in the annotation area, and a moment later inside the shared video of your partner's screen. Turning this down keeps your local strokes faint, so the copy arriving through the video is the one you read and judge. Your partner always sees the drawing at full strength." />
+                            </ToolTip>
+                        </StackPanel.ToolTip>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Opacity" />
+                            <TextBlock Grid.Column="1"
+                                       Foreground="#AFAFAF"
+                                       Text="{Binding DrawingOpacityLabel}" />
+                        </Grid>
+                        <Slider Margin="0,6,0,0"
+                                Style="{StaticResource SettingsSliderStyle}"
+                                Minimum="{Binding MinimumDrawingOpacityPercent, Mode=OneTime}"
+                                Maximum="{Binding MaximumDrawingOpacityPercent, Mode=OneTime}"
+                                SmallChange="5"
+                                LargeChange="10"
+                                TickFrequency="5"
+                                IsSnapToTickEnabled="True"
+                                Value="{Binding DrawingOpacityPercent}" />
+                    </StackPanel>
+
+                    <CheckBox Margin="0,18,0,0"
+                              Style="{StaticResource ToggleSwitchStyle}"
+                              IsChecked="{Binding ShowUsageHints}"
+                              Content="Show usage hints" />
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Application" />
+                    <CheckBox Margin="0,0,0,8"
+                              Style="{StaticResource ToggleSwitchStyle}"
+                              IsChecked="{Binding IsLaunchAtStartup}"
+                              Content="Launch at startup" />
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderStyle}"
+                               Text="Connection" />
+                    <TextBlock Margin="0,0,0,6" Text="Server address" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Padding="10,0"
+                                Background="#343434"
+                                BorderBrush="#555555"
+                                BorderThickness="1,1,0,1"
+                                CornerRadius="4,0,0,4">
+                            <TextBlock VerticalAlignment="Center"
+                                       Foreground="#D8D8D8"
+                                       Text="https://" />
+                        </Border>
+                        <TextBox Grid.Column="1"
+                                 BorderThickness="0,1,1,1"
+                                 Text="{Binding ServerAddressInput, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="2"
+                                Width="72"
+                                Height="36"
+                                Margin="8,0,0,0"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Command="{Binding TestServerConnectionCommand}"
+                                Content="Test"
+                                ToolTip="Test the server connection and save the address" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource ValidationMessageStyle}"
+                               Text="{Binding ServerAddressValidationMessage}" />
+                    <StackPanel Margin="0,6,0,0"
+                                Orientation="Horizontal"
+                                Visibility="{Binding IsServerAddressVerified, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   FontSize="14"
+                                   Foreground="#6CCB7F"
+                                   Text="&#xE73E;" />
+                        <TextBlock Margin="7,0,0,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="11"
+                                   Foreground="#8C8C8C"
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="{Binding ServerVersionLabel}"
+                                   Visibility="{Binding HasServerVersion, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource ValidationMessageStyle}"
+                               Text="{Binding ServerConnectionTestMessage}" />
+
+                    <Grid Margin="0,18,0,0"
+                          Visibility="{Binding ShowServerPasswordSetState, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Text="Server password is set" />
+                        <Button Grid.Column="1"
+                                Style="{StaticResource LinkButtonStyle}"
+                                Command="{Binding ChangeServerPasswordCommand}"
+                                Content="Change" />
+                        <Button Grid.Column="2"
+                                Style="{StaticResource LinkButtonStyle}"
+                                Command="{Binding ClearServerPasswordCommand}"
+                                Content="Remove" />
+                    </Grid>
+                    <StackPanel Visibility="{Binding ShowServerPasswordEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Margin="0,18,0,6" Text="Server password" />
+                        <TextBlock Margin="0,0,0,8"
+                                   FontSize="11"
+                                   Foreground="#AFAFAF"
+                                   TextWrapping="Wrap"
+                                   Text="The password for this relay. Without it the relay does not accept this client at all." />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <PasswordBox x:Name="ServerPasswordBox"
+                                         PasswordChanged="OnServerPasswordChanged" />
+                            <Button Grid.Column="1"
+                                    Width="66"
+                                    Height="36"
+                                    Margin="8,0,0,0"
+                                    Style="{StaticResource PrimaryButtonStyle}"
+                                    Command="{Binding ApplyServerPasswordCommand}"
+                                    Content="Apply" />
+                            <Button Grid.Column="2"
+                                    Width="66"
+                                    Height="36"
+                                    Margin="6,0,0,0"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    Command="{Binding CancelServerPasswordChangeCommand}"
+                                    Content="Cancel"
+                                    Visibility="{Binding IsChangingServerPassword, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </Grid>
+                        <TextBlock Style="{StaticResource ValidationMessageStyle}"
+                                   Text="{Binding ServerPasswordValidationMessage}" />
+                    </StackPanel>
+                    <Border Margin="0,10,0,0"
+                            Padding="10,8"
+                            Background="#3A3222"
+                            BorderBrush="#7A6320"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Visibility="{Binding ShowServerPasswordWarning, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <!-- A Grid, not a horizontal StackPanel: the text column has to be
+                             bounded for the warning to wrap instead of running past the box. -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Top"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14"
+                                       Foreground="#FFB900"
+                                       Text="&#xE7BA;" />
+                            <TextBlock Grid.Column="1"
+                                       Margin="8,0,0,0"
+                                       FontSize="11"
+                                       Foreground="#F0D79A"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding ServerPasswordWarning}" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Margin="0,18,0,6" Text="Room" />
+                    <TextBlock Margin="0,0,0,8"
+                               FontSize="11"
+                               Foreground="#AFAFAF"
+                               TextWrapping="Wrap"
+                               Text="Clients see each other when they are in the same room." />
+                    <TextBox Text="{Binding RoomInput, UpdateSourceTrigger=PropertyChanged}"
+                             MaxLength="64" />
+                    <TextBlock Style="{StaticResource ValidationMessageStyle}"
+                               Text="{Binding RoomValidationMessage}" />
+
+                    <Border Margin="0,24,0,2"
+                            Padding="0,12,0,0"
+                            BorderBrush="#303030"
+                            BorderThickness="0,1,0,0">
+                        <StackPanel HorizontalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Opacity="0.55">
+                            <TextBlock VerticalAlignment="Center"
+                                       FontSize="10"
+                                       Foreground="#B8B8B8"
+                                       Text="{Binding ApplicationVersion, StringFormat=Version {0}}" />
+                            <Button Margin="8,0,0,0"
+                                    Padding="2"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Cursor="Hand"
+                                    ToolTip="View source on GitHub"
+                                    Click="OnOpenRepository">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Opacity" Value="0.75" />
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Opacity" Value="1" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <Viewbox Width="13" Height="13">
+                                    <Path Fill="#D0D0D0"
+                                          Data="M12,0.7 C5.7,0.7 0.7,5.8 0.7,12.1 C0.7,17.1 3.9,21.4 8.4,22.9 C9,23 9.2,22.6 9.2,22.3 C9.2,22 9.2,21.3 9.2,20.3 C5.8,21 5.1,18.7 5.1,18.7 C4.5,17.3 3.7,16.9 3.7,16.9 C2.6,16.1 3.8,16.1 3.8,16.1 C5,16.2 5.7,17.4 5.7,17.4 C6.8,19.2 8.5,18.7 9.2,18.4 C9.3,17.6 9.6,17 10,16.7 C7.3,16.4 4.4,15.3 4.4,10.7 C4.4,9.4 4.9,8.3 5.7,7.4 C5.6,7.1 5.1,5.8 5.8,4.2 C5.8,4.2 6.9,3.9 9.3,5.5 C10.3,5.2 11.4,5.1 12.5,5.1 C13.6,5.1 14.7,5.2 15.7,5.5 C18.1,3.9 19.2,4.2 19.2,4.2 C19.9,5.8 19.4,7.1 19.3,7.4 C20.1,8.3 20.6,9.4 20.6,10.7 C20.6,15.3 17.7,16.4 15,16.7 C15.4,17.1 15.8,17.8 15.8,18.9 C15.8,20.5 15.8,21.7 15.8,22.1 C15.8,22.4 16,22.8 16.6,22.7 C21.1,21.2 24.3,17 24.3,12 C24.3,5.8 19.2,0.7 12.9,0.7 Z" />
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Bottom profile and settings bar -->
+            <Border Grid.Row="1"
+                    Background="#202020"
+                    BorderBrush="#343434"
+                    BorderThickness="0,1,0,0"
+                    CornerRadius="0,0,8,8">
+                <Grid Margin="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="ProfileButton"
+                            Height="46"
+                            HorizontalAlignment="Left"
+                            Padding="5,0,12,0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{Binding ToggleAvailabilityMenuCommand}"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource AvailabilityOptionButtonStyle}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsServerAvailable}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="34" Height="34">
+                                <Border Background="#3A3A3A" CornerRadius="17">
+                                    <Grid>
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="White"
+                                                   Visibility="{Binding ProfilePicturePath, Converter={StaticResource ProfilePictureFallbackVisibilityConverter}}"
+                                                   Text="{Binding ProfileInitials}" />
+                                        <Ellipse RenderOptions.BitmapScalingMode="HighQuality">
+                                            <Ellipse.Fill>
+                                                <ImageBrush ImageSource="{Binding ProfilePicturePath}"
+                                                            Stretch="UniformToFill" />
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+                                    </Grid>
+                                </Border>
+                                <Ellipse Width="11"
+                                         Height="11"
+                                         HorizontalAlignment="Right"
+                                         VerticalAlignment="Bottom"
+                                         Fill="{Binding AvailabilityColor}"
+                                         Stroke="#202020"
+                                         StrokeThickness="2" />
+                            </Grid>
+                            <StackPanel Margin="9,0,0,0" VerticalAlignment="Center">
+                                <TextBlock MaxWidth="180"
+                                           FontWeight="SemiBold"
+                                           Foreground="#F4F4F4"
+                                           Text="{Binding UserName}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock FontSize="10"
+                                           Foreground="#AFAFAF"
+                                           Text="{Binding AvailabilityLabel}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1"
+                            Style="{StaticResource IconButtonStyle}"
+                            Command="{Binding ToggleSettingsCommand}"
+                            Content="&#xE713;"
+                            ToolTip="Settings" />
+                </Grid>
+            </Border>
+
+            <!-- Availability chooser stays inside the flyout so it does not deactivate the window. -->
+            <Border x:Name="AvailabilityPanel"
+                    Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Panel.ZIndex="20"
+                    Width="244"
+                    Margin="16,0,0,66"
+                    Padding="8"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Background="#303030"
+                    BorderBrush="#505050"
+                    BorderThickness="1"
+                    CornerRadius="7"
+                    Visibility="{Binding IsAvailabilityMenuOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <StackPanel>
+                    <TextBlock Margin="10,6,10,8"
+                               FontWeight="SemiBold"
+                               Text="Set availability" />
+                    <Button Height="42"
+                            Padding="10,0"
+                            Style="{StaticResource AvailabilityOptionButtonStyle}"
+                            HorizontalContentAlignment="Stretch"
+                            Command="{Binding SetHostAvailabilityCommand}"
+                            CommandParameter="{x:Static viewModels:HostAvailability.Available}"
+                            Cursor="Hand">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="10" Height="10" Fill="#6CCB7F" />
+                                <TextBlock Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Text="Available" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       Foreground="#60CDFF"
+                                       Text="&#xE73E;">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HostAvailability}"
+                                                         Value="{x:Static viewModels:HostAvailability.Available}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Button>
+                    <Button Height="42"
+                            Padding="10,0"
+                            Style="{StaticResource AvailabilityOptionButtonStyle}"
+                            HorizontalContentAlignment="Stretch"
+                            Command="{Binding SetHostAvailabilityCommand}"
+                            CommandParameter="{x:Static viewModels:HostAvailability.Invisible}"
+                            Cursor="Hand">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="10" Height="10" Fill="#8B8B8B" />
+                                <TextBlock Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           Text="Invisible" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1"
+                                       VerticalAlignment="Center"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       Foreground="#60CDFF"
+                                       Text="&#xE73E;">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HostAvailability}"
+                                                         Value="{x:Static viewModels:HostAvailability.Invisible}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

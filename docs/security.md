@@ -4,7 +4,7 @@
 
 The protocol contains only display geometry, normalized pointer events, deliberate transient text annotations, acknowledgements, and session metadata. The solution has no screen-capture, audio, input-injection, clipboard, file-transfer, process-inspection, UI Automation, or conferencing-integration API.
 
-The shared library does not reference Windows desktop APIs. Client Win32 interop is restricted to monitor geometry, overlay styles, display-change messages, and global hotkey registration under `RemotePointer.Client/Native`.
+The shared library does not reference Windows desktop APIs. Client Win32 interop is restricted to monitor geometry, overlay styles, display-change messages, and global hotkey registration under `RemoteAnnotate.Client/Native`.
 
 ## Phase 1 controls
 
@@ -18,7 +18,7 @@ The shared library does not reference Windows desktop APIs. Client Win32 interop
 
 - The host overlay is non-activating and returns transparent native hit-test results.
 - The overlay never observes mouse input and has no keyboard handlers.
-- Win32 interop is isolated under `RemotePointer.Client/Native` and is limited to display enumeration, DPI inspection, window placement, and extended window styles.
+- Win32 interop is isolated under `RemoteAnnotate.Client/Native` and is limited to display enumeration, DPI inspection, window placement, and extended window styles.
 - Test markers are generated from local normalized coordinates; no screen contents or application metadata are accessed.
 
 ## Phase 3 input controls

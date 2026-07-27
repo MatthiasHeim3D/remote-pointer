@@ -1,6 +1,6 @@
 # Relay deployment
 
-The small-network deployment is two containers: Caddy exposes HTTPS on port 443 and the Remote Pointer relay is reachable only from Caddy on Docker's private network. Caddy creates and renews the leaf certificate from a persistent local CA; there is no PFX file or certificate password to manage.
+The small-network deployment is two containers: Caddy exposes HTTPS on port 443 and the Remote Annotate relay is reachable only from Caddy on Docker's private network. Caddy creates and renews the leaf certificate from a persistent local CA; there is no PFX file or certificate password to manage.
 
 ## Start the server
 
@@ -14,13 +14,13 @@ Copy-Item .env.example .env
 Edit `.env`, then start the stack:
 
 ```text
-REMOTEPOINTER_HOSTNAME=pointer.internal.example
-REMOTEPOINTER_SERVER_PASSWORD=change-this-to-your-own
+REMOTEANNOTATE_HOSTNAME=pointer.internal.example
+REMOTEANNOTATE_SERVER_PASSWORD=change-this-to-your-own
 ```
 
 ## The server password
 
-The server password is the relay's front door. Every client presents it to open its connection, and one that does not hold it is refused at the handshake: it never reaches the hub, so it can neither publish itself nor list or reach anyone, whatever room it names. Set it in `.env` as `REMOTEPOINTER_SERVER_PASSWORD`; the relay reads it as `Access__ServerPassword` and refuses to start on anything shorter than 8 characters.
+The server password is the relay's front door. Every client presents it to open its connection, and one that does not hold it is refused at the handshake: it never reaches the hub, so it can neither publish itself nor list or reach anyone, whatever room it names. Set it in `.env` as `REMOTEANNOTATE_SERVER_PASSWORD`; the relay reads it as `Access__ServerPassword` and refuses to start on anything shorter than 8 characters.
 
 The password itself never crosses the network. The relay derives a key from it with PBKDF2-SHA256 at startup, the client derives the same key from what the user typed, and the relay compares the two in constant time. The client stores only that derived key, under DPAPI, and can never show the password back.
 
@@ -71,7 +71,7 @@ On a client where the installer has run, this should succeed without `-k`:
 Invoke-RestMethod https://pointer.internal.example/health
 ```
 
-`Invoke-RestMethod https://pointer.internal.example/version` reports the deployed relay build alongside the `remote-pointer-relay` product id. The client's connection test requires both — a host that only answers `/health` is rejected — and shows the version under the server address in its settings, which is the quickest way to confirm which build a user is actually talking to.
+`Invoke-RestMethod https://pointer.internal.example/version` reports the deployed relay build alongside the `remote-annotate-relay` product id. The client's connection test requires both — a host that only answers `/health` is rejected — and shows the version under the server address in its settings, which is the quickest way to confirm which build a user is actually talking to.
 
 ## Routine operation
 
@@ -84,6 +84,6 @@ docker compose down
 
 The relay image is built locally from this repository (`compose.yaml` uses a `build:` context, not a registry image), so updating means refreshing the source and rebuilding with `--build`. There is no `docker compose pull` step for the relay; `docker compose up -d --build` still pulls a newer Caddy base image when one is available.
 
-A prebuilt relay image is also published to GitHub Container Registry, but only when a release tag matching `v*` is pushed — not on every push to `main`. CI refuses to publish unless the tag is the one Nerdbank.GitVersioning expects for that commit and the commit is an ancestor of `main`. Each run publishes `ghcr.io/<owner>/remote-pointer-relay:<version>` and moves `:latest` to it. To run a published image instead of building, replace the relay `image:`/`build:` block in `compose.yaml` with that reference.
+A prebuilt relay image is also published to GitHub Container Registry, but only when a release tag matching `v*` is pushed — not on every push to `main`. CI refuses to publish unless the tag is the one Nerdbank.GitVersioning expects for that commit and the commit is an ancestor of `main`. Each run publishes `ghcr.io/<owner>/remote-annotate-relay:<version>` and moves `:latest` to it. To run a published image instead of building, replace the relay `image:`/`build:` block in `compose.yaml` with that reference.
 
 `docker compose down` preserves the named Caddy data volume. Do not add `--volumes` during normal maintenance: deleting that volume creates a new CA, after which every client installer must be rebuilt with the new public root. Restarting the relay intentionally ends active in-memory sessions, so users pair again.

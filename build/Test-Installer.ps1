@@ -21,15 +21,15 @@ if ($Scope -eq 'AllUsers') {
     if (-not $isElevated) {
         throw 'An all-users check must run from an elevated session; setup cannot show a UAC prompt in silent mode.'
     }
-    $installDirectory = Join-Path $env:ProgramFiles 'Remote Pointer'
+    $installDirectory = Join-Path $env:ProgramFiles 'Remote Annotate'
     $scopeArgument = '/ALLUSERS'
 }
 else {
-    $installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\Remote Pointer'
+    $installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\Remote Annotate'
     $scopeArgument = '/CURRENTUSER'
 }
 
-$executablePath = Join-Path $installDirectory 'RemotePointer.Client.exe'
+$executablePath = Join-Path $installDirectory 'RemoteAnnotate.Client.exe'
 $uninstallerPath = Join-Path $installDirectory 'unins000.exe'
 
 $installArguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- $scopeArgument"
